@@ -1,0 +1,663 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>StudyLink — Peer Tutoring</title>
+<style>
+  :root{
+    --bg:#eef2fb; --card:#ffffff; --ink:#2f3350; --muted:#8b8fa8; --line:#eceaf5;
+    --blue:#7aa7f0; --blue-d:#4d7fd6; --pink:#f28fb4; --pink-d:#e0679a;
+    --purple:#a78be6; --green:#63c39a; --orange:#f0a868; --star:#f5b942;
+    --good:#3fae7a;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;height:100%}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:#d8def0; color:var(--ink);
+    display:flex; align-items:center; justify-content:center; min-height:100vh;
+  }
+  /* Phone shell */
+  .phone{
+    width:100%; max-width:430px; height:100vh; max-height:920px; background:var(--bg);
+    display:flex; flex-direction:column; position:relative; overflow:hidden;
+    box-shadow:0 30px 80px rgba(60,50,110,.25);
+  }
+  @media (min-width:460px){ .phone{ border-radius:34px; height:900px; } }
+
+  .head{
+    padding:16px 18px 12px; background:linear-gradient(135deg,#eaf0fe,#f6edf8);
+    border-bottom:1px solid var(--line); flex:0 0 auto;
+  }
+  .head .brand{display:flex; align-items:center; gap:8px}
+  .head .brand .logo{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--blue),var(--purple));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:16px}
+  .head h1{font-size:18px;margin:0;font-weight:800;letter-spacing:.2px}
+  .head .sub{font-size:12px;color:var(--muted);font-weight:600}
+  .head .right{margin-left:auto;font-size:12px;color:var(--muted);font-weight:700;text-align:right}
+
+  .scroll{flex:1 1 auto; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:16px 16px 90px}
+
+  /* Bottom nav */
+  .nav{
+    position:absolute; bottom:0; left:0; right:0; background:rgba(255,255,255,.92); backdrop-filter:blur(10px);
+    border-top:1px solid var(--line); display:flex; padding:8px 6px calc(8px + env(safe-area-inset-bottom));
+  }
+  .nav button{flex:1; border:none; background:transparent; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:3px; padding:4px; color:var(--muted); font-size:10px; font-weight:700}
+  .nav button .ic{font-size:20px; line-height:1}
+  .nav button.active{color:var(--blue-d)}
+
+  /* Bits */
+  h2.title{font-size:22px; font-weight:800; margin:4px 2px 2px}
+  .lead{color:var(--muted); font-size:13px; font-weight:600; margin:0 2px 14px}
+  .sectlabel{font-size:11px; font-weight:800; letter-spacing:.6px; text-transform:uppercase; color:var(--muted); margin:20px 2px 8px}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:16px; padding:14px; box-shadow:0 4px 16px rgba(90,70,150,.05)}
+  .card + .card{margin-top:10px}
+  .search{display:flex; align-items:center; gap:8px; background:#fff; border:1px solid var(--line); border-radius:14px; padding:12px 14px; box-shadow:0 4px 16px rgba(90,70,150,.05)}
+  .search input{border:none; outline:none; font-size:15px; width:100%; font-family:inherit; color:var(--ink); background:transparent}
+  .search .mag{font-size:16px}
+
+  .chips{display:flex; flex-wrap:wrap; gap:8px}
+  .chip{border:none; cursor:pointer; padding:8px 13px; border-radius:20px; font-weight:700; font-size:13px; background:#fff; border:1px solid var(--line); color:var(--ink)}
+  .chip.dept{color:#fff}
+
+  .btn{border:none; cursor:pointer; border-radius:12px; font-weight:800; font-size:14px; padding:12px 16px; width:100%; color:#fff; background:linear-gradient(120deg,var(--blue),var(--purple)); box-shadow:0 6px 16px rgba(120,110,220,.28)}
+  .btn:active{transform:translateY(1px)}
+  .btn.sm{width:auto; padding:9px 14px; font-size:13px; border-radius:10px}
+  .btn.ghost{background:#fff; color:var(--blue-d); border:1.5px solid #dbe3f7; box-shadow:none}
+  .btn.green{background:linear-gradient(120deg,#6bcfa2,#43ae7a); box-shadow:0 6px 16px rgba(80,190,140,.28)}
+  .btn.pink{background:linear-gradient(120deg,#f6a6c2,var(--pink-d))}
+  .btn.gray{background:#f0eef7; color:var(--muted); box-shadow:none}
+  .btn:disabled{opacity:.5}
+
+  .avatar{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:17px;flex:0 0 auto}
+  .row{display:flex; align-items:center; gap:12px}
+  .grade{font-weight:800; padding:2px 8px; border-radius:8px; font-size:12px}
+  .g-A{background:#e4f6ec;color:#2e9b6a}.g-B{background:#e6eefb;color:#4d7fd6}.g-C{background:#fbf1e2;color:#c98b34}
+  .stars{color:var(--star); font-weight:800; font-size:13px}
+  .tiny{font-size:11.5px; color:var(--muted); font-weight:600}
+  .pill{display:inline-block; background:#f2f0fb; color:#7a6fb0; font-size:11px; font-weight:700; padding:3px 9px; border-radius:20px; margin:2px 3px 0 0}
+  .tutorcard .top{display:flex; gap:12px; align-items:flex-start}
+  .tutorcard h3{margin:0; font-size:16px; font-weight:800}
+
+  .back{display:inline-flex; align-items:center; gap:6px; background:none; border:none; color:var(--muted); font-weight:700; font-size:14px; cursor:pointer; padding:2px 0; margin-bottom:6px}
+
+  .field{margin-bottom:12px}
+  .field label{display:block; font-size:12px; font-weight:800; color:var(--muted); margin-bottom:5px; text-transform:uppercase; letter-spacing:.4px}
+  .field input,.field select,.field textarea{width:100%; padding:11px 12px; border:1.5px solid #e5e2f0; border-radius:11px; font-size:15px; font-family:inherit; color:var(--ink); outline:none; background:#fff}
+  .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--purple)}
+  .seg{display:flex; gap:6px}
+  .seg button{flex:1; border:1.5px solid #e5e2f0; background:#fff; border-radius:11px; padding:10px; font-weight:700; font-size:13px; color:var(--muted); cursor:pointer}
+  .seg button.on{border-color:var(--blue); background:#eef3fe; color:var(--blue-d)}
+
+  .post{border-bottom:1px solid var(--line); padding:12px 0}
+  .post:last-child{border-bottom:none}
+  .post .who{font-weight:800; font-size:13px}
+  .post .txt{font-size:14px; margin-top:2px; line-height:1.4}
+  .reply{margin:8px 0 0 14px; padding:8px 11px; background:#f7f6fc; border-radius:11px; font-size:13px}
+  .composer{display:flex; gap:8px; margin-top:12px}
+  .composer input{flex:1; padding:11px 12px; border:1.5px solid #e5e2f0; border-radius:11px; font-size:14px; outline:none; font-family:inherit}
+
+  .empty{text-align:center; color:var(--muted); padding:34px 16px; font-size:14px}
+  .empty .em{font-size:38px; margin-bottom:8px}
+
+  .toast{position:absolute; left:50%; bottom:78px; transform:translateX(-50%) translateY(20px); background:#2f3350; color:#fff; padding:11px 16px; border-radius:12px; font-size:13px; font-weight:700; opacity:0; transition:.3s; pointer-events:none; z-index:50; max-width:88%; text-align:center; box-shadow:0 8px 24px rgba(0,0,0,.2)}
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+
+  .statgrid{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px}
+  .stat{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px; text-align:center}
+  .stat .n{font-size:22px; font-weight:900}
+  .stat .l{font-size:11px; color:var(--muted); font-weight:700; margin-top:2px}
+
+  .badge{position:absolute; top:-4px; right:22%; background:var(--pink-d); color:#fff; font-size:10px; font-weight:800; min-width:16px; height:16px; border-radius:9px; display:flex; align-items:center; justify-content:center; padding:0 4px}
+  .navwrap{position:relative; flex:1}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="head" id="head"></div>
+  <div class="scroll" id="scroll"></div>
+  <div class="nav" id="nav"></div>
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+/* ============================= DATA ============================= */
+const DEPTS = [
+  { name:'Math', emoji:'📐', color:'#7aa7f0', courses:['Algebra I','Geometry','Algebra II','Precalculus','AP Calculus'] },
+  { name:'Science', emoji:'🔬', color:'#63c39a', courses:['Biology','Chemistry','Physics','AP Biology'] },
+  { name:'Social Studies', emoji:'🌍', color:'#f0a868', courses:['AP Human Geography','World History','US History','AP US History'] },
+  { name:'English', emoji:'📖', color:'#f28fb4', courses:['English 9','English 10','English 11','AP English Lang'] },
+  { name:'World Languages', emoji:'🗣️', color:'#a78be6', courses:['Spanish 1','Spanish 2','Spanish 3','French 2'] },
+];
+const ALL_COURSES = DEPTS.flatMap(d => d.courses);
+const courseColor = c => (DEPTS.find(d => d.courses.includes(c))?.color) || '#7aa7f0';
+const courseEmoji = c => (DEPTS.find(d => d.courses.includes(c))?.emoji) || '📚';
+const gradeClass = g => g?.startsWith('A') ? 'g-A' : g?.startsWith('B') ? 'g-B' : 'g-C';
+
+const TUTORS = [
+  { id:'t1', name:'Emma R.', grade:12, color:'#f28fb4', rating:4.9, sessions:12, format:'In person + Virtual',
+    bio:'AP Hug was my favorite class — happy to make the models make sense!',
+    avail:'Tue & Thu after school',
+    courses:[{course:'AP Human Geography',grade:'A',year:'2024–25'},{course:'World History',grade:'A-',year:'2023–24'}] },
+  { id:'t2', name:'Jake T.', grade:11, color:'#7aa7f0', rating:4.7, sessions:8, format:'In person',
+    bio:'I like breaking big topics into simple steps.',
+    avail:'Wed & Fri after school',
+    courses:[{course:'AP Human Geography',grade:'A-',year:'2024–25'},{course:'Algebra II',grade:'B+',year:'2023–24'}] },
+  { id:'t3', name:'Taylor M.', grade:11, color:'#a78be6', rating:4.8, sessions:15, format:'In person + Virtual',
+    bio:'Math clicked for me late, so I get where you\'re stuck.',
+    avail:'Mon & Wed lunch + after school',
+    courses:[{course:'Algebra II',grade:'A',year:'2024–25'},{course:'Precalculus',grade:'B+',year:'2024–25'},{course:'Geometry',grade:'A',year:'2022–23'}] },
+  { id:'t4', name:'Priya S.', grade:12, color:'#63c39a', rating:5.0, sessions:20, format:'Virtual',
+    bio:'Pre-med hopeful — bio & chem are my thing.',
+    avail:'Weeknights (virtual)',
+    courses:[{course:'Chemistry',grade:'A',year:'2023–24'},{course:'AP Biology',grade:'A-',year:'2024–25'},{course:'Biology',grade:'A',year:'2022–23'}] },
+  { id:'t5', name:'Marcus L.', grade:12, color:'#f0a868', rating:4.6, sessions:6, format:'In person',
+    bio:'Physics and calc — I love a good diagram.',
+    avail:'Thu after school',
+    courses:[{course:'AP Calculus',grade:'A',year:'2024–25'},{course:'Physics',grade:'B+',year:'2023–24'}] },
+  { id:'t6', name:'Sofia D.', grade:10, color:'#e0679a', rating:4.9, sessions:9, format:'In person + Virtual',
+    bio:'Native Spanish speaker, patient with the basics.',
+    avail:'Tue & Fri after school',
+    courses:[{course:'Spanish 3',grade:'A',year:'2024–25'},{course:'Spanish 2',grade:'A',year:'2023–24'},{course:'English 10',grade:'A-',year:'2024–25'}] },
+];
+const tutorsFor = course => TUTORS.filter(t => t.courses.some(c => c.course === course));
+
+const SEED_POSTS = {
+  'AP Human Geography':[
+    { id:'p1', who:'Sarah K.', txt:'Does anyone actually get the difference between centrifugal and centripetal forces?', replies:[{who:'Jake T.', txt:'Centripetal pulls a country together, centrifugal splits it apart. I can walk you through examples!'}] },
+    { id:'p2', who:'Devon M.', txt:'What\'s on the unit 3 test — is it all migration models?', replies:[] },
+  ],
+  'Algebra II':[
+    { id:'p3', who:'Alex P.', txt:'Can someone explain how to factor when a ≠ 1?', replies:[{who:'Taylor M.', txt:'Try the AC method — multiply a·c, find factors that add to b. Ping me for a session.'}] },
+  ],
+  'Chemistry':[
+    { id:'p4', who:'Nina B.', txt:'Stoichiometry is destroying me. Study group before Thursday?', replies:[{who:'Priya S.', txt:'I\'m down! Library at 3:30?'}] },
+  ],
+};
+const SEED_INCOMING = [
+  { id:'r_seed1', from:'Jordan L.', course:'AP Human Geography', topic:'Migration push/pull factors', day:'Thursday', time:'3:30 PM', format:'In person', status:'incoming' },
+  { id:'r_seed2', from:'Casey W.', course:'Algebra II', topic:'Factoring & quadratics', day:'Tuesday', time:'Lunch', format:'In person', status:'incoming' },
+];
+
+/* ============================= STATE ============================= */
+const LS='studylink-v1';
+let S = {
+  tab:'home', overlay:null,
+  me:{ name:'You', grade:11, isTutor:false, tutorCourses:[], avail:'' },
+  myRequests:[],            // requests I sent to tutors (as student)
+  incoming:[],              // requests sent to me (as tutor)
+  sessions:[],              // confirmed upcoming/completed
+  hours:0, helped:0,
+  posts:{},                 // course -> extra posts I added
+};
+function load(){ try{ const s=JSON.parse(localStorage.getItem(LS)); if(s) S={...S,...s}; }catch(e){} }
+function save(){ localStorage.setItem(LS, JSON.stringify(S)); }
+const uid = () => 'x'+Math.random().toString(36).slice(2,8);
+
+/* ============================= HELPERS ============================= */
+const $ = id => document.getElementById(id);
+const esc = s => (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const initials = n => (n||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),2600); }
+function go(tab){ S.tab=tab; S.overlay=null; render(); }
+function open(ov){ S.overlay=ov; render(); }
+function close(){ S.overlay=null; render(); }
+function postsFor(course){ return [ ...(S.posts[course]||[]), ...(SEED_POSTS[course]||[]) ]; }
+
+/* ============================= RENDER ============================= */
+function render(){ renderHead(); renderBody(); renderNav(); save(); }
+
+function renderHead(){
+  const pendingIncoming = S.incoming.filter(r=>r.status==='incoming').length + (S.me.isTutor ? SEED_INCOMING.length : 0);
+  $('head').innerHTML = `
+    <div class="brand">
+      <div class="logo">S</div>
+      <div>
+        <h1>StudyLink</h1>
+        <div class="sub">Riverside High · peer tutoring</div>
+      </div>
+      <div class="right">${esc(S.me.name)}<br>Grade ${S.me.grade}</div>
+    </div>`;
+}
+
+function renderNav(){
+  const incCount = (S.me.isTutor ? SEED_INCOMING.filter(s=>!S.incoming.find(i=>i.id===s.id)).length : 0) + S.incoming.filter(r=>r.status==='incoming').length;
+  const tabs=[
+    ['home','🏠','Home'],['classes','📚','Classes'],['tutoring','🤝','Tutoring',incCount],['community','💬','Community'],['profile','👤','Profile']
+  ];
+  $('nav').innerHTML = tabs.map(([id,ic,label,badge])=>`
+    <button class="${S.tab===id&&!S.overlay?'active':''}" onclick="go('${id}')" style="position:relative">
+      ${badge?`<span class="badge">${badge}</span>`:''}
+      <span class="ic">${ic}</span>${label}
+    </button>`).join('');
+}
+
+function renderBody(){
+  const c=$('scroll'); c.scrollTop=c.scrollTop; // keep
+  if(S.overlay) return renderOverlay(c);
+  if(S.tab==='home') return renderHome(c);
+  if(S.tab==='classes') return renderClasses(c);
+  if(S.tab==='tutoring') return renderTutoring(c);
+  if(S.tab==='community') return renderCommunity(c);
+  if(S.tab==='profile') return renderProfile(c);
+}
+
+/* -------- HOME -------- */
+function renderHome(c){
+  const upcoming = S.sessions.filter(s=>s.status!=='done');
+  const popular = ['AP Human Geography','Algebra II','Chemistry','AP Biology'];
+  c.innerHTML = `
+    <h2 class="title">What do you need help with?</h2>
+    <div class="lead">Find a classmate who recently aced it.</div>
+    <div class="search" onclick="open({type:'search'})">
+      <span class="mag">🔍</span><input placeholder="Search classes…" readonly>
+    </div>
+
+    <div class="sectlabel">Upcoming tutoring</div>
+    ${upcoming.length ? upcoming.map(sessionCard).join('') : `<div class="card tiny" style="text-align:center">No sessions yet — find a tutor to get started.</div>`}
+
+    <div class="sectlabel">Popular classes</div>
+    <div class="chips">
+      ${popular.map(c=>`<button class="chip" onclick="open({type:'course',course:'${esc(c)}'})">${courseEmoji(c)} ${esc(c)}</button>`).join('')}
+    </div>
+
+    <div class="sectlabel">Jump in</div>
+    <div class="card row" onclick="go('classes')" style="cursor:pointer">
+      <div class="avatar" style="background:${'#7aa7f0'}">📚</div>
+      <div><div style="font-weight:800">Browse all classes</div><div class="tiny">${ALL_COURSES.length} courses · ${TUTORS.length} tutors available</div></div>
+      <div style="margin-left:auto;color:var(--muted)">›</div>
+    </div>
+    ${!S.me.isTutor ? `<div class="card row" onclick="open({type:'becomeTutor'})" style="cursor:pointer;margin-top:10px">
+      <div class="avatar" style="background:${'#63c39a'}">✋</div>
+      <div><div style="font-weight:800">Become a tutor</div><div class="tiny">Help classmates · earn service hours</div></div>
+      <div style="margin-left:auto;color:var(--muted)">›</div>
+    </div>`:''}
+  `;
+}
+function sessionCard(s){
+  return `<div class="card row">
+    <div class="avatar" style="background:${courseColor(s.course)}">${courseEmoji(s.course)}</div>
+    <div style="min-width:0">
+      <div style="font-weight:800">${esc(s.course)}</div>
+      <div class="tiny">${esc(s.day)} · ${esc(s.time)} · with ${esc(s.with)} · ${esc(s.format)}</div>
+    </div>
+    ${s.role==='tutor' ? `<button class="btn sm green" style="margin-left:auto" onclick="completeSession('${s.id}')">Complete</button>` : `<span class="pill" style="margin-left:auto">Confirmed</span>`}
+  </div>`;
+}
+
+/* -------- CLASSES -------- */
+function renderClasses(c){
+  c.innerHTML = `
+    <h2 class="title">Classes</h2>
+    <div class="lead">Tap a class to find tutors and join the community.</div>
+    ${DEPTS.map(d=>`
+      <div class="sectlabel">${d.emoji} ${d.name}</div>
+      ${d.courses.map(course=>{
+        const n=tutorsFor(course).length;
+        return `<div class="card row" style="cursor:pointer" onclick="open({type:'course',course:'${esc(course)}'})">
+          <div class="avatar" style="background:${d.color}">${d.emoji}</div>
+          <div><div style="font-weight:800">${esc(course)}</div>
+            <div class="tiny">${n} tutor${n===1?'':'s'} · ${postsFor(course).length} community post${postsFor(course).length===1?'':'s'}</div></div>
+          <div style="margin-left:auto;color:var(--muted)">›</div>
+        </div>`;
+      }).join('')}
+    `).join('')}
+  `;
+}
+
+/* -------- COURSE DETAIL (overlay) -------- */
+function renderCourseDetail(c, course){
+  let tutors = tutorsFor(course);
+  const f = S.overlay.filter || {};
+  if(f.grade) tutors = tutors.filter(t=>{ const g=t.courses.find(x=>x.course===course).grade; return f.grade==='A'?g.startsWith('A'):f.grade==='B'?(g.startsWith('A')||g.startsWith('B')):true; });
+  if(f.format) tutors = tutors.filter(t=>t.format.toLowerCase().includes(f.format));
+  c.innerHTML = `
+    <button class="back" onclick="close()">‹ Back</button>
+    <div class="row" style="margin:2px 0 10px">
+      <div class="avatar" style="background:${courseColor(course)};width:52px;height:52px;font-size:22px">${courseEmoji(course)}</div>
+      <div><h2 class="title" style="margin:0">${esc(course)}</h2>
+      <div class="tiny">${tutorsFor(course).length} tutors · ${postsFor(course).length} in the community</div></div>
+    </div>
+
+    <button class="btn ghost sm" style="width:100%" onclick="open({type:'board',course:'${esc(course)}'})">💬 Open ${esc(course)} community</button>
+
+    <div class="sectlabel">Filter tutors</div>
+    <div class="chips">
+      ${[['','Any grade'],['B','B or higher'],['A','A only']].map(([v,l])=>`<button class="chip ${(!f.grade&&!v)||f.grade===v?'dept':''}" style="${(!f.grade&&!v)||f.grade===v?'background:'+courseColor(course):''}" onclick="setFilter('grade','${v}')">${l}</button>`).join('')}
+      ${[['','Any format'],['virtual','Virtual'],['person','In person']].map(([v,l])=>`<button class="chip ${(!f.format&&!v)||f.format===v?'dept':''}" style="${(!f.format&&!v)||f.format===v?'background:'+courseColor(course):''}" onclick="setFilter('format','${v}')">${l}</button>`).join('')}
+    </div>
+
+    <div class="sectlabel">${tutors.length} peer tutor${tutors.length===1?'':'s'}</div>
+    ${tutors.length ? tutors.map(t=>tutorCard(t,course)).join('') : `<div class="empty"><div class="em">🔍</div>No tutors match — try loosening the filters.</div>`}
+  `;
+}
+function tutorCard(t, course){
+  const cc = t.courses.find(x=>x.course===course);
+  return `<div class="card tutorcard">
+    <div class="top">
+      <div class="avatar" style="background:${t.color}">${initials(t.name)}</div>
+      <div style="flex:1;min-width:0">
+        <div class="row" style="gap:8px"><h3>${esc(t.name)}</h3><span class="tiny">Grade ${t.grade}</span>
+          <span class="stars" style="margin-left:auto">★ ${t.rating}</span></div>
+        <div style="margin-top:4px">
+          <span class="grade ${gradeClass(cc.grade)}">${esc(course)}: ${cc.grade}</span>
+          <span class="tiny" style="margin-left:6px">Taken ${cc.year}</span>
+        </div>
+        <div class="tiny" style="margin-top:5px">🗓️ ${esc(t.avail)} · ${esc(t.format)}</div>
+        <div class="tiny" style="margin-top:2px">${t.sessions} sessions completed</div>
+      </div>
+    </div>
+    <div style="margin-top:10px" class="row">
+      <button class="btn ghost sm" onclick="open({type:'tutor',id:'${t.id}',course:'${esc(course)}'})">View profile</button>
+      <button class="btn sm" style="margin-left:auto" onclick="open({type:'request',id:'${t.id}',course:'${esc(course)}'})">Request tutoring</button>
+    </div>
+  </div>`;
+}
+function setFilter(k,v){ S.overlay.filter={...(S.overlay.filter||{})}; if(v) S.overlay.filter[k]=v; else delete S.overlay.filter[k]; render(); }
+
+/* -------- TUTOR PROFILE (overlay) -------- */
+function renderTutorProfile(c){
+  const t=TUTORS.find(x=>x.id===S.overlay.id); if(!t){close();return;}
+  c.innerHTML=`
+    <button class="back" onclick="close()">‹ Back</button>
+    <div class="card">
+      <div class="row"><div class="avatar" style="background:${t.color};width:56px;height:56px;font-size:22px">${initials(t.name)}</div>
+        <div><h2 class="title" style="margin:0">${esc(t.name)}</h2>
+        <div class="tiny">Grade ${t.grade} · ★ ${t.rating} · ${t.sessions} sessions</div></div></div>
+      <p style="font-size:14px;color:#555;margin:12px 0 4px">${esc(t.bio)}</p>
+      <div class="tiny">🗓️ ${esc(t.avail)} · ${esc(t.format)}</div>
+      <div class="sectlabel">Classes taken</div>
+      ${t.courses.map(cc=>`<div class="row" style="margin-bottom:6px"><span class="grade ${gradeClass(cc.grade)}">${cc.grade}</span>
+        <span style="font-weight:700;font-size:14px">${esc(cc.course)}</span><span class="tiny" style="margin-left:auto">${cc.year}</span></div>`).join('')}
+    </div>
+    <div style="margin-top:12px"><button class="btn" onclick="open({type:'request',id:'${t.id}',course:'${esc(t.courses[0].course)}'})">Request tutoring</button></div>
+  `;
+}
+
+/* -------- REQUEST TUTORING (overlay) -------- */
+function renderRequest(c){
+  const t=TUTORS.find(x=>x.id===S.overlay.id); if(!t){close();return;}
+  const course=S.overlay.course;
+  const coursesTutored=t.courses.map(x=>x.course);
+  c.innerHTML=`
+    <button class="back" onclick="close()">‹ Back</button>
+    <h2 class="title">Request tutoring</h2>
+    <div class="lead">with ${esc(t.name)} · ★ ${t.rating}</div>
+    <div class="card">
+      <div class="field"><label>Course</label>
+        <select id="rq_course">${coursesTutored.map(x=>`<option ${x===course?'selected':''}>${esc(x)}</option>`).join('')}</select></div>
+      <div class="field"><label>Topic</label><input id="rq_topic" placeholder="e.g. Migration models"></div>
+      <div class="field"><label>What do you need help with?</label><textarea id="rq_desc" rows="2" placeholder="A sentence or two…"></textarea></div>
+      <div class="row" style="gap:10px">
+        <div class="field" style="flex:1;margin:0"><label>Day</label><input id="rq_day" placeholder="Thursday"></div>
+        <div class="field" style="flex:1;margin:0"><label>Time</label><input id="rq_time" placeholder="3:30 PM"></div>
+      </div>
+      <div class="field" style="margin-top:12px"><label>Format</label>
+        <div class="seg" id="rq_fmt">
+          <button class="on" data-v="In person">In person</button>
+          <button data-v="Virtual">Virtual</button>
+        </div></div>
+    </div>
+    <div style="margin-top:14px"><button class="btn" onclick="submitRequest('${t.id}')">Send request to ${esc(t.name.split(' ')[0])}</button></div>
+    <p class="tiny" style="text-align:center;margin-top:10px">🔒 Coordination stays inside StudyLink — no phone numbers or personal emails shared.</p>
+  `;
+  c.querySelectorAll('#rq_fmt button').forEach(b=>b.onclick=()=>{ c.querySelectorAll('#rq_fmt button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); });
+}
+function submitRequest(tid){
+  const t=TUTORS.find(x=>x.id===tid);
+  const course=$('rq_course').value;
+  const topic=$('rq_topic').value.trim()||'General help';
+  const day=$('rq_day').value.trim()||'TBD';
+  const time=$('rq_time').value.trim()||'TBD';
+  const fmt=document.querySelector('#rq_fmt button.on')?.dataset.v||'In person';
+  const req={ id:uid(), tutor:t.name, tutorId:tid, course, topic, day, time, format:fmt, status:'pending' };
+  S.myRequests.unshift(req);
+  close(); go('tutoring');
+  toast('Request sent to '+t.name.split(' ')[0]+' 🎉');
+  // Simulate the tutor accepting shortly (prototype).
+  setTimeout(()=>{
+    const r=S.myRequests.find(x=>x.id===req.id); if(!r||r.status!=='pending')return;
+    r.status='confirmed';
+    S.sessions.unshift({ id:uid(), course:r.course, day:r.day, time:r.time, with:r.tutor, format:r.format, role:'student', status:'upcoming' });
+    save(); if(!S.overlay) render();
+    toast(t.name.split(' ')[0]+' accepted your request ✅');
+  }, 4500);
+}
+
+/* -------- TUTORING -------- */
+function renderTutoring(c){
+  // merge seeded incoming (once) into state so they persist actions
+  if(S.me.isTutor){ SEED_INCOMING.forEach(s=>{ if(!S.incoming.find(i=>i.id===s.id)) S.incoming.push({...s}); }); }
+  const inc = S.incoming.filter(r=>r.status==='incoming');
+  c.innerHTML=`
+    <h2 class="title">Tutoring</h2>
+    <div class="lead">Your requests and sessions.</div>
+
+    ${S.me.isTutor ? `
+      <div class="sectlabel">Requests to you ${inc.length?`(${inc.length})`:''}</div>
+      ${inc.length ? inc.map(r=>`
+        <div class="card">
+          <div class="row"><div class="avatar" style="background:${courseColor(r.course)}">${initials(r.from)}</div>
+            <div><div style="font-weight:800">${esc(r.from)}</div><div class="tiny">${esc(r.course)} · ${esc(r.topic)}</div></div></div>
+          <div class="tiny" style="margin:8px 0 10px">🗓️ ${esc(r.day)} · ${esc(r.time)} · ${esc(r.format)}</div>
+          <div class="row" style="gap:8px">
+            <button class="btn sm gray" style="flex:1" onclick="respondRequest('${r.id}',false)">Decline</button>
+            <button class="btn sm green" style="flex:1" onclick="respondRequest('${r.id}',true)">Accept</button>
+          </div>
+        </div>`).join('') : `<div class="card tiny" style="text-align:center">No new requests right now.</div>`}
+    ` : ''}
+
+    <div class="sectlabel">Your tutoring (as student)</div>
+    ${S.myRequests.length ? S.myRequests.map(r=>`
+      <div class="card row">
+        <div class="avatar" style="background:${courseColor(r.course)}">${courseEmoji(r.course)}</div>
+        <div style="min-width:0"><div style="font-weight:800">${esc(r.course)}</div>
+          <div class="tiny">${esc(r.topic)} · with ${esc(r.tutor)} · ${esc(r.day)} ${esc(r.time)}</div></div>
+        <span class="pill" style="margin-left:auto;${r.status==='confirmed'?'background:#e4f6ec;color:#2e9b6a':''}">${r.status==='confirmed'?'Confirmed':'Pending'}</span>
+      </div>`).join('') : `<div class="card tiny" style="text-align:center">You haven\'t requested tutoring yet. Head to Classes to find a tutor.</div>`}
+
+    ${S.sessions.filter(s=>s.role==='tutor').length ? `<div class="sectlabel">Sessions you're tutoring</div>
+      ${S.sessions.filter(s=>s.role==='tutor').map(sessionCard).join('')}`:''}
+  `;
+}
+function respondRequest(id, accept){
+  const r=S.incoming.find(x=>x.id===id); if(!r)return;
+  r.status=accept?'accepted':'declined';
+  if(accept){
+    S.sessions.unshift({ id:uid(), course:r.course, day:r.day, time:r.time, with:r.from, format:r.format, role:'tutor', status:'upcoming' });
+    toast('Session confirmed with '+r.from.split(' ')[0]+' ✅');
+  } else toast('Request declined');
+  render();
+}
+function completeSession(id){
+  const s=S.sessions.find(x=>x.id===id); if(!s)return;
+  s.status='done';
+  S.hours=Math.round((S.hours+0.75)*100)/100; S.helped+=1;
+  toast('Logged 0.75 service hours 🎉');
+  render();
+}
+
+/* -------- COMMUNITY -------- */
+function renderCommunity(c){
+  const active = ['AP Human Geography','Algebra II','Chemistry','AP Biology','Spanish 3'];
+  c.innerHTML=`
+    <h2 class="title">Community</h2>
+    <div class="lead">Ask a question — someone in your class can help.</div>
+    ${active.map(course=>{
+      const posts=postsFor(course);
+      return `<div class="card row" style="cursor:pointer" onclick="open({type:'board',course:'${esc(course)}'})">
+        <div class="avatar" style="background:${courseColor(course)}">${courseEmoji(course)}</div>
+        <div style="min-width:0"><div style="font-weight:800">${esc(course)}</div>
+          <div class="tiny">${posts.length} post${posts.length===1?'':'s'} · ${tutorsFor(course).length} tutors here</div></div>
+        <div style="margin-left:auto;color:var(--muted)">›</div>
+      </div>`;
+    }).join('')}
+  `;
+}
+function renderBoard(c){
+  const course=S.overlay.course;
+  const posts=postsFor(course);
+  c.innerHTML=`
+    <button class="back" onclick="close()">‹ Back</button>
+    <div class="row" style="margin-bottom:8px"><div class="avatar" style="background:${courseColor(course)}">${courseEmoji(course)}</div>
+      <div><h2 class="title" style="margin:0">${esc(course)}</h2><div class="tiny">Class community</div></div></div>
+    <div class="composer">
+      <input id="post_in" placeholder="Ask the class a question…" onkeydown="if(event.key==='Enter')addPost('${esc(course)}')">
+      <button class="btn sm" onclick="addPost('${esc(course)}')">Post</button>
+    </div>
+    <p class="tiny" style="margin:8px 2px">🛡️ Class boards are moderated. Be kind and keep it school-appropriate.</p>
+    <div class="card" style="margin-top:6px">
+      ${posts.length ? posts.map(p=>`
+        <div class="post">
+          <div class="row"><div class="avatar" style="width:30px;height:30px;font-size:12px;background:${courseColor(course)}">${initials(p.who)}</div>
+            <div class="who">${esc(p.who)}</div></div>
+          <div class="txt">${esc(p.txt)}</div>
+          ${(p.replies||[]).map(r=>`<div class="reply"><b>${esc(r.who)}</b> · ${esc(r.txt)}</div>`).join('')}
+          <button class="btn ghost sm" style="margin-top:8px" onclick="open({type:'course',course:'${esc(course)}'})">Find a tutor for this</button>
+        </div>`).join('') : `<div class="empty"><div class="em">💬</div>No posts yet — be the first to ask!</div>`}
+    </div>
+  `;
+}
+function addPost(course){
+  const inp=$('post_in'); const txt=(inp.value||'').trim(); if(!txt)return;
+  S.posts[course]=S.posts[course]||[];
+  S.posts[course].unshift({ id:uid(), who:S.me.name, txt, replies:[] });
+  render(); toast('Posted to '+course);
+}
+
+/* -------- PROFILE -------- */
+function renderProfile(c){
+  const me=S.me;
+  c.innerHTML=`
+    <h2 class="title">Profile</h2>
+    <div class="card">
+      <div class="row"><div class="avatar" style="width:54px;height:54px;font-size:20px;background:linear-gradient(135deg,var(--blue),var(--purple))">${initials(me.name)}</div>
+        <div style="flex:1"><input id="me_name" value="${esc(me.name)}" style="font-weight:800;font-size:17px;border:none;outline:none;width:100%" onchange="S.me.name=this.value.trim()||'You';render()">
+        <div class="tiny">${me.isTutor?'Tutor + Student':'Student'} · Grade ${me.grade}</div></div></div>
+    </div>
+
+    ${me.isTutor ? `
+      <div class="sectlabel">Community service</div>
+      <div class="statgrid">
+        <div class="stat"><div class="n" style="color:var(--green)">${me.tutorCourses.length?S.hours:0}</div><div class="l">hours</div></div>
+        <div class="stat"><div class="n" style="color:var(--blue-d)">${S.helped}</div><div class="l">students helped</div></div>
+        <div class="stat"><div class="n" style="color:var(--purple)">${me.tutorCourses.length}</div><div class="l">subjects</div></div>
+      </div>
+      <div class="sectlabel">Classes you tutor</div>
+      <div class="card">
+        ${me.tutorCourses.length ? me.tutorCourses.map(tc=>`<div class="row" style="margin-bottom:6px"><span class="grade ${gradeClass(tc.grade)}">${tc.grade}</span>
+          <span style="font-weight:700;font-size:14px">${esc(tc.course)}</span><span class="tiny" style="margin-left:auto">${esc(tc.year)}</span></div>`).join('') : `<div class="tiny">No classes added yet.</div>`}
+        <button class="btn ghost sm" style="width:100%;margin-top:10px" onclick="open({type:'becomeTutor'})">Edit tutoring classes</button>
+      </div>
+      <div class="tiny" style="margin:12px 2px">🗓️ Available: ${esc(me.avail||'not set')}</div>
+    ` : `
+      <div class="card" style="text-align:center;margin-top:12px">
+        <div style="font-size:36px">✋</div>
+        <div style="font-weight:800;margin:6px 0 2px">Become a tutor</div>
+        <div class="tiny" style="margin-bottom:12px">Help classmates in classes you've taken — and earn verified service hours.</div>
+        <button class="btn green" onclick="open({type:'becomeTutor'})">Get started</button>
+      </div>
+    `}
+
+    <div class="sectlabel">Account</div>
+    <div class="card tiny">🔒 Riverside High students only. Your schedule and contact info stay private; coordination happens in-app.</div>
+    <button class="btn gray" style="margin-top:14px" onclick="if(confirm('Reset the prototype data?')){localStorage.removeItem(LS);location.reload()}">Reset prototype</button>
+  `;
+}
+
+/* -------- BECOME A TUTOR (overlay, multi-step) -------- */
+function renderBecomeTutor(c){
+  S.overlay.step = S.overlay.step || 1;
+  S.overlay.draft = S.overlay.draft || { courses:{}, avail:S.me.avail||'' };
+  const d=S.overlay.draft, step=S.overlay.step;
+  const GRADES=['A','A-','B+','B','B-','C+','C'];
+  if(step===1){
+    c.innerHTML=`
+      <button class="back" onclick="close()">‹ Cancel</button>
+      <h2 class="title">Become a tutor</h2>
+      <div class="lead">Step 1 of 3 · Which classes have you taken?</div>
+      ${DEPTS.map(dep=>`<div class="sectlabel">${dep.emoji} ${dep.name}</div><div class="chips">
+        ${dep.courses.map(course=>`<button class="chip ${d.courses[course]?'dept':''}" style="${d.courses[course]?'background:'+dep.color:''}" onclick="toggleTutorCourse('${esc(course)}')">${esc(course)}</button>`).join('')}
+      </div>`).join('')}
+      <div style="margin-top:18px"><button class="btn" ${Object.keys(d.courses).length?'':'disabled'} onclick="S.overlay.step=2;render()">Next (${Object.keys(d.courses).length} selected)</button></div>
+    `;
+  } else if(step===2){
+    const chosen=Object.keys(d.courses);
+    c.innerHTML=`
+      <button class="back" onclick="S.overlay.step=1;render()">‹ Back</button>
+      <h2 class="title">Your grades</h2>
+      <div class="lead">Step 2 of 3 · What did you earn, and when?</div>
+      ${chosen.map(course=>`<div class="card">
+        <div style="font-weight:800;margin-bottom:8px">${courseEmoji(course)} ${esc(course)}</div>
+        <div class="row" style="gap:10px">
+          <div class="field" style="flex:1;margin:0"><label>Grade</label>
+            <select onchange="d_grade('${esc(course)}',this.value)">${GRADES.map(g=>`<option ${d.courses[course].grade===g?'selected':''}>${g}</option>`).join('')}</select></div>
+          <div class="field" style="flex:1;margin:0"><label>Year taken</label>
+            <select onchange="d_year('${esc(course)}',this.value)">${['2024–25','2023–24','2022–23'].map(y=>`<option ${d.courses[course].year===y?'selected':''}>${y}</option>`).join('')}</select></div>
+        </div></div>`).join('')}
+      <div style="margin-top:16px"><button class="btn" onclick="S.overlay.step=3;render()">Next</button></div>
+    `;
+  } else {
+    c.innerHTML=`
+      <button class="back" onclick="S.overlay.step=2;render()">‹ Back</button>
+      <h2 class="title">Availability</h2>
+      <div class="lead">Step 3 of 3 · When can you help?</div>
+      <div class="card"><div class="field" style="margin:0"><label>Your availability</label>
+        <input id="av" value="${esc(d.avail)}" placeholder="e.g. Tue & Thu after school" oninput="d.avail=this.value"></div></div>
+      <div class="card" style="margin-top:12px;text-align:center">
+        <div style="font-size:34px">🎉</div>
+        <div style="font-weight:800;margin:6px 0 2px">You're ready to tutor!</div>
+        <div class="tiny">${Object.keys(d.courses).length} classes · service hours will track automatically.</div>
+      </div>
+      <div style="margin-top:16px"><button class="btn green" onclick="finishTutor()">Finish — start tutoring</button></div>
+    `;
+  }
+}
+function toggleTutorCourse(course){ const d=S.overlay.draft; if(d.courses[course])delete d.courses[course]; else d.courses[course]={grade:'A',year:'2024–25'}; render(); }
+function d_grade(course,v){ S.overlay.draft.courses[course].grade=v; }
+function d_year(course,v){ S.overlay.draft.courses[course].year=v; }
+function finishTutor(){
+  const d=S.overlay.draft;
+  S.me.isTutor=true;
+  S.me.avail=$('av')?$('av').value.trim():d.avail;
+  S.me.tutorCourses=Object.entries(d.courses).map(([course,v])=>({course,grade:v.grade,year:v.year}));
+  close(); go('tutoring');
+  toast('You\'re now a tutor! 🎓');
+}
+
+/* -------- SEARCH (overlay) -------- */
+function renderSearch(c){
+  c.innerHTML=`
+    <button class="back" onclick="close()">‹ Back</button>
+    <div class="search"><span class="mag">🔍</span><input id="sq" placeholder="Search classes…" oninput="renderSearchResults(this.value)"></div>
+    <div id="sresults" style="margin-top:12px"></div>`;
+  setTimeout(()=>{ $('sq')&&$('sq').focus(); renderSearchResults(''); },0);
+}
+function renderSearchResults(q){
+  q=(q||'').toLowerCase();
+  const matches=ALL_COURSES.filter(c=>c.toLowerCase().includes(q));
+  $('sresults').innerHTML = matches.length ? matches.map(course=>`
+    <div class="card row" style="cursor:pointer" onclick="open({type:'course',course:'${esc(course)}'})">
+      <div class="avatar" style="background:${courseColor(course)}">${courseEmoji(course)}</div>
+      <div><div style="font-weight:800">${esc(course)}</div><div class="tiny">${tutorsFor(course).length} tutors</div></div>
+      <div style="margin-left:auto;color:var(--muted)">›</div>
+    </div>`).join('') : `<div class="empty"><div class="em">🔍</div>No classes found.</div>`;
+}
+
+/* -------- overlay router -------- */
+function renderOverlay(c){
+  const o=S.overlay;
+  if(o.type==='course') return renderCourseDetail(c,o.course);
+  if(o.type==='tutor') return renderTutorProfile(c);
+  if(o.type==='request') return renderRequest(c);
+  if(o.type==='board') return renderBoard(c);
+  if(o.type==='becomeTutor') return renderBecomeTutor(c);
+  if(o.type==='search') return renderSearch(c);
+}
+
+/* ============================= INIT ============================= */
+load(); render();
+</script>
+</body>
+</html>
