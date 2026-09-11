@@ -111,6 +111,10 @@
 
   .badge{position:absolute; top:-4px; right:22%; background:var(--pink-d); color:#fff; font-size:10px; font-weight:800; min-width:16px; height:16px; border-radius:9px; display:flex; align-items:center; justify-content:center; padding:0 4px}
   .navwrap{position:relative; flex:1}
+  .roleswitch{display:flex;gap:6px;margin-top:10px;background:#eef0f4;padding:4px;border-radius:10px}
+  .roleswitch button{flex:1;border:0;background:transparent;padding:7px 0;border-radius:7px;
+    font:inherit;font-size:13px;font-weight:600;color:#5b6270;cursor:pointer;letter-spacing:.01em}
+  .roleswitch button.on{background:#fff;color:#1e2330;box-shadow:0 1px 3px rgba(20,25,40,.12)}
 </style>
   <!-- One visit per browser per day, logged to my own Supabase project.
        Feeds the usage chart on the portfolio. -->
@@ -230,9 +234,13 @@ function renderHead(){
       <div class="logo">S</div>
       <div>
         <h1>StudyLink</h1>
-        <div class="sub">Riverside High · peer tutoring</div>
+        <div class="sub">Peer tutoring, arranged anonymously</div>
       </div>
-      <div class="right">${esc(S.me.name)}<br>Grade ${S.me.grade}</div>
+      <div class="right">${esc(currentAlias())}<br>Grade ${S.me.grade}</div>
+    </div>
+    <div class="roleswitch">
+      <button class="${A.role==='student'?'on':''}" onclick="setRole('student')">Seeking help</button>
+      <button class="${A.role==='tutor'?'on':''}" onclick="setRole('tutor')">Tutoring</button>
     </div>`;
 }
 
@@ -676,92 +684,107 @@ function renderOverlay(c){
 /* ============================= AUTH SCREENS ============================= */
 function renderAuth(){
   const body = document.getElementById('scroll');
-  const d = A.draft || (A.draft = { alias:null, choices:aliasChoices() });
   const msg = A.authMsg ? '<div class="tiny" style="color:var(--red);margin-top:8px">' + esc(A.authMsg) + '</div>' : '';
+
+  // Shown once, after the account is created. The alias is the only thing they
+  // need to remember, so it gets a screen to itself rather than a toast.
+  if(A.authView === 'issued'){
+    body.innerHTML =
+      '<h2 class="title">Your account is ready</h2>' +
+      '<div class="lead">This is how you will sign in, and how other members will see you.</div>' +
+      '<div class="card" style="text-align:center;padding:22px">' +
+        '<div class="tiny" style="letter-spacing:.08em;text-transform:uppercase">Your alias</div>' +
+        '<div style="font-size:30px;font-weight:800;margin:6px 0 4px">' + esc(A.signedUpAlias || '') + '</div>' +
+        '<div class="tiny">Write this down. Your real name is never shown to other members.</div>' +
+      '</div>' +
+      '<div style="margin-top:16px"><button class="btn" onclick="A.authView=\'signin\';render()">Continue to sign in</button></div>';
+    return;
+  }
 
   if(A.authView === 'signup'){
     body.innerHTML =
-      '<h2 class="title">Make an account</h2>' +
-      '<div class="lead">Use a personal email \u2014 your name is never shown to other students.</div>' +
+      '<h2 class="title">Create an account</h2>' +
+      '<div class="lead">Your alias is assigned automatically. Your name is visible only to a school administrator.</div>' +
       '<div class="card">' +
-        '<div class="field"><label>Username</label><input id="su_user" placeholder="what you sign in with"></div>' +
-        '<div class="field"><label>Your email</label><input id="su_email" type="email" placeholder="personal email \u2014 where reset links go"></div>' +
-        '<div class="field"><label>Password</label><input id="su_pass" type="password" placeholder="at least 6 characters"></div>' +
-        '<div class="field"><label>Your real name</label><input id="su_real" placeholder="only an administrator sees this"></div>' +
-        '<div class="field" style="margin-bottom:0"><label>Grade</label><select id="su_grade">' +
-          [9,10,11,12].map(function(g){ return '<option value="' + g + '">' + g + 'th</option>'; }).join('') +
+        '<div class="field"><label>Email address</label><input id="su_email" type="email" placeholder="A personal address, for password resets"></div>' +
+        '<div class="field"><label>Password</label><input id="su_pass" type="password" placeholder="At least 6 characters"></div>' +
+        '<div class="field"><label>Full name</label><input id="su_real" placeholder="Seen only by a school administrator"></div>' +
+        '<div class="field" style="margin-bottom:0"><label>Year</label><select id="su_grade">' +
+          [9,10,11,12].map(function(g){ return '<option value="' + g + '">Grade ' + g + '</option>'; }).join('') +
         '</select></div>' +
-      '</div>' +
-      '<div class="card" style="margin-top:12px">' +
-        '<label>Pick how you appear to others</label>' +
-        '<div class="tiny" style="margin-bottom:8px">Nobody sees your real name \u2014 just this.</div>' +
-        d.choices.map(function(a){
-          return '<button class="btn ' + (d.alias === a ? 'green' : 'gray') + '" style="margin-bottom:6px" ' +
-                 'onclick="A.draft.alias=' + JSON.stringify(a).replace(/"/g,'&quot;') + ';render()">' + esc(a) + '</button>';
-        }).join('') +
-        '<button class="btn gray" onclick="A.draft.choices=aliasChoices();A.draft.alias=null;render()">\u21bb Show me five more</button>' +
-      '</div>' +
-      msg +
-      '<div style="margin-top:16px"><button class="btn" onclick="doSignUp()">' + (A.authBusy ? 'Creating\u2026' : 'Create account') + '</button></div>' +
-      '<div style="margin-top:10px;text-align:center"><button class="btn gray" onclick="A.authView=\'signin\';A.authMsg=\'\';render()">I already have one</button></div>';
+      '</div>' + msg +
+      '<div style="margin-top:16px"><button class="btn" onclick="doSignUp()">' + (A.authBusy ? 'Creating account\u2026' : 'Create account') + '</button></div>' +
+      '<div style="margin-top:10px;text-align:center"><button class="btn gray" onclick="A.authView=\'signin\';A.authMsg=\'\';render()">I already have an account</button></div>';
     return;
   }
 
   if(A.authView === 'reset'){
     body.innerHTML =
       '<h2 class="title">Reset your password</h2>' +
-      '<div class="lead">We\u2019ll email you a link.</div>' +
-      '<div class="card"><div class="field" style="margin:0"><label>Your email</label>' +
-        '<input id="rs_email" type="email" placeholder="the one you signed up with"></div></div>' + msg +
-      '<div style="margin-top:16px"><button class="btn" onclick="doReset()">Send the link</button></div>' +
+      '<div class="lead">A reset link will be sent to the address on your account.</div>' +
+      '<div class="card"><div class="field" style="margin:0"><label>Email address</label>' +
+        '<input id="rs_email" type="email" placeholder="The address you registered with"></div></div>' + msg +
+      '<div style="margin-top:16px"><button class="btn" onclick="doReset()">Send reset link</button></div>' +
       '<div style="margin-top:10px;text-align:center"><button class="btn gray" onclick="A.authView=\'signin\';A.authMsg=\'\';render()">Back</button></div>';
     return;
   }
 
   body.innerHTML =
     '<h2 class="title">StudyLink</h2>' +
-    '<div class="lead">Sign in to find a tutor \u2014 or to be one.</div>' +
+    '<div class="lead">Peer tutoring, arranged anonymously.</div>' +
     '<div class="card">' +
-      '<div class="field"><label>Your email</label><input id="si_user" type="email" placeholder="the email you signed up with"></div>' +
+      '<div class="field"><label>Alias</label><input id="si_user" placeholder="For example, Student 14"></div>' +
       '<div class="field" style="margin-bottom:0"><label>Password</label><input id="si_pass" type="password"></div>' +
     '</div>' + msg +
     '<div style="margin-top:16px"><button class="btn" onclick="doSignIn()">' + (A.authBusy ? 'Signing in\u2026' : 'Sign in') + '</button></div>' +
     '<div style="margin-top:10px;text-align:center">' +
-      '<button class="btn gray" onclick="A.authView=\'signup\';A.authMsg=\'\';render()">Make an account</button>' +
-      '<button class="btn gray" style="margin-top:6px" onclick="A.authView=\'reset\';A.authMsg=\'\';render()">Forgot my password</button>' +
+      '<button class="btn gray" onclick="A.authView=\'signup\';A.authMsg=\'\';render()">Create an account</button>' +
+      '<button class="btn gray" style="margin-top:6px" onclick="A.authView=\'reset\';A.authMsg=\'\';render()">Forgotten password</button>' +
     '</div>';
 }
 
 async function doSignIn(){
   const u = (document.getElementById('si_user')||{}).value || '';
   const p = (document.getElementById('si_pass')||{}).value || '';
-  if(!u.trim() || !p){ A.authMsg = 'Email and password, please.'; return render(); }
+  if(!u.trim() || !p){ A.authMsg = 'Please enter your alias and password.'; return render(); }
   A.authBusy = true; A.authMsg = ''; render();
   try { await signIn(u, p); A.authBusy = false; render(); }
-  catch(e){ A.authBusy = false; A.authMsg = /Invalid/i.test(e.message) ? 'That email and password don\u2019t match.' : e.message; render(); }
+  catch(e){
+    A.authBusy = false;
+    A.authMsg = /Invalid/i.test(e.message) ? 'That alias and password do not match.' : e.message;
+    render();
+  }
 }
 
 async function doSignUp(){
   const g = function(id){ return ((document.getElementById(id)||{}).value || '').trim(); };
-  const username = g('su_user'), email = g('su_email'), pass = g('su_pass'), real = g('su_real');
-  const grade = g('su_grade'), alias = A.draft.alias;
-  if(!username || !email || !pass || !real){ A.authMsg = 'Everything above is needed.'; return render(); }
-  if(!/^[a-z0-9_.-]+$/i.test(username)){ A.authMsg = 'Usernames can use letters, numbers, dots, dashes and underscores.'; return render(); }
-  if(pass.length < 6){ A.authMsg = 'Passwords need at least 6 characters.'; return render(); }
-  if(!alias){ A.authMsg = 'Pick how you want to appear to others.'; return render(); }
+  const email = g('su_email'), pass = g('su_pass'), real = g('su_real'), grade = g('su_grade');
+  if(!email || !pass || !real){ A.authMsg = 'All fields are required.'; return render(); }
+  if(pass.length < 6){ A.authMsg = 'Passwords must be at least 6 characters.'; return render(); }
   A.authBusy = true; A.authMsg = ''; render();
-  try { await signUp({ username, email, password:pass, realName:real, gradeLevel:grade, alias }); A.authBusy = false; render(); }
+  try {
+    const alias = await signUp({ email, password:pass, realName:real, gradeLevel:grade });
+    A.authBusy = false; A.signedUpAlias = alias; A.authView = 'issued'; render();
+  }
   catch(e){
     A.authBusy = false;
-    A.authMsg = /duplicate|already/i.test(e.message) ? 'That username or alias is taken \u2014 try another.' : e.message;
+    if(e.message.indexOf('CONFIRM:') === 0){
+      // Confirmation is on, so there is no session yet. Give them the alias
+      // anyway — it is the thing they will need once the email arrives.
+      A.signedUpAlias = e.message.slice(8);
+      A.authMsg = 'Check your email to confirm the account, then sign in.';
+      A.authView = 'issued'; return render();
+    }
+    A.authMsg = /already registered|already been/i.test(e.message)
+      ? 'An account already exists for that email address.' : e.message;
     render();
   }
 }
 
 async function doReset(){
   const email = ((document.getElementById('rs_email')||{}).value || '').trim();
-  if(!email){ A.authMsg = 'Enter your school email.'; return render(); }
-  try { await sendReset(email); A.authMsg = ''; alert('If that email is on an account, a reset link is on its way.'); A.authView='signin'; render(); }
+  if(!email){ A.authMsg = 'Please enter your email address.'; return render(); }
+  try { await sendReset(email); A.authMsg = ''; alert('If an account exists for that address, a reset link has been sent.'); A.authView='signin'; render(); }
   catch(e){ A.authMsg = e.message; render(); }
 }
 
@@ -772,7 +795,18 @@ const SB  = 'https://ejmiqtizvuuilsztbafk.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVqbWlxdGl6dnV1aWxzenRiYWZrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUzNjkzMjAsImV4cCI6MjA3MDk0NTMyMH0.mHjzI8hth6JMFW6WeDg2Dy0nFOprC0Tj4p5Cjs7Aq0E';
 const AUTH_LS = 'studylink-session';
 
-let A = { token:null, user:null, profile:null, authView:'signin', authBusy:false, authMsg:'' };
+let A = { token:null, user:null, profile:null, authView:'signin', authBusy:false, authMsg:'', role:'student', signedUpAlias:null };
+
+// Which name you are wearing right now. Switching roles switches identity — a
+// tutor and a student with the same person behind them look unrelated.
+function currentAlias(){
+  if(!A.profile) return 'You';
+  return A.role === 'tutor' ? (A.profile.tutor_alias || 'Tutor') : A.profile.student_alias;
+}
+async function setRole(r){
+  if(r === 'tutor'){ try { await ensureTutorAlias(); } catch(e){ toast(e.message); return; } }
+  A.role = r; S.me.name = currentAlias(); render();
+}
 
 function sbHeaders(auth){
   const h = { apikey:SKEY, 'Content-Type':'application/json' };
@@ -806,19 +840,26 @@ function clearSession(){ try{ localStorage.removeItem(AUTH_LS); }catch(e){} A.to
 async function loadProfile(){
   const rows = await sbFetch('/rest/v1/sl_profiles?select=*&id=eq.' + A.user.id);
   A.profile = rows && rows[0] ? rows[0] : null;
-  // The rest of the app only ever knows you by your alias.
+  // The app knows you by whichever alias fits what you're currently doing.
   if(A.profile){
-    S.me.name  = A.profile.alias;
+    S.me.name  = currentAlias();
     S.me.grade = A.profile.grade_level || S.me.grade;
   }
 }
 
 async function signIn(idOrEmail, password){
-  // Sign in with the email on the account. A made-up username@studylink.local
-  // address was the original plan, but Supabase rejects domains that don't
-  // resolve, and a real address is needed for the reset link anyway. The
-  // username is still yours — it just isn't what you log in with.
-  const email = idOrEmail.trim();
+  // You sign in with your alias. The email behind it is resolved server-side by
+  // sl_login_email, which checks the password before returning anything — so
+  // aliases, which are public by design, can't be used to harvest addresses.
+  let email = idOrEmail.trim();
+  if(!email.includes('@')){
+    const found = await sbFetch('/rest/v1/rpc/sl_login_email', {
+      method:'POST', headers:{ Authorization:'Bearer ' + SKEY },
+      body: JSON.stringify({ p_alias: email, p_password: password })
+    });
+    if(!found) throw new Error('Invalid login credentials');
+    email = found;
+  }
   const d = await sbFetch('/auth/v1/token?grant_type=password', {
     method:'POST', headers:{ Authorization:'Bearer ' + SKEY },
     body: JSON.stringify({ email, password })
@@ -827,21 +868,43 @@ async function signIn(idOrEmail, password){
   await loadProfile();
 }
 
-async function signUp({ username, email, password, realName, gradeLevel, alias }){
+async function signUp({ email, password, realName, gradeLevel }){
+  // The alias is issued, not chosen. Sequential numbers from the server keep
+  // them unique without anyone picking something that identifies them.
+  const alias = await sbFetch('/rest/v1/rpc/sl_next_alias', {
+    method:'POST', headers:{ Authorization:'Bearer ' + SKEY },
+    body: JSON.stringify({ kind:'student' })
+  });
   const d = await sbFetch('/auth/v1/signup', {
     method:'POST', headers:{ Authorization:'Bearer ' + SKEY },
     body: JSON.stringify({ email: email.trim(), password })
   });
   A.token = d.access_token || (d.session && d.session.access_token);
   A.user  = d.user || (d.session && d.session.user);
-  if(!A.token) throw new Error('Account made, but sign-in did not complete. Try signing in.');
+  if(!A.token) throw new Error('CONFIRM:' + alias);
   saveSession();
   await sbFetch('/rest/v1/sl_profiles', {
     method:'POST', headers:{ Prefer:'return=minimal' },
-    body: JSON.stringify({ id:A.user.id, username:username.trim().toLowerCase(), real_name:realName.trim(),
-                           grade_level:Number(gradeLevel)||null, alias })
+    body: JSON.stringify({ id:A.user.id, real_name:realName.trim(),
+                           grade_level:Number(gradeLevel)||null, student_alias:alias })
   });
   await loadProfile();
+  return alias;
+}
+
+// Claim a tutor alias the first time someone offers to tutor, so their two
+// identities are separate numbers that can't be matched to each other.
+async function ensureTutorAlias(){
+  if(A.profile && A.profile.tutor_alias) return A.profile.tutor_alias;
+  const alias = await sbFetch('/rest/v1/rpc/sl_next_alias', {
+    method:'POST', body: JSON.stringify({ kind:'tutor' })
+  });
+  await sbFetch('/rest/v1/sl_profiles?id=eq.' + A.user.id, {
+    method:'PATCH', headers:{ Prefer:'return=minimal' },
+    body: JSON.stringify({ tutor_alias: alias })
+  });
+  await loadProfile();
+  return alias;
 }
 
 async function sendReset(email){
