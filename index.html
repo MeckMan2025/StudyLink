@@ -112,6 +112,9 @@
   .badge{position:absolute; top:-4px; right:22%; background:var(--pink-d); color:#fff; font-size:10px; font-weight:800; min-width:16px; height:16px; border-radius:9px; display:flex; align-items:center; justify-content:center; padding:0 4px}
   .navwrap{position:relative; flex:1}
 </style>
+  <!-- One visit per browser per day, logged to my own Supabase project.
+       Feeds the usage chart on the portfolio. -->
+  <script>(function(){try{var k='pv-studylink-'+new Date().toISOString().slice(0,10);if(localStorage.getItem(k))return;localStorage.setItem(k,'1');fetch('https://ejmiqtizvuuilsztbafk.supabase.co/rest/v1/pageviews',{method:'POST',headers:{apikey:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVqbWlxdGl6dnV1aWxzenRiYWZrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUzNjkzMjAsImV4cCI6MjA3MDk0NTMyMH0.mHjzI8hth6JMFW6WeDg2Dy0nFOprC0Tj4p5Cjs7Aq0E',Authorization:'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVqbWlxdGl6dnV1aWxzenRiYWZrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUzNjkzMjAsImV4cCI6MjA3MDk0NTMyMH0.mHjzI8hth6JMFW6WeDg2Dy0nFOprC0Tj4p5Cjs7Aq0E','Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({site:'studylink'})}).catch(function(){});}catch(e){}})();</script>
 </head>
 <body>
 <div class="phone">
