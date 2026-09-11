@@ -682,10 +682,10 @@ function renderAuth(){
   if(A.authView === 'signup'){
     body.innerHTML =
       '<h2 class="title">Make an account</h2>' +
-      '<div class="lead">Your name is never shown to other students.</div>' +
+      '<div class="lead">Use a personal email \u2014 your name is never shown to other students.</div>' +
       '<div class="card">' +
         '<div class="field"><label>Username</label><input id="su_user" placeholder="what you sign in with"></div>' +
-        '<div class="field"><label>School email</label><input id="su_email" type="email" placeholder="for password resets"></div>' +
+        '<div class="field"><label>Your email</label><input id="su_email" type="email" placeholder="personal email \u2014 where reset links go"></div>' +
         '<div class="field"><label>Password</label><input id="su_pass" type="password" placeholder="at least 6 characters"></div>' +
         '<div class="field"><label>Your real name</label><input id="su_real" placeholder="only an administrator sees this"></div>' +
         '<div class="field" style="margin-bottom:0"><label>Grade</label><select id="su_grade">' +
@@ -711,7 +711,7 @@ function renderAuth(){
     body.innerHTML =
       '<h2 class="title">Reset your password</h2>' +
       '<div class="lead">We\u2019ll email you a link.</div>' +
-      '<div class="card"><div class="field" style="margin:0"><label>School email</label>' +
+      '<div class="card"><div class="field" style="margin:0"><label>Your email</label>' +
         '<input id="rs_email" type="email" placeholder="the one you signed up with"></div></div>' + msg +
       '<div style="margin-top:16px"><button class="btn" onclick="doReset()">Send the link</button></div>' +
       '<div style="margin-top:10px;text-align:center"><button class="btn gray" onclick="A.authView=\'signin\';A.authMsg=\'\';render()">Back</button></div>';
@@ -722,7 +722,7 @@ function renderAuth(){
     '<h2 class="title">StudyLink</h2>' +
     '<div class="lead">Sign in to find a tutor \u2014 or to be one.</div>' +
     '<div class="card">' +
-      '<div class="field"><label>School email</label><input id="si_user" type="email" placeholder="your school email"></div>' +
+      '<div class="field"><label>Your email</label><input id="si_user" type="email" placeholder="the email you signed up with"></div>' +
       '<div class="field" style="margin-bottom:0"><label>Password</label><input id="si_pass" type="password"></div>' +
     '</div>' + msg +
     '<div style="margin-top:16px"><button class="btn" onclick="doSignIn()">' + (A.authBusy ? 'Signing in\u2026' : 'Sign in') + '</button></div>' +
@@ -814,10 +814,10 @@ async function loadProfile(){
 }
 
 async function signIn(idOrEmail, password){
-  // Sign in with the school email. A made-up username@studylink.local address
-  // was the original plan, but Supabase rejects domains that don't resolve, and
-  // a real address is needed for the reset link anyway. The username is still
-  // yours — it just isn't what you log in with.
+  // Sign in with the email on the account. A made-up username@studylink.local
+  // address was the original plan, but Supabase rejects domains that don't
+  // resolve, and a real address is needed for the reset link anyway. The
+  // username is still yours — it just isn't what you log in with.
   const email = idOrEmail.trim();
   const d = await sbFetch('/auth/v1/token?grant_type=password', {
     method:'POST', headers:{ Authorization:'Bearer ' + SKEY },
