@@ -701,6 +701,18 @@ function renderAuth(){
     return;
   }
 
+  if(A.authView === 'confirm'){
+    body.innerHTML =
+      '<h2 class="title">Confirm your email</h2>' +
+      '<div class="lead">Your account has been created.</div>' +
+      '<div class="card">' +
+        '<p>Open the link we have sent to your email address, then return here and sign in <strong>using that email address</strong>.</p>' +
+        '<p class="tiny" style="margin-top:8px">Your alias will be issued when you first sign in. After that, you can sign in with the alias instead.</p>' +
+      '</div>' +
+      '<div style="margin-top:16px"><button class="btn" onclick="A.authView=\'signin\';render()">Go to sign in</button></div>';
+    return;
+  }
+
   if(A.authView === 'signup'){
     body.innerHTML =
       '<h2 class="title">Create an account</h2>' +
@@ -733,7 +745,7 @@ function renderAuth(){
     '<h2 class="title">StudyLink</h2>' +
     '<div class="lead">Peer tutoring, arranged anonymously.</div>' +
     '<div class="card">' +
-      '<div class="field"><label>Alias</label><input id="si_user" placeholder="For example, Student 14"></div>' +
+      '<div class="field"><label>Alias or email</label><input id="si_user" placeholder="Student 14, or your email the first time"></div>' +
       '<div class="field" style="margin-bottom:0"><label>Password</label><input id="si_pass" type="password"></div>' +
     '</div>' + msg +
     '<div style="margin-top:16px"><button class="btn" onclick="doSignIn()">' + (A.authBusy ? 'Signing in\u2026' : 'Sign in') + '</button></div>' +
@@ -748,7 +760,13 @@ async function doSignIn(){
   const p = (document.getElementById('si_pass')||{}).value || '';
   if(!u.trim() || !p){ A.authMsg = 'Please enter your alias and password.'; return render(); }
   A.authBusy = true; A.authMsg = ''; render();
-  try { await signIn(u, p); A.authBusy = false; render(); }
+  try {
+    const newAlias = await signIn(u, p);
+    A.authBusy = false;
+    // Only set on the very first sign-in, when the profile was just created.
+    if(newAlias){ A.signedUpAlias = newAlias; A.authView = 'issued'; A.profile = null; }
+    render();
+  }
   catch(e){
     A.authBusy = false;
     A.authMsg = /Invalid/i.test(e.message) ? 'That alias and password do not match.' : e.message;
@@ -764,19 +782,18 @@ async function doSignUp(){
   A.authBusy = true; A.authMsg = ''; render();
   try {
     const alias = await signUp({ email, password:pass, realName:real, gradeLevel:grade });
-    A.authBusy = false; A.signedUpAlias = alias; A.authView = 'issued'; render();
+    A.authBusy = false;
+    if(alias){ A.signedUpAlias = alias; A.authView = 'issued'; A.profile = null; }
+    else { A.authView = 'confirm'; }   // confirmation is on; alias comes after
+    render();
   }
   catch(e){
     A.authBusy = false;
-    if(e.message.indexOf('CONFIRM:') === 0){
-      // Confirmation is on, so there is no session yet. Give them the alias
-      // anyway — it is the thing they will need once the email arrives.
-      A.signedUpAlias = e.message.slice(8);
-      A.authMsg = 'Check your email to confirm the account, then sign in.';
-      A.authView = 'issued'; return render();
-    }
     A.authMsg = /already registered|already been/i.test(e.message)
-      ? 'An account already exists for that email address.' : e.message;
+      ? 'An account already exists for that email address.'
+      : /rate limit/i.test(e.message)
+        ? 'Too many sign-ups from this server right now. Try again shortly.'
+        : e.message;
     render();
   }
 }
@@ -865,31 +882,51 @@ async function signIn(idOrEmail, password){
     body: JSON.stringify({ email, password })
   });
   A.token = d.access_token; A.user = d.user; saveSession();
-  await loadProfile();
+  return await ensureProfile();   // issues the alias if this is their first sign-in
 }
 
 async function signUp({ email, password, realName, gradeLevel }){
-  // The alias is issued, not chosen. Sequential numbers from the server keep
-  // them unique without anyone picking something that identifies them.
-  const alias = await sbFetch('/rest/v1/rpc/sl_next_alias', {
-    method:'POST', headers:{ Authorization:'Bearer ' + SKEY },
-    body: JSON.stringify({ kind:'student' })
-  });
+  // Create the account first. The alias used to be claimed before this, which
+  // burned a Student number every time a signup failed and showed an error
+  // where the alias should have been.
   const d = await sbFetch('/auth/v1/signup', {
     method:'POST', headers:{ Authorization:'Bearer ' + SKEY },
-    body: JSON.stringify({ email: email.trim(), password })
+    body: JSON.stringify({
+      email: email.trim(), password,
+      data: { real_name: realName.trim(), grade_level: Number(gradeLevel) || null }
+    })
   });
   A.token = d.access_token || (d.session && d.session.access_token);
   A.user  = d.user || (d.session && d.session.user);
-  if(!A.token) throw new Error('CONFIRM:' + alias);
+  // No session means email confirmation is on. The account exists, but nothing
+  // can be written as them until they confirm and sign in, so the alias is
+  // issued then instead.
+  if(!A.token) return null;
   saveSession();
+  return await ensureProfile();
+}
+
+// Give this account a profile and a student number if it doesn't have one yet.
+// Runs on first sign-in as well as after signup, so it works whether or not
+// email confirmation is switched on.
+async function ensureProfile(){
+  await loadProfile();
+  if(A.profile) return null;
+  const alias = await sbFetch('/rest/v1/rpc/sl_next_alias', {
+    method:'POST', body: JSON.stringify({ kind:'student' })
+  });
+  const meta = (A.user && A.user.user_metadata) || {};
   await sbFetch('/rest/v1/sl_profiles', {
     method:'POST', headers:{ Prefer:'return=minimal' },
-    body: JSON.stringify({ id:A.user.id, real_name:realName.trim(),
-                           grade_level:Number(gradeLevel)||null, student_alias:alias })
+    body: JSON.stringify({
+      id: A.user.id,
+      real_name: meta.real_name || 'Unknown',
+      grade_level: meta.grade_level || null,
+      student_alias: alias
+    })
   });
   await loadProfile();
-  return alias;
+  return alias;   // non-null only the first time, so the alias screen shows once
 }
 
 // Claim a tutor alias the first time someone offers to tutor, so their two
