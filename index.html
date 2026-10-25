@@ -472,7 +472,7 @@ function renderHelp(c){
     ${q('Getting help', 'Open a class to see its tutors, then send a request. Once it is accepted, it shows up on your calendar.')}
     ${q('Privacy', 'Other students only see your alias. Coordination happens inside StudyLink — no phone numbers or personal emails are shared.')}
     ${q('Verified grades', 'When you become a tutor, the grades you claim go to a school administrator, who checks them against your records. Verified grades show a ✓ on your tutor card.')}
-    ${q('Who runs this', 'Students use the app. Administrators verify grades and manage requests. The board maintains the app itself. Accounts are invitation-only: an administrator adds you by email and you set your password from the link you receive. Administrators and the board change levels, names and grades on the Members page.')}`;
+    ${q('Who runs this', 'Students use the app. Administrators verify grades and manage requests. The board maintains the app itself. Only emails approved by the school can create an account; an administrator adds you on the Members page first. Administrators and the board change levels, names and grades there too.')}`;
 }
 
 /* -------- HOME -------- */
@@ -1189,7 +1189,7 @@ async function renderAdminTeam(c){
     ${list.filter(s=>s.role===role).map(row).join('') || '<div class="card tiny" style="text-align:center">Nobody yet.</div>'}`;
   c.innerHTML = `
     <h2 class="title">Members</h2>
-    <div class="lead">StudyLink is invitation-only. Add someone here and they get an email with a link to set their password. Students use the app; administrators verify grades and manage requests; the board maintains the app. Administrators and the board can add anyone.</div>
+    <div class="lead">Only approved emails can make an account. Add someone here: they get an invite email, or they can simply press Create an account with that address. Students use the app; administrators verify grades and manage requests; the board maintains the app. Administrators and the board can add anyone.</div>
     <div class="card">
       <div class="row" style="gap:8px;flex-wrap:wrap">
         <input id="mb_name" placeholder="Full name" style="flex:1;min-width:160px;padding:10px 12px;border:1.5px solid #e5e2f0;border-radius:11px;font:inherit;font-size:14px">
@@ -1338,8 +1338,8 @@ function renderAuth(){
   if(A.authView === 'signup'){
     body.innerHTML = card(logo +
       '<h2>Create an account</h2>' +
-      '<div class="lead">Your alias is assigned automatically. Your name is visible only to a school administrator.</div>' +
-      '<div class="field"><label>Email address</label><input id="su_email" type="email" autocomplete="email" placeholder="A personal address, for password resets" value="' + v('su_email') + '"></div>' +
+      '<div class="lead">Use the email address the school approved. Your alias is assigned automatically; your name is visible only to a school administrator.</div>' +
+      '<div class="field"><label>Email address</label><input id="su_email" type="email" autocomplete="email" placeholder="The address the school approved" value="' + v('su_email') + '"></div>' +
       '<div class="field"><label>Password</label>' + pw('su_pass', 'At least 6 characters', 'new-password') + '</div>' +
       '<div class="field"><label>Full name</label><input id="su_real" autocomplete="name" placeholder="Seen only by a school administrator" value="' + v('su_real') + '"></div>' +
       '<div class="field"><label>Year</label><select id="su_grade">' +
@@ -1368,8 +1368,8 @@ function renderAuth(){
     '<div class="field"><label>Alias or email</label><input id="si_user" autocomplete="username" placeholder="Student 14 — or your email, the first time" value="' + v('si_user') + '"></div>' +
     '<div class="field"><label>Password</label>' + pw('si_pass') + '</div>' + msg +
     '<button class="btn" onclick="doSignIn()"' + (A.authBusy ? ' disabled' : '') + '>' + (A.authBusy ? 'Signing in…' : 'Sign in') + '</button>' +
-    links(link('reset', 'Forgotten password?')) +
-    '<div class="auth-foot">Accounts are set up by the school. If you were invited, use the link in that email to set your password.<br>Your real name is never shown to other members.</div>');
+    links(link('signup', 'Create an account'), link('reset', 'Forgotten password?')) +
+    '<div class="auth-foot">Only emails approved by the school can create an account.<br>Your real name is never shown to other members.</div>');
   wireAuthForm('doSignIn', 'si_user');
 }
 
@@ -1408,7 +1408,11 @@ async function consumeAuthLink(){
     A.token = token;
     const user = await sbFetch('/auth/v1/user');
     A.user = user; saveSession(); dataLoaded = false;
-    A.linkType = type; A.authView = 'setpw'; A.profile = null;
+    A.linkType = type; A.profile = null;
+    if(type === 'recovery' || type === 'invite'){ A.authView = 'setpw'; return true; }
+    // Email confirmed after sign-up: the password is already set, so issue the alias.
+    const alias = await ensureProfile();
+    if(alias){ A.signedUpAlias = alias; A.authView = 'issued'; A.profile = null; }
     return true;
   } catch(e){ clearSession(); A.authMsg = 'That link has expired. Ask for a new one.'; return false; }
 }
@@ -1475,11 +1479,13 @@ async function doSignUp(){
   }
   catch(e){
     A.authBusy = false;
-    A.authMsg = /already registered|already been/i.test(e.message)
-      ? 'An account already exists for that email address.'
-      : /rate limit/i.test(e.message)
-        ? 'Too many sign-ups from this server right now. Try again shortly.'
-        : e.message;
+    A.authMsg = /already registered|already been|already exists/i.test(e.message)
+      ? 'An account already exists for that email address. Sign in, or use Forgotten password.'
+      : /Database error|not been approved|unexpected_failure/i.test(e.message)
+        ? 'That email address has not been approved by the school. Ask an administrator to add you.'
+        : /rate limit/i.test(e.message)
+          ? 'Too many sign-ups right now. Try again in a little while.'
+          : e.message;
     render();
   }
 }
