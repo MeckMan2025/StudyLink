@@ -107,6 +107,33 @@
   .evrow .bar{width:4px; align-self:stretch; border-radius:3px; background:var(--c)}
   .evrow .del{margin-left:auto; border:none; background:none; color:var(--muted); cursor:pointer; font-size:16px}
 
+  /* Sign-in: a centred card, no sidebar or header behind it */
+  .app.auth .side,.app.auth .scrim,.app.auth .head{display:none !important}
+  .app.auth .main{margin-left:0}
+  .app.auth .scroll{max-width:none; padding:0}
+  .auth-wrap{min-height:100vh; display:flex; align-items:center; justify-content:center; padding:28px 16px;
+    background:radial-gradient(900px 520px at 15% -10%, #dde8fd 0%, transparent 60%), radial-gradient(800px 520px at 100% 110%, #fbe3ee 0%, transparent 60%), var(--bg)}
+  .auth-card{width:100%; max-width:400px; background:#fff; border:1px solid var(--line); border-radius:22px; padding:28px 24px 22px; box-shadow:0 22px 60px rgba(60,50,110,.14)}
+  .auth-logo{width:58px; height:58px; border-radius:17px; background:linear-gradient(135deg,var(--blue),var(--purple)); display:flex; align-items:center; justify-content:center; color:#fff; font-weight:900; font-size:28px; margin:0 auto 12px; box-shadow:0 10px 22px rgba(120,100,220,.28)}
+  .auth-card h2{margin:0; text-align:center; font-size:24px; font-weight:800; letter-spacing:.2px}
+  .auth-card .lead{text-align:center; margin:4px 0 18px}
+  .auth-card .field:last-child{margin-bottom:0}
+  .pw{position:relative}
+  .pw input{padding-right:58px}
+  .pw .eye{position:absolute; right:6px; top:50%; transform:translateY(-50%); border:none; background:none; cursor:pointer; color:var(--blue-d); font:inherit; font-size:12px; font-weight:800; padding:6px 8px; border-radius:8px}
+  .pw .eye:hover{background:#eef2fb}
+  .auth-msg{margin-top:12px; border-radius:11px; padding:10px 12px; font-size:13px; font-weight:700; line-height:1.35}
+  .auth-msg.err{background:#fdecef; color:#c23b5e}
+  .auth-msg.ok{background:#e6f6ee; color:#2f8a5e}
+  .auth-card .btn{margin-top:16px}
+  .auth-links{display:flex; justify-content:space-between; gap:10px; margin-top:14px}
+  .auth-links button{border:none; background:none; cursor:pointer; font:inherit; font-size:13px; font-weight:800; color:var(--blue-d); padding:4px 0}
+  .auth-links button:hover{text-decoration:underline}
+  .auth-links.center{justify-content:center}
+  .auth-alias{margin:14px 0 4px; text-align:center; background:linear-gradient(135deg,#eaf0fe,#f6edf8); border-radius:16px; padding:20px 14px}
+  .auth-alias .big{font-size:32px; font-weight:800; margin:6px 0 4px; color:var(--ink)}
+  .auth-foot{text-align:center; margin-top:18px; font-size:11.5px; color:var(--muted); font-weight:600}
+
   /* Bits */
   h2.title{font-size:22px; font-weight:800; margin:4px 2px 2px}
   .lead{color:var(--muted); font-size:13px; font-weight:600; margin:0 2px 14px}
@@ -312,6 +339,7 @@ function render(){
   // requests all belong to somebody, so there's no sensible signed-out view.
   // Sign-in is parked for now (SKIP_LOGIN) — everyone lands on a demo profile.
   if(!A.profile && SKIP_LOGIN) useDemoProfile();
+  document.getElementById('app').classList.toggle('auth', !A.profile);
   if(!A.profile){
     document.getElementById('head').innerHTML = '';
     document.getElementById('nav').innerHTML  = '';
@@ -995,85 +1023,116 @@ function renderOverlay(c){
 /* ============================= AUTH SCREENS ============================= */
 function renderAuth(){
   const body = document.getElementById('scroll');
-  const msg = A.authMsg ? '<div class="tiny" style="color:var(--red);margin-top:8px">' + esc(A.authMsg) + '</div>' : '';
+  const d = A.draft || {};
+  const v = k => esc(d[k] || '');
+  const msg = A.authMsg ? '<div class="auth-msg err">' + esc(A.authMsg) + '</div>'
+            : A.authOk ? '<div class="auth-msg ok">' + esc(A.authOk) + '</div>' : '';
+  const card = inner => '<div class="auth-wrap"><div class="auth-card">' + inner + '</div></div>';
+  const logo = '<div class="auth-logo">S</div>';
+  const pw = (id, ph, extra) =>
+    '<div class="pw"><input id="' + id + '" type="password" autocomplete="' + (extra || 'current-password') + '"' + (ph ? ' placeholder="' + ph + '"' : '') + '>' +
+    '<button type="button" class="eye" onclick="togglePw(\'' + id + '\', this)">Show</button></div>';
+  const links = (a, b) => '<div class="auth-links' + (b ? '' : ' center') + '">' + a + (b || '') + '</div>';
+  const link = (view, label) => '<button type="button" onclick="authGo(\'' + view + '\')">' + label + '</button>';
 
   // Shown once, after the account is created. The alias is the only thing they
   // need to remember, so it gets a screen to itself rather than a toast.
   if(A.authView === 'issued'){
-    body.innerHTML =
-      '<h2 class="title">Your account is ready</h2>' +
+    body.innerHTML = card(logo +
+      '<h2>Your account is ready</h2>' +
       '<div class="lead">This is how you will sign in, and how other members will see you.</div>' +
-      '<div class="card" style="text-align:center;padding:22px">' +
+      '<div class="auth-alias">' +
         '<div class="tiny" style="letter-spacing:.08em;text-transform:uppercase">Your alias</div>' +
-        '<div style="font-size:30px;font-weight:800;margin:6px 0 4px">' + esc(A.signedUpAlias || '') + '</div>' +
+        '<div class="big">' + esc(A.signedUpAlias || '') + '</div>' +
         '<div class="tiny">Write this down. Your real name is never shown to other members.</div>' +
       '</div>' +
-      '<div style="margin-top:16px"><button class="btn" onclick="A.authView=\'signin\';render()">Continue to sign in</button></div>';
+      '<button class="btn" onclick="authGo(\'signin\')">Continue to sign in</button>');
     return;
   }
 
   if(A.authView === 'confirm'){
-    body.innerHTML =
-      '<h2 class="title">Confirm your email</h2>' +
+    body.innerHTML = card(logo +
+      '<h2>Confirm your email</h2>' +
       '<div class="lead">Your account has been created.</div>' +
-      '<div class="card">' +
-        '<p>Open the link we have sent to your email address, then return here and sign in <strong>using that email address</strong>.</p>' +
-        '<p class="tiny" style="margin-top:8px">Your alias will be issued when you first sign in. After that, you can sign in with the alias instead.</p>' +
-      '</div>' +
-      '<div style="margin-top:16px"><button class="btn" onclick="A.authView=\'signin\';render()">Go to sign in</button></div>';
+      '<p style="margin:0;font-size:14px;line-height:1.5">Open the link we have sent to your email address, then return here and sign in <strong>using that email address</strong>.</p>' +
+      '<p class="tiny" style="margin-top:10px">Your alias will be issued when you first sign in. After that, you can sign in with the alias instead.</p>' +
+      '<button class="btn" onclick="authGo(\'signin\')">Go to sign in</button>');
     return;
   }
 
   if(A.authView === 'signup'){
-    body.innerHTML =
-      '<h2 class="title">Create an account</h2>' +
+    body.innerHTML = card(logo +
+      '<h2>Create an account</h2>' +
       '<div class="lead">Your alias is assigned automatically. Your name is visible only to a school administrator.</div>' +
-      '<div class="card">' +
-        '<div class="field"><label>Email address</label><input id="su_email" type="email" placeholder="A personal address, for password resets"></div>' +
-        '<div class="field"><label>Password</label><input id="su_pass" type="password" placeholder="At least 6 characters"></div>' +
-        '<div class="field"><label>Full name</label><input id="su_real" placeholder="Seen only by a school administrator"></div>' +
-        '<div class="field" style="margin-bottom:0"><label>Year</label><select id="su_grade">' +
-          [9,10,11,12].map(function(g){ return '<option value="' + g + '">Grade ' + g + '</option>'; }).join('') +
-        '</select></div>' +
-      '</div>' + msg +
-      '<div style="margin-top:16px"><button class="btn" onclick="doSignUp()">' + (A.authBusy ? 'Creating account\u2026' : 'Create account') + '</button></div>' +
-      '<div style="margin-top:10px;text-align:center"><button class="btn gray" onclick="A.authView=\'signin\';A.authMsg=\'\';render()">I already have an account</button></div>';
+      '<div class="field"><label>Email address</label><input id="su_email" type="email" autocomplete="email" placeholder="A personal address, for password resets" value="' + v('su_email') + '"></div>' +
+      '<div class="field"><label>Password</label>' + pw('su_pass', 'At least 6 characters', 'new-password') + '</div>' +
+      '<div class="field"><label>Full name</label><input id="su_real" autocomplete="name" placeholder="Seen only by a school administrator" value="' + v('su_real') + '"></div>' +
+      '<div class="field"><label>Year</label><select id="su_grade">' +
+        [9,10,11,12].map(function(g){ return '<option value="' + g + '"' + (String(d.su_grade) === String(g) ? ' selected' : '') + '>Grade ' + g + '</option>'; }).join('') +
+      '</select></div>' + msg +
+      '<button class="btn" onclick="doSignUp()"' + (A.authBusy ? ' disabled' : '') + '>' + (A.authBusy ? 'Creating account…' : 'Create account') + '</button>' +
+      links(link('signin', 'I already have an account')));
+    wireAuthForm('doSignUp', 'su_email');
     return;
   }
 
   if(A.authView === 'reset'){
-    body.innerHTML =
-      '<h2 class="title">Reset your password</h2>' +
+    body.innerHTML = card(logo +
+      '<h2>Reset your password</h2>' +
       '<div class="lead">A reset link will be sent to the address on your account.</div>' +
-      '<div class="card"><div class="field" style="margin:0"><label>Email address</label>' +
-        '<input id="rs_email" type="email" placeholder="The address you registered with"></div></div>' + msg +
-      '<div style="margin-top:16px"><button class="btn" onclick="doReset()">Send reset link</button></div>' +
-      '<div style="margin-top:10px;text-align:center"><button class="btn gray" onclick="A.authView=\'signin\';A.authMsg=\'\';render()">Back</button></div>';
+      '<div class="field"><label>Email address</label><input id="rs_email" type="email" autocomplete="email" placeholder="The address you registered with" value="' + v('rs_email') + '"></div>' + msg +
+      '<button class="btn" onclick="doReset()">Send reset link</button>' +
+      links(link('signin', 'Back to sign in')));
+    wireAuthForm('doReset', 'rs_email');
     return;
   }
 
-  body.innerHTML =
-    '<h2 class="title">StudyLink</h2>' +
+  body.innerHTML = card(logo +
+    '<h2>StudyLink</h2>' +
     '<div class="lead">Peer tutoring, arranged anonymously.</div>' +
-    '<div class="card">' +
-      '<div class="field"><label>Alias or email</label><input id="si_user" placeholder="Student 14, or your email the first time"></div>' +
-      '<div class="field" style="margin-bottom:0"><label>Password</label><input id="si_pass" type="password"></div>' +
-    '</div>' + msg +
-    '<div style="margin-top:16px"><button class="btn" onclick="doSignIn()">' + (A.authBusy ? 'Signing in\u2026' : 'Sign in') + '</button></div>' +
-    '<div style="margin-top:10px;text-align:center">' +
-      '<button class="btn gray" onclick="A.authView=\'signup\';A.authMsg=\'\';render()">Create an account</button>' +
-      '<button class="btn gray" style="margin-top:6px" onclick="A.authView=\'reset\';A.authMsg=\'\';render()">Forgotten password</button>' +
-    '</div>';
+    '<div class="field"><label>Alias or email</label><input id="si_user" autocomplete="username" placeholder="Student 14 — or your email, the first time" value="' + v('si_user') + '"></div>' +
+    '<div class="field"><label>Password</label>' + pw('si_pass') + '</div>' + msg +
+    '<button class="btn" onclick="doSignIn()"' + (A.authBusy ? ' disabled' : '') + '>' + (A.authBusy ? 'Signing in…' : 'Sign in') + '</button>' +
+    links(link('signup', 'Create an account'), link('reset', 'Forgotten password?')) +
+    '<div class="auth-foot">Your real name is never shown to other members.</div>');
+  wireAuthForm('doSignIn', 'si_user');
+}
+
+// Switch between the sign-in views, clearing any message from the last one.
+function authGo(view){ A.authView = view; A.authMsg = ''; A.authOk = ''; A.draft = null; render(); }
+
+// Enter submits; the first empty field gets focus.
+function wireAuthForm(submit, firstId){
+  const card = document.querySelector('.auth-card'); if(!card) return;
+  card.querySelectorAll('input').forEach(function(el){
+    el.addEventListener('keydown', function(e){ if(e.key === 'Enter'){ e.preventDefault(); window[submit](); } });
+  });
+  const empty = Array.from(card.querySelectorAll('input')).find(function(el){ return !el.value; }) || document.getElementById(firstId);
+  if(empty) setTimeout(function(){ empty.focus(); }, 0);
+}
+
+function togglePw(id, btn){
+  const el = document.getElementById(id); if(!el) return;
+  const show = el.type === 'password';
+  el.type = show ? 'text' : 'password'; btn.textContent = show ? 'Hide' : 'Show';
+  el.focus();
+}
+
+// What was typed survives a re-render (an error, or the busy state).
+function keepDraft(ids){
+  A.draft = {};
+  ids.forEach(function(id){ const el = document.getElementById(id); if(el) A.draft[id] = el.value; });
 }
 
 async function doSignIn(){
   const u = (document.getElementById('si_user')||{}).value || '';
   const p = (document.getElementById('si_pass')||{}).value || '';
+  keepDraft(['si_user']);
   if(!u.trim() || !p){ A.authMsg = 'Please enter your alias and password.'; return render(); }
-  A.authBusy = true; A.authMsg = ''; render();
+  A.authBusy = true; A.authMsg = ''; A.authOk = ''; render();
   try {
     const newAlias = await signIn(u, p);
-    A.authBusy = false;
+    A.authBusy = false; A.draft = null;
     // Only set on the very first sign-in, when the profile was just created.
     if(newAlias){ A.signedUpAlias = newAlias; A.authView = 'issued'; A.profile = null; }
     render();
@@ -1088,12 +1147,13 @@ async function doSignIn(){
 async function doSignUp(){
   const g = function(id){ return ((document.getElementById(id)||{}).value || '').trim(); };
   const email = g('su_email'), pass = g('su_pass'), real = g('su_real'), grade = g('su_grade');
+  keepDraft(['su_email','su_real','su_grade']);
   if(!email || !pass || !real){ A.authMsg = 'All fields are required.'; return render(); }
   if(pass.length < 6){ A.authMsg = 'Passwords must be at least 6 characters.'; return render(); }
-  A.authBusy = true; A.authMsg = ''; render();
+  A.authBusy = true; A.authMsg = ''; A.authOk = ''; render();
   try {
     const alias = await signUp({ email, password:pass, realName:real, gradeLevel:grade });
-    A.authBusy = false;
+    A.authBusy = false; A.draft = null;
     if(alias){ A.signedUpAlias = alias; A.authView = 'issued'; A.profile = null; }
     else { A.authView = 'confirm'; }   // confirmation is on; alias comes after
     render();
@@ -1111,8 +1171,9 @@ async function doSignUp(){
 
 async function doReset(){
   const email = ((document.getElementById('rs_email')||{}).value || '').trim();
+  keepDraft(['rs_email']);
   if(!email){ A.authMsg = 'Please enter your email address.'; return render(); }
-  try { await sendReset(email); A.authMsg = ''; alert('If an account exists for that address, a reset link has been sent.'); A.authView='signin'; render(); }
+  try { await sendReset(email); A.authMsg = ''; A.authView = 'signin'; A.draft = null; A.authOk = 'If an account exists for that address, a reset link has been sent.'; render(); }
   catch(e){ A.authMsg = e.message; render(); }
 }
 
@@ -1123,7 +1184,7 @@ const SB  = 'https://ejmiqtizvuuilsztbafk.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVqbWlxdGl6dnV1aWxzenRiYWZrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUzNjkzMjAsImV4cCI6MjA3MDk0NTMyMH0.mHjzI8hth6JMFW6WeDg2Dy0nFOprC0Tj4p5Cjs7Aq0E';
 const AUTH_LS = 'studylink-session';
 
-let A = { token:null, user:null, profile:null, authView:'signin', authBusy:false, authMsg:'', role:'student', signedUpAlias:null };
+let A = { token:null, user:null, profile:null, authView:'signin', authBusy:false, authMsg:'', authOk:'', draft:null, role:'student', signedUpAlias:null };
 
 // Which name you are wearing right now. Switching roles switches identity — a
 // tutor and a student with the same person behind them look unrelated.
