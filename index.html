@@ -224,6 +224,24 @@
   .daychips button{border:1.5px solid #e5e2f0; background:#fff; border-radius:9px; padding:7px 9px; font:inherit; font-size:12.5px; font-weight:800; color:var(--muted); cursor:pointer}
   .daychips button.on{border-color:var(--blue); background:#eef3fe; color:var(--blue-d)}
 
+  /* Dashboard */
+  .hero{background:linear-gradient(135deg,#eaf0fe,#f6edf8); border:1px solid var(--line); border-radius:18px; padding:16px 18px}
+  .hero .k{font-size:11px; font-weight:800; letter-spacing:.6px; text-transform:uppercase; color:var(--muted)}
+  .hero .big{font-size:20px; font-weight:800; margin-top:2px}
+  .hero .sub{font-size:13px; color:#555; font-weight:600; margin-top:2px}
+  .pride{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+  .pride .p{background:#fff; border:1px solid var(--line); border-radius:16px; padding:14px; text-align:center}
+  .pride .p .n{font-size:28px; font-weight:900; background:linear-gradient(90deg,var(--blue-d),var(--purple)); -webkit-background-clip:text; color:transparent}
+  .pride .p .l{font-size:12px; color:var(--muted); font-weight:700}
+  .bigbtn{display:block; width:100%; margin-top:18px; padding:16px; font-size:16px; border-radius:16px}
+  .listrow{display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); cursor:pointer}
+  .listrow:last-child{border-bottom:none}
+  .listrow .dot{width:10px; height:10px; border-radius:50%; flex:0 0 auto}
+  .listrow .t{font-weight:800; font-size:14px; min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .listrow .r{font-size:12px; color:var(--muted); font-weight:700; white-space:nowrap}
+  .urgent{border-left:4px solid var(--pink-d)}
+  .sos{background:#fff7f9; border:1px solid #f7d6e0; border-radius:16px; padding:12px 14px}
+
   /* Bits */
   h2.title{font-size:22px; font-weight:800; margin:4px 2px 2px}
   .lead{color:var(--muted); font-size:13px; font-weight:600; margin:0 2px 14px}
@@ -394,7 +412,7 @@ function closeView(){ S.overlay=null; render(); }
 function postsFor(course){
   const all = S.posts || [], me = A.user ? A.user.id : null;
   return all.filter(p => p.course===course && !p.parent_id).map(p => ({
-    id:p.id, who:p.author_alias, txt:p.body, mine:p.author_id===me,
+    id:p.id, who:p.author_alias, txt:p.body, mine:p.author_id===me, urgent:!!p.urgent,
     replies: all.filter(r => r.parent_id===p.id).sort((a,b)=>a.created_at.localeCompare(b.created_at)).map(r => ({ who:r.author_alias, txt:r.body })),
   }));
 }
@@ -573,41 +591,167 @@ function renderHelp(c){
 
 /* -------- HOME -------- */
 function renderHome(c){
-  const today = ymd(new Date());
-  const week = ymd(addDays(new Date(),7));
-  const soon = calItems().filter(e => e.date>=today && e.date<=week).sort(byWhen).slice(0,6);
-  const pending = S.myRequests.filter(r=>r.status==='pending').length;
-  const inc = incomingCount();
   const hour = new Date().getHours();
   const hi = hour<12 ? 'Good morning' : hour<17 ? 'Good afternoon' : 'Good evening';
-  c.innerHTML = `
+  const head = `
     <div class="row" style="align-items:flex-start">
-      <div style="flex:1;min-width:0"><h2 class="title">${hi}, ${esc(currentAlias())}</h2>
+      <div style="flex:1;min-width:0"><h2 class="title">${hi}, ${esc(currentAlias())} 👋</h2>
       <div class="lead">${new Date().toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'})}</div></div>
       ${adminButtonHtml()}
+    </div>`;
+  c.innerHTML = head + (S.mode==='tutor' && S.me.isTutor ? tutorDashboard() : studentDashboard());
+}
+
+// ---- helpers shared by both dashboards ----
+const dayWord = k => { const t=ymd(new Date()), tm=ymd(addDays(new Date(),1)); return k===t ? 'Today' : k===tm ? 'Tomorrow' : fmtDate(k); };
+const recentCut = () => new Date(Date.now()-7*86400000).toISOString();
+function newPostCount(course){ const cut=recentCut(); return (S.posts||[]).filter(p=>p.course===course && !p.parent_id && p.created_at>cut).length; }
+function classRow(course, right){
+  return `<div class="listrow" onclick="openClass('${esc(course)}')"><span class="dot" style="background:${courseColor(course)}"></span><span class="t">${esc(course)}</span><span class="r">${right}</span></div>`;
+}
+function postRow(p){
+  return `<div class="listrow ${p.urgent?'urgent':''}" style="${p.urgent?'padding-left:8px':''}" onclick="openView({type:'course',course:'${esc(p.course)}',sec:'community'})">
+    <span class="t" style="font-weight:700">${p.urgent?'🆘 ':''}“${esc(p.body.length>70?p.body.slice(0,70)+'…':p.body)}”</span><span class="r">${esc(p.course)}</span></div>`;
+}
+const STATUS_WORD = { pending:'Waiting for tutor', offered:'Tutor offered to help', accepted:'Accepted ✓', declined:'Declined', done:'Done', cancelled:'Cancelled' };
+
+// ---- the student view: next session, requests, classes, community, one big button ----
+function studentDashboard(){
+  const today=ymd(new Date());
+  const next = sessionsList().filter(x=>x.role==='student' && x.date && x.date>=today).sort((a,b)=>a.date.localeCompare(b.date)||(a.time||'').localeCompare(b.time||''))[0];
+  const reqs = S.myRequests.filter(r=>['pending','offered','accepted','declined'].includes(r.status)).slice(0,5);
+  const mine = ALL_COURSES.filter(x=>S.myClasses.includes(x));
+  const feed = (S.posts||[]).filter(p=>!p.parent_id && mine.includes(p.course)).sort((a,b)=>b.created_at.localeCompare(a.created_at)).slice(0,4);
+  return `
+    <div class="hero" style="margin-top:4px">
+      <div class="k">Next tutoring session</div>
+      ${next ? `<div class="big">${esc(next.course)} · ${esc(dayWord(next.date))} at ${esc(next.time)}</div>
+        <div class="sub">with ${esc(next.with)} · ${esc(next.format)}${next.location?' · 📍 '+esc(next.location):''}</div>`
+      : `<div class="big" style="font-size:16px">Nothing booked yet</div><div class="sub">Open a class to find a tutor, or post what you're stuck on below.</div>`}
     </div>
 
+    <div class="sectlabel">Need help with something?</div>
+    <div class="search" onclick="openView({type:'search'})" style="cursor:pointer"><span class="mag">🔍</span><input placeholder="Search your classes…" readonly style="cursor:pointer"></div>
+    ${helpNowHtml()}
+
+    <div class="cols even" style="margin-top:6px">
+      <div>
+        <div class="sectlabel">Your classes</div>
+        <div class="card">${mine.length ? mine.map(cs=>{ const n=newPostCount(cs); return classRow(cs, n ? n+' new post'+(n===1?'':'s') : tutorsFor(cs).length+' tutor'+(tutorsFor(cs).length===1?'':'s')); }).join('') : `<div class="tiny" style="text-align:center;padding:8px">No classes yet — add them under Classes.</div>`}</div>
+      </div>
+      <div>
+        <div class="sectlabel">Your requests</div>
+        <div class="card">${reqs.length ? reqs.map(r=>`<div class="listrow" onclick="go('tutoring')"><span class="dot" style="background:${courseColor(r.course)}"></span><span class="t">${esc(r.course)}</span><span class="r" style="${r.status==='accepted'?'color:#2e9b6a':r.status==='pending'||r.status==='offered'?'color:#c98b34':''}">${STATUS_WORD[r.status]||r.status}</span></div>`).join('') : `<div class="tiny" style="text-align:center;padding:8px">No requests yet.</div>`}</div>
+      </div>
+    </div>
+
+    <div class="sectlabel">Community</div>
+    <div class="card">${feed.length ? feed.map(postRow).join('') : `<div class="tiny" style="text-align:center;padding:8px">Nothing new in your classes this week.</div>`}</div>
 
     <div class="sectlabel">This week</div>
     ${weekStrip()}
 
+    <button class="btn bigbtn" onclick="go('classes')">Find a Tutor</button>`;
+}
+
+// "Help needed now": one line, one class, and tutors of that class see it first.
+function helpNowHtml(){
+  const mine = ALL_COURSES.filter(x=>S.myClasses.includes(x));
+  if(!mine.length) return '';
+  return `<div class="sos" style="margin-top:10px">
+    <div style="font-weight:800;font-size:13.5px">🆘 Help needed now</div>
+    <div class="tiny" style="margin:2px 0 8px">Stuck tonight? Say what and in which class — tutors for that class see it right away.</div>
+    <div class="row" style="gap:8px;flex-wrap:wrap">
+      <select id="sos_course" style="flex:0 0 170px;padding:9px 11px;border:1.5px solid #e5e2f0;border-radius:10px;font:inherit;font-size:13px;background:#fff">${mine.map(cs=>`<option>${esc(cs)}</option>`).join('')}</select>
+      <input id="sos_text" placeholder="e.g. Stuck on quadratics, test tomorrow" style="flex:1;min-width:180px;padding:9px 11px;border:1.5px solid #e5e2f0;border-radius:10px;font:inherit;font-size:13px" onkeydown="if(event.key==='Enter')postHelpNow()">
+      <button class="btn sm pink" onclick="postHelpNow()">Post</button>
+    </div>
+  </div>`;
+}
+function postHelpNow(){
+  const course=$('sos_course')?.value, text=($('sos_text')?.value||'').trim(); if(!course||!text) return;
+  sbFetch('/rest/v1/sl_posts', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ course, body:text, parent_id:null, author_id:A.user.id, author_alias:A.profile.student_alias, urgent:true }) })
+    .then(loadData).then(function(){ toast('Posted — tutors for '+course+' can see it'); render(); }).catch(function(e){ toast(e.message); });
+}
+
+// ---- the tutor view: decisions first, then pride numbers, then the week ----
+function tutorDashboard(){
+  const today=ymd(new Date()), weekEnd=ymd(addDays(new Date(), 7-new Date().getDay()));
+  const inc = S.incoming.filter(r=>r.status==='pending');
+  const sessions = sessionsList().filter(x=>x.role==='tutor' && x.date && x.date>=today && x.date<=weekEnd).sort((a,b)=>a.date.localeCompare(b.date)||(a.time||'').localeCompare(b.time||''));
+  const myCourses = S.tutorClasses;
+  const cut=recentCut();
+  const urgent = (S.posts||[]).filter(p=>p.urgent && !p.parent_id && myCourses.includes(p.course) && p.author_id!==A.user.id && p.created_at>cut).sort((a,b)=>b.created_at.localeCompare(a.created_at)).slice(0,5);
+  const unanswered = (S.posts||[]).filter(p=>!p.parent_id && !p.urgent && myCourses.includes(p.course) && p.author_id!==A.user.id && p.created_at>cut && !(S.posts||[]).some(r=>r.parent_id===p.id)).slice(0,4);
+  const away = awayBlocks();
+  const helped = new Set(S.incoming.filter(r=>r.status==='done').map(r=>r.student_id)).size;
+  return `
+    <div class="pride" style="margin-top:4px">
+      <div class="p"><div class="n">${helped}</div><div class="l">student${helped===1?'':'s'} helped</div></div>
+      <div class="p"><div class="n">${S.hours}</div><div class="l">service hours earned</div></div>
+    </div>
+
+    ${inc.length ? `<div class="sectlabel">New requests — your call (${inc.length})</div>
+      ${inc.map(r=>`<div class="card">
+        <div class="row"><div class="avatar" style="background:${courseColor(r.course)}">${initials(r.student_alias)}</div>
+          <div style="min-width:0;flex:1"><div style="font-weight:800">${esc(r.student_alias)} <span class="tiny">· ${esc(r.course)}</span></div>
+          <div class="tiny">${esc(r.topic)} · ${esc(dayWord(r.date))} ${esc(r.time||'')} · ${esc(r.format)}${r.location?' · 📍 '+esc(r.location):''}</div></div></div>
+        <div class="row" style="gap:8px;margin-top:10px">
+          <button class="btn sm gray" style="flex:1" onclick="respondRequest('${r.id}',false)">Decline</button>
+          <button class="btn sm green" style="flex:1" onclick="respondRequest('${r.id}',true)">Accept</button>
+        </div></div>`).join('')}` : ''}
+
+    ${urgent.length ? `<div class="sectlabel">🆘 Help needed now</div><div class="card">${urgent.map(p=>`<div class="listrow urgent" style="padding-left:8px" onclick="openView({type:'course',course:'${esc(p.course)}',sec:'community'})"><span class="t" style="font-weight:700">${esc(p.author_alias)}: “${esc(p.body.length>80?p.body.slice(0,80)+'…':p.body)}”</span><span class="r">${esc(p.course)} · reply ›</span></div>`).join('')}</div>` : ''}
+
     <div class="cols even" style="margin-top:6px">
       <div>
-        <div class="sectlabel">Tutoring you</div>
-        <div class="card">${sessionColumn('student')}</div>
+        <div class="sectlabel">This week's sessions</div>
+        <div class="card">${sessions.length ? sessions.map(x=>`<div class="sessrow"><div class="avatar" style="width:36px;height:36px;font-size:14px;background:${courseColor(x.course)}">${courseEmoji(x.course)}</div>
+          <div style="min-width:0;flex:1"><div class="who">${esc(x.with)} <span class="tiny">· ${esc(x.course)}</span></div><div class="meta">${esc(dayWord(x.date))} · ${esc(x.time)} · ${esc(x.format)}${x.location?' · 📍 '+esc(x.location):''}</div></div>
+          ${x.date<=today ? `<button class="btn sm green" onclick="completeSession('${x.id}')">Done</button>` : ''}</div>`).join('') : `<div class="tiny" style="text-align:center;padding:8px">Nothing booked this week.</div>`}</div>
       </div>
       <div>
-        <div class="sectlabel">You're tutoring</div>
-        <div class="card">${sessionColumn('tutor')}</div>
+        <div class="sectlabel">Availability</div>
+        <div class="card">
+          <div style="font-weight:800">${away.length ? 'Away this week' : 'Available this week'}</div>
+          <div class="tiny" style="margin:2px 0 10px">${S.me.avail ? esc(S.me.avail) : 'Set your usual times under Calendar.'}</div>
+          <button class="btn sm ${away.length?'green':'gray'}" style="width:100%" onclick="toggleAwayWeek()">${away.length ? 'I\'m available again' : 'Mark me away this week'}</button>
+          <button class="btn ghost sm" style="width:100%;margin-top:6px" onclick="go('calendar')">Edit availability</button>
+        </div>
       </div>
     </div>
 
+    <div class="cols even" style="margin-top:6px">
+      <div>
+        <div class="sectlabel">Classes you tutor</div>
+        <div class="card">${myCourses.length ? myCourses.map(cs=>classRow(cs, S.roster.filter(r=>r.course===cs).length+' student'+(S.roster.filter(r=>r.course===cs).length===1?'':'s'))).join('') : `<div class="tiny" style="text-align:center;padding:8px">None yet.</div>`}</div>
+      </div>
+      <div>
+        <div class="sectlabel">Questions needing answers</div>
+        <div class="card">${unanswered.length ? unanswered.map(postRow).join('') : `<div class="tiny" style="text-align:center;padding:8px">All caught up in your classes.</div>`}</div>
+      </div>
+    </div>
 
-  `;
+    <div class="sectlabel">This week</div>
+    ${weekStrip()}`;
 }
-
-// Who is online right now: tutors for my classes and classmates in them, by
-// alias. Tapping a person opens the class they share with you.
+// "Away this week": one-time all-day unavailable blocks from today to Saturday.
+function awayBlocks(){
+  const today=ymd(new Date()), end=ymd(addDays(new Date(), 6-new Date().getDay()));
+  return (S.availability||[]).filter(b=>b.user_id===A.user.id && !b.recurring && b.kind==='unavailable' && b.note==='Away this week' && b.date>=today && b.date<=end);
+}
+function toggleAwayWeek(){
+  const have=awayBlocks();
+  if(have.length){
+    sbFetch('/rest/v1/sl_availability?id=in.('+have.map(b=>b.id).join(',')+')', { method:'DELETE', headers:{ Prefer:'return=minimal' } })
+      .then(loadData).then(function(){ toast('You\'re available again'); render(); }).catch(function(e){ toast(e.message); });
+    return;
+  }
+  const rows=[]; const d0=new Date(); const n=6-d0.getDay();
+  for(let i=0;i<=n;i++) rows.push({ user_id:A.user.id, kind:'unavailable', recurring:false, date:ymd(addDays(d0,i)), start_min:0, end_min:1440, note:'Away this week' });
+  sbFetch('/rest/v1/sl_availability', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify(rows) })
+    .then(loadData).then(function(){ toast('Marked away through Saturday'); render(); }).catch(function(e){ toast(e.message); });
+}
 
 // Sunday to Saturday of the current week, with sessions, requests and events on
 // each day. Tapping a day opens the calendar there.
@@ -1038,7 +1182,7 @@ function boardHtml(course){
           <div class="row"><div class="avatar" style="width:30px;height:30px;font-size:12px;background:${courseColor(course)}">${initials(p.who)}</div>
             <div class="who">${esc(p.who)}</div>
             ${p.mine ? `<button class="del" title="Delete post" style="margin-left:auto;border:none;background:none;color:var(--muted);cursor:pointer" onclick="deletePost('${p.id}')">✕</button>` : ''}</div>
-          <div class="txt">${esc(p.txt)}</div>
+          <div class="txt">${p.urgent?'<span class="pill" style="background:#fdecef;color:#c23b5e;margin:0 6px 0 0">🆘 Help needed now</span>':''}${esc(p.txt)}</div>
           ${(p.replies||[]).map(r=>`<div class="reply"><b>${esc(r.who)}</b> · ${esc(r.txt)}</div>`).join('')}
           <div class="composer" style="margin-top:8px">
             <input id="rp_${p.id}" placeholder="Reply as ${esc(currentAlias())}…" onkeydown="if(event.key==='Enter')addReply('${p.id}','${esc(course)}')">
@@ -1684,7 +1828,22 @@ function renderAdminHub(c){
     <div class="lead">Tools for ${A.profile.role==='board' ? 'the board and administrators' : 'administrators'}.</div>
     ${tile('admin-grades','✅','Grade checks', S.pendingGrades ? S.pendingGrades+' waiting' : 'Nothing waiting', S.pendingGrades)}
     ${tile('admin-requests','📋','All requests','Every tutoring request in the school')}
-    ${tile('admin-team','🛡️','Members','Approve people, join codes, levels')}`;
+    ${tile('admin-team','🛡️','Members','Approve people, join codes, levels')}
+    <div class="sectlabel">Where do students need help?</div>
+    <div class="card" style="padding:6px 14px">${needHeatHtml()}</div>`;
+}
+// Students taking each class versus tutors for it. The gap is the story.
+function needHeatHtml(){
+  const rows = ALL_COURSES.map(cs=>{
+    const students=(S.roster||[]).filter(r=>r.course===cs).length + (S.myClasses.includes(cs)?1:0);
+    const tutors=tutorsFor(cs).length + (S.tutorClasses.includes(cs)?1:0);
+    const gap = students===0 ? 'none' : tutors===0 ? 'high' : students/tutors>4 ? 'high' : students/tutors>2 ? 'some' : 'ok';
+    return { cs, students, tutors, gap };
+  }).filter(r=>r.students||r.tutors).sort((a,b)=>({high:0,some:1,ok:2,none:3}[a.gap]-{high:0,some:1,ok:2,none:3}[b.gap]) || (b.students-a.students));
+  if(!rows.length) return '<div class="tiny" style="text-align:center;padding:8px">No classes added yet.</div>';
+  const tag = g => g==='high' ? '<span class="pill" style="background:#fdecef;color:#c23b5e">High need</span>' : g==='some' ? '<span class="pill" style="background:#fbf1e2;color:#c98b34">Thin</span>' : g==='ok' ? '<span class="pill" style="background:#e4f6ec;color:#2e9b6a">Covered</span>' : '<span class="pill">No students</span>';
+  return `<div class="listrow" style="cursor:default;font-size:11px;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.5px"><span class="t">Class</span><span class="r" style="width:70px;text-align:right">Students</span><span class="r" style="width:60px;text-align:right">Tutors</span><span class="r" style="width:90px;text-align:right">Gap</span></div>` +
+    rows.map(r=>`<div class="listrow" onclick="openClass('${esc(r.cs)}')"><span class="dot" style="background:${courseColor(r.cs)}"></span><span class="t">${esc(r.cs)}</span><span class="r" style="width:70px;text-align:right">${r.students}</span><span class="r" style="width:60px;text-align:right">${r.tutors}</span><span class="r" style="width:90px;text-align:right">${tag(r.gap)}</span></div>`).join('');
 }
 // A compact button to the hub, used on the home screen and profile.
 function adminButtonHtml(){
@@ -1812,18 +1971,17 @@ async function renderAdminTeam(c){
   // A quiet row: avatar, name, level, status. The pencil opens everything else.
   const row = s => {
     const me = s.email.toLowerCase()===myEmail;
-    const open = S.editMember === s.email;
-    return `<div class="card mrow" data-email="${esc(s.email)}" style="${open?'border-color:var(--blue)':''}">
+    const open = !!S.membersEdit;
+    return `<div class="card mrow" data-email="${esc(s.email)}">
       ${s.joined ? avatarDot(initials(s.real_name || s.email), s.seen, 'background:'+(s.role==='board'?'var(--purple)':s.role==='admin'?'var(--blue-d)':courseColor(''))) : `<div class="avatar" style="background:${s.role==='board'?'var(--purple)':s.role==='admin'?'var(--blue-d)':courseColor('')}">${initials(s.real_name || s.email)}</div>`}
       <div class="info">
         <div style="font-weight:800">${esc(s.real_name || s.email)}${me?' <span class="tiny">(you)</span>':''} ${roleBadge(s.role)} ${s.joined ? seenHtml(s.seen) : ''}</div>
         <div class="tiny">${s.joined ? esc(s.email) : 'Not signed up yet · code <b>'+esc(s.join_code||'—')+'</b>'}${s.grade_level?' · Grade '+s.grade_level:''}</div>
       </div>
-      <button class="mini" title="${open?'Close':'Edit'}" style="margin-left:auto;width:36px;padding:7px 0;text-align:center" onclick="S.editMember = ${open ? 'null' : `'${esc(s.email)}'`}; render()">${open ? '✕' : '✎'}</button>
       ${open ? `<div class="medit" style="flex-direction:column;align-items:stretch;gap:10px;padding-top:10px;border-top:1px solid var(--line)">
         <div class="row" style="gap:8px;flex-wrap:wrap">
-          <input id="me_name" value="${esc(s.real_name)}" placeholder="Full name" style="flex:2;min-width:160px;${inp}">
-          <select id="me_grade" style="flex:0 0 120px;${inp}"><option value="">No grade</option>${[6,7,8,9,10,11,12].map(g=>`<option value="${g}" ${s.grade_level===g?'selected':''}>Grade ${g}</option>`).join('')}</select>
+          <input id="me_name_${s.email.replace(/\W/g,'_')}" value="${esc(s.real_name)}" placeholder="Full name" style="flex:2;min-width:160px;${inp}">
+          <select id="me_grade_${s.email.replace(/\W/g,'_')}" style="flex:0 0 120px;${inp}"><option value="">No grade</option>${[6,7,8,9,10,11,12].map(g=>`<option value="${g}" ${s.grade_level===g?'selected':''}>Grade ${g}</option>`).join('')}</select>
           <select class="lvl" style="flex:0 0 150px;${inp}" ${me?'disabled title="Another administrator or board member changes your level"':''} onchange="setMemberLevel('${esc(s.email)}', this.value, this)">
             ${LEVELS.map(([v,l])=>`<option value="${v}" ${s.role===v?'selected':''}>${l}</option>`).join('')}
           </select>
@@ -1847,6 +2005,7 @@ async function renderAdminTeam(c){
     <button class="back" onclick="go('admin')">‹ ${A.profile.role==='board' ? 'Board' : 'Administration'}</button>
     <div class="row" style="align-items:center">
       <div style="flex:1"><h2 class="title" style="margin-bottom:0">Members</h2><div class="lead" style="margin-bottom:0">${list.length} member${list.length===1?'':'s'} · <span class="seen on">● ${online} online</span></div></div>
+      <button class="btn sm ${S.membersEdit?'':'gray'}" style="width:auto;padding:10px 14px;font-size:16px;line-height:1;margin-right:6px" title="${S.membersEdit?'Done editing':'Edit members'}" onclick="S.membersEdit=!S.membersEdit;render()">${S.membersEdit?'Done':'✎'}</button>
       <button class="btn sm ${S.addMemberOpen?'gray':''}" style="width:auto;padding:10px 14px;font-size:18px;line-height:1" title="Add a member" onclick="S.addMemberOpen=!S.addMemberOpen;render()">${S.addMemberOpen?'✕':'＋'}</button>
     </div>
     ${S.addMemberOpen ? `<div class="card" style="margin-top:12px;border-color:var(--blue)">
@@ -1905,10 +2064,11 @@ function setMemberLevel(email, role, sel){
     .catch(function(e){ toast(e.message); render(); });
 }
 function saveMember(email){
-  const real_name = ($('me_name').value||'').trim(), g = $('me_grade').value;
+  const k = email.replace(/\W/g,'_');
+  const real_name = (($('me_name_'+k)||{}).value||'').trim(), g = ($('me_grade_'+k)||{}).value||'';
   if(!real_name){ $('me_name').focus(); return; }
   sbFetch('/rest/v1/sl_staff?email=eq.'+encodeURIComponent(email), { method:'PATCH', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ real_name, grade_level: g ? Number(g) : null }) })
-    .then(function(){ S.editMember = null; toast('Saved'); render(); })
+    .then(function(){ toast('Saved'); render(); })
     .catch(function(e){ toast(e.message); });
 }
 function removeMember(email){
