@@ -1190,8 +1190,6 @@ function renderBecomeTutor(c){
   }
   const d=S.overlay.draft, step=S.overlay.step;
   const GRADES=['A','A-','B+','B','B-','C+','C'];
-  const TAKEN_GRADES=['Grade 7','Grade 8','Grade 9','Grade 10','Grade 11','Grade 12'];
-  const defaultTaken = 'Grade ' + Math.max(7, Math.min(12, (S.me.grade||10) - 1));
   if(step===1){
     c.innerHTML=`
       <button class="back" onclick="closeView()">‹ Cancel</button>
@@ -1243,6 +1241,9 @@ function renderBecomeTutor(c){
     `;
   }
 }
+// Letter grades and the grade a class was taken in, for the tutor steps.
+const TAKEN_GRADES=['Grade 7','Grade 8','Grade 9','Grade 10','Grade 11','Grade 12'];
+const defaultTaken = () => 'Grade ' + Math.max(7, Math.min(12, (S.me.grade||10) - 1));
 // Availability is picked, not typed: days and times of day, stored as one
 // readable line such as "Mon, Wed · After school, Evenings".
 const AVAIL_DAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
@@ -1260,7 +1261,7 @@ function parseAvail(str){
   if(/Every day/.test(str)) days.push.apply(days, AVAIL_DAYS);
   return { days:Array.from(new Set(days)), times };
 }
-function toggleTutorCourse(course){ const d=S.overlay.draft; if(d.courses[course])delete d.courses[course]; else d.courses[course]={grade:'A',year:defaultTaken}; render(); }
+function toggleTutorCourse(course){ const d=S.overlay.draft; if(d.courses[course])delete d.courses[course]; else d.courses[course]={grade:'A',year:defaultTaken()}; render(); }
 function d_grade(course,v){ S.overlay.draft.courses[course].grade=v; }
 function d_year(course,v){ S.overlay.draft.courses[course].year=v; }
 async function finishTutor(){
