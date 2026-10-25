@@ -343,7 +343,7 @@ function render(){
 }
 
 let menuOpen = false;
-const TAB_TITLES = { settings:'Settings', help:'Help', home:'Home Screen', classes:'Classes', calendar:'Calendar', tutoring:'Tutoring', community:'Community', profile:'Profile', 'admin-grades':'Grade checks', 'admin-requests':'All requests', 'admin-team':'Team' };
+const TAB_TITLES = { settings:'Settings', help:'Help', home:'Home Screen', classes:'Classes', calendar:'Calendar', tutoring:'Tutoring', community:'Community', profile:'Profile', 'admin-grades':'Grade checks', 'admin-requests':'All requests', 'admin-team':'Members' };
 const isStaff = () => !!(A.profile && (A.profile.role==='admin' || A.profile.role==='board'));
 const roleBadge = r => r==='admin' ? '<span class="rolebadge admin">Administrator</span>' : r==='board' ? '<span class="rolebadge board">Board</span>' : '';
 function renderHead(){
@@ -404,7 +404,7 @@ function renderNav(){
       <div class="section">${A.profile.role==='board' ? 'Board' : 'Administration'}</div>
       ${item('admin-grades','✅','Grade checks', S.pendingGrades ? `<span class="count">${S.pendingGrades}</span>` : '')}
       ${item('admin-requests','📋','All requests')}
-      ${item('admin-team','🛡️','Team')}` : ''}
+      ${item('admin-team','🛡️','Members')}` : ''}
     </nav>
 `;
 }
@@ -457,7 +457,7 @@ function renderHelp(c){
     ${q('Getting help', 'Open a class to see its tutors, then send a request. Once it is accepted, it shows up on your calendar.')}
     ${q('Privacy', 'Other students only see your alias. Coordination happens inside StudyLink — no phone numbers or personal emails are shared.')}
     ${q('Verified grades', 'When you become a tutor, the grades you claim go to a school administrator, who checks them against your records. Verified grades show a ✓ on your tutor card.')}
-    ${q('Who runs this', 'Students use the app. Administrators verify grades and manage requests. The board maintains the app itself.')}`;
+    ${q('Who runs this', 'Students use the app. Administrators verify grades and manage requests. The board maintains the app itself. Accounts are invitation-only: an administrator adds you by email and you set your password from the link you receive.')}`;
 }
 
 /* -------- HOME -------- */
@@ -1128,49 +1128,77 @@ function adminCancel(id){
 // that person signs up; removing the row takes it away again.
 async function renderAdminTeam(c){
   if(!isStaff()) return go('home');
-  c.innerHTML = '<h2 class="title">Team</h2><div class="lead">Loading…</div>';
-  let staff, people;
+  c.innerHTML = '<h2 class="title">Members</h2><div class="lead">Loading…</div>';
+  let list, people;
   try {
-    [staff, people] = await Promise.all([
-      sbFetch('/rest/v1/sl_staff?select=*&order=role,added_at'),
-      sbFetch('/rest/v1/sl_profiles?select=id,real_name,student_alias,role&role=in.(admin,board)'),
+    [list, people] = await Promise.all([
+      sbFetch('/rest/v1/sl_staff?select=*&order=role,added_at.desc'),
+      sbFetch('/rest/v1/sl_profiles?select=id,real_name,student_alias,role,created_at'),
     ]);
-  } catch(e){ c.innerHTML = '<h2 class="title">Team</h2><div class="auth-msg err">' + esc(e.message) + '</div>'; return; }
+  } catch(e){ c.innerHTML = '<h2 class="title">Members</h2><div class="auth-msg err">' + esc(e.message) + '</div>'; return; }
   if(S.tab!=='admin-team') return;
   const myEmail = ((A.user && A.user.email) || '').toLowerCase();
+  const signedUp = {}; people.forEach(p => { signedUp[p.id] = p; });
+  const q = (S.memberQuery || '').toLowerCase();
+  const row = s => `<div class="card row">
+      <div class="avatar" style="background:${s.role==='board'?'var(--purple)':s.role==='admin'?'var(--blue-d)':courseColor('')}">${initials(s.real_name || s.email)}</div>
+      <div style="min-width:0"><div style="font-weight:800">${esc(s.real_name || s.email)}${s.email.toLowerCase()===myEmail?' <span class="tiny">(you)</span>':''} ${roleBadge(s.role)}</div>
+        <div class="tiny">${esc(s.email)}${s.grade_level?' · Grade '+s.grade_level:''} · ${s.joined ? 'signed up ' + esc(new Date(s.joined).toLocaleDateString()) : s.invited_at ? 'invited ' + esc(new Date(s.invited_at).toLocaleDateString()) + ', not signed up yet' : 'approved, invite email not sent yet'}${s.added_by_alias?' · added by '+esc(s.added_by_alias):''}</div></div>
+      ${s.joined ? '' : `<button class="btn ghost sm" style="margin-left:auto" onclick="inviteMember('${esc(s.email)}','${esc(s.real_name)}','${s.grade_level||''}','${s.role}',this)">Resend invite</button>`}
+      ${s.email.toLowerCase()===myEmail ? '' : `<button class="del" title="Remove" style="${s.joined?'margin-left:auto;':''}border:none;background:none;color:var(--muted);cursor:pointer;font-size:16px" onclick="removeMember('${esc(s.email)}')">✕</button>`}
+    </div>`;
+  // Each approval points at the profile it became, once that person has signed up.
+  list.forEach(s => { const p = s.user_id ? signedUp[s.user_id] : null; s.joined = p ? p.created_at : null; });
+  const students = list.filter(s => s.role==='student' && (!q || (s.real_name+' '+s.email).toLowerCase().includes(q)));
   const group = (role, title, blurb) => `
-    <div class="sectlabel">${title}</div>
+    <div class="sectlabel">${title} (${list.filter(s=>s.role===role).length})</div>
     <div class="tiny" style="margin:-4px 2px 8px">${blurb}</div>
-    ${staff.filter(s=>s.role===role).map(s=>`<div class="card row">
-      <div class="avatar" style="background:${role==='board'?'var(--purple)':'var(--blue-d)'}">${initials(s.email)}</div>
-      <div style="min-width:0"><div style="font-weight:800">${esc(s.email)}${s.email.toLowerCase()===myEmail?' <span class="tiny">(you)</span>':''}</div>
-        <div class="tiny">${roleBadge(role)} added ${esc(new Date(s.added_at).toLocaleDateString())}${s.added_by_alias?' by '+esc(s.added_by_alias):''}</div></div>
-      ${s.email.toLowerCase()===myEmail ? '' : `<button class="del" title="Remove" style="margin-left:auto;border:none;background:none;color:var(--muted);cursor:pointer;font-size:16px" onclick="removeStaff('${esc(s.email)}')">✕</button>`}
-    </div>`).join('') || '<div class="card tiny" style="text-align:center">Nobody yet.</div>'}`;
+    ${list.filter(s=>s.role===role).map(row).join('') || '<div class="card tiny" style="text-align:center">Nobody yet.</div>'}`;
   c.innerHTML = `
-    <h2 class="title">Team</h2>
-    <div class="lead">Three levels: students use the app, administrators verify grades and manage requests, and the board changes the app itself. Administrators and the board can add either.</div>
+    <h2 class="title">Members</h2>
+    <div class="lead">StudyLink is invitation-only. Add someone here and they get an email with a link to set their password. Students use the app; administrators verify grades and manage requests; the board maintains the app. Administrators and the board can add anyone.</div>
     <div class="card">
       <div class="row" style="gap:8px;flex-wrap:wrap">
-        <input id="st_email" type="email" placeholder="School or personal email they sign up with" style="flex:2;min-width:220px;padding:10px 12px;border:1.5px solid #e5e2f0;border-radius:11px;font:inherit;font-size:14px" onkeydown="if(event.key==='Enter')addStaff()">
-        <select id="st_role" style="flex:1;min-width:140px;padding:10px 12px;border:1.5px solid #e5e2f0;border-radius:11px;font:inherit;font-size:14px;background:#fff"><option value="admin">Administrator</option><option value="board">Board</option></select>
-        <button class="btn sm" onclick="addStaff()">Add</button>
+        <input id="mb_name" placeholder="Full name" style="flex:1;min-width:160px;padding:10px 12px;border:1.5px solid #e5e2f0;border-radius:11px;font:inherit;font-size:14px">
+        <input id="mb_email" type="email" placeholder="Email they will sign in with" style="flex:2;min-width:220px;padding:10px 12px;border:1.5px solid #e5e2f0;border-radius:11px;font:inherit;font-size:14px" onkeydown="if(event.key==='Enter')addMember()">
+        <select id="mb_grade" style="flex:0 0 110px;padding:10px 12px;border:1.5px solid #e5e2f0;border-radius:11px;font:inherit;font-size:14px;background:#fff"><option value="">Grade</option>${[9,10,11,12].map(g=>`<option value="${g}">Grade ${g}</option>`).join('')}</select>
+        <select id="mb_role" style="flex:0 0 150px;padding:10px 12px;border:1.5px solid #e5e2f0;border-radius:11px;font:inherit;font-size:14px;background:#fff"><option value="student">Student</option><option value="admin">Administrator</option><option value="board">Board</option></select>
+        <button class="btn sm" id="mb_add" onclick="addMember()">Invite</button>
       </div>
-      <div class="tiny" style="margin-top:8px">The role applies as soon as that email signs in, or right away if they already have an account.</div>
+      <div class="tiny" style="margin-top:8px">The name is used only to check grades against school records; other members never see it.</div>
     </div>
     ${group('board', 'Board', 'Maintain the app: fix errors and build new features. Everything an administrator can do, too.')}
     ${group('admin', 'Administrators', 'Verify tutors\' grades against school records and keep an eye on tutoring requests.')}
-    <div class="sectlabel">Signed-up staff</div>
-    <div class="card">${people.length ? people.map(p=>`<div class="row" style="margin-bottom:6px"><span style="font-weight:700;font-size:14px">${esc(p.real_name)}</span><span class="tiny">${esc(p.student_alias)}</span><span style="margin-left:auto">${roleBadge(p.role)}</span></div>`).join('') : '<div class="tiny">None of the people above have signed up yet.</div>'}</div>`;
+    <div class="sectlabel">Students (${list.filter(s=>s.role==='student').length})</div>
+    <div class="search" style="margin-bottom:10px"><span class="mag">🔍</span><input placeholder="Search students…" value="${esc(S.memberQuery||'')}" oninput="S.memberQuery=this.value; filterMembers()"></div>
+    <div id="memberlist">${students.map(row).join('') || '<div class="card tiny" style="text-align:center">No students yet. Invite the first one above.</div>'}</div>`;
+  A.memberRows = list;
 }
-function addStaff(){
-  const email = ($('st_email').value||'').trim().toLowerCase(), role = $('st_role').value;
-  if(!email || !email.includes('@')){ $('st_email').focus(); return; }
-  sbFetch('/rest/v1/sl_staff', { method:'POST', headers:{ Prefer:'return=minimal,resolution=merge-duplicates' }, body:JSON.stringify({ email, role, added_by:A.user.id, added_by_alias:A.profile.student_alias }) })
-    .then(function(){ toast(email+' is now '+(role==='board'?'on the board':'an administrator')); render(); })
-    .catch(function(e){ toast(e.message); });
+function filterMembers(){
+  const q=(S.memberQuery||'').toLowerCase();
+  document.querySelectorAll('#memberlist .card').forEach(function(el){ el.hidden = q && !el.textContent.toLowerCase().includes(q); });
 }
-function removeStaff(email){
+function addMember(){
+  const name=($('mb_name').value||'').trim(), email=($('mb_email').value||'').trim().toLowerCase(), grade=$('mb_grade').value, role=$('mb_role').value;
+  if(!name){ $('mb_name').focus(); return; }
+  if(!email || !email.includes('@')){ $('mb_email').focus(); return; }
+  inviteMember(email, name, grade, role, $('mb_add'));
+}
+// The invite goes through an edge function, which is the only thing allowed to
+// create accounts. It records the approval and sends the email.
+function inviteMember(email, name, grade, role, btn){
+  if(btn){ btn.disabled=true; btn.textContent='Sending…'; }
+  sbFetch('/functions/v1/sl-invite', { method:'POST', body: JSON.stringify({ email, real_name:name, grade_level: grade ? Number(grade) : null, role, redirect: APP_URL }) })
+    .then(function(r){
+      if(r && r.existing) toast(email+' already has an account; approval updated');
+      else if(r && r.approved && !r.ok) toast(email+' is approved, but the email could not be sent ('+(r.error||'mail limit')+'). Use Resend invite later.');
+      else toast('Invite sent to '+email);
+      render();
+    })
+    .catch(function(e){ toast(e.message); if(btn){ btn.disabled=false; btn.textContent='Invite'; } });
+}
+function removeMember(email){
+  if(!confirm('Remove '+email+' from StudyLink? Their account and everything in it will be deleted.')) return;
   sbFetch('/rest/v1/sl_staff?email=eq.'+encodeURIComponent(email), { method:'DELETE', headers:{ Prefer:'return=minimal' } })
     .then(function(){ toast('Removed '+email); render(); }).catch(function(e){ toast(e.message); });
 }
@@ -1234,7 +1262,18 @@ function renderAuth(){
         '<div class="big">' + esc(A.signedUpAlias || '') + '</div>' +
         '<div class="tiny">Write this down. Your real name is never shown to other members.</div>' +
       '</div>' +
-      '<button class="btn" onclick="authGo(\'signin\')">Continue to sign in</button>');
+      '<button class="btn" onclick="finishIssued()">' + (A.token ? 'Open StudyLink' : 'Continue to sign in') + '</button>');
+    return;
+  }
+
+  if(A.authView === 'setpw'){
+    body.innerHTML = card(logo +
+      '<h2>' + (A.linkType === 'recovery' ? 'Choose a new password' : 'Welcome to StudyLink') + '</h2>' +
+      '<div class="lead">' + (A.linkType === 'recovery' ? 'Pick something you will remember.' : 'Set a password to finish setting up your account.') + '</div>' +
+      '<div class="field"><label>New password</label>' + pw('np_pass', 'At least 6 characters', 'new-password') + '</div>' +
+      '<div class="field"><label>Again, to be sure</label>' + pw('np_pass2', '', 'new-password') + '</div>' + msg +
+      '<button class="btn" onclick="doSetPassword()"' + (A.authBusy ? ' disabled' : '') + '>' + (A.authBusy ? 'Saving\u2026' : 'Save password') + '</button>');
+    wireAuthForm('doSetPassword', 'np_pass');
     return;
   }
 
@@ -1281,9 +1320,49 @@ function renderAuth(){
     '<div class="field"><label>Alias or email</label><input id="si_user" autocomplete="username" placeholder="Student 14 — or your email, the first time" value="' + v('si_user') + '"></div>' +
     '<div class="field"><label>Password</label>' + pw('si_pass') + '</div>' + msg +
     '<button class="btn" onclick="doSignIn()"' + (A.authBusy ? ' disabled' : '') + '>' + (A.authBusy ? 'Signing in…' : 'Sign in') + '</button>' +
-    links(link('signup', 'Create an account'), link('reset', 'Forgotten password?')) +
-    '<div class="auth-foot">Your real name is never shown to other members.</div>');
+    links(link('reset', 'Forgotten password?')) +
+    '<div class="auth-foot">Accounts are set up by the school. If you were invited, use the link in that email to set your password.<br>Your real name is never shown to other members.</div>');
   wireAuthForm('doSignIn', 'si_user');
+}
+
+// After the alias screen: straight in if a session is already saved.
+function finishIssued(){
+  A.authView = 'signin'; A.authMsg = ''; A.authOk = '';
+  if(A.token){ loadProfile().then(render).catch(function(){ render(); }); } else render();
+}
+async function doSetPassword(){
+  const a = ($('np_pass')||{}).value || '', b = ($('np_pass2')||{}).value || '';
+  if(a.length < 6){ A.authMsg = 'Passwords must be at least 6 characters.'; return render(); }
+  if(a !== b){ A.authMsg = 'Those two do not match.'; return render(); }
+  A.authBusy = true; A.authMsg = ''; render();
+  try {
+    await sbFetch('/auth/v1/user', { method:'PUT', body: JSON.stringify({ password: a }) });
+    A.authBusy = false;
+    const alias = await ensureProfile();      // first arrival: issue the alias
+    if(alias){ A.signedUpAlias = alias; A.authView = 'issued'; A.profile = null; }
+    else { A.authView = 'signin'; }
+    render();
+  } catch(e){
+    A.authBusy = false;
+    A.authMsg = /approved/i.test(e.message) ? 'This email address has not been approved by the school.' : e.message;
+    render();
+  }
+}
+// An invite or reset email lands here with tokens in the URL fragment.
+async function consumeAuthLink(){
+  const h = location.hash || '';
+  if(h.indexOf('access_token=') < 0) return false;
+  const q = new URLSearchParams(h.replace(/^#/, ''));
+  const token = q.get('access_token'), type = q.get('type') || '';
+  history.replaceState(null, '', location.pathname + location.search);
+  if(!token) return false;
+  try {
+    A.token = token;
+    const user = await sbFetch('/auth/v1/user');
+    A.user = user; saveSession(); dataLoaded = false;
+    A.linkType = type; A.authView = 'setpw'; A.profile = null;
+    return true;
+  } catch(e){ clearSession(); A.authMsg = 'That link has expired. Ask for a new one.'; return false; }
 }
 
 // Switch between the sign-in views, clearing any message from the last one.
@@ -1371,6 +1450,8 @@ async function doReset(){
 const SB  = 'https://ejmiqtizvuuilsztbafk.supabase.co';
 const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVqbWlxdGl6dnV1aWxzenRiYWZrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUzNjkzMjAsImV4cCI6MjA3MDk0NTMyMH0.mHjzI8hth6JMFW6WeDg2Dy0nFOprC0Tj4p5Cjs7Aq0E';
 const AUTH_LS = 'studylink-session';
+// Where invite and reset emails send people back to.
+const APP_URL = location.origin + location.pathname;
 
 let A = { token:null, user:null, profile:null, authView:'signin', authBusy:false, authMsg:'', authOk:'', draft:null, role:'student', signedUpAlias:null };
 
@@ -1514,7 +1595,7 @@ async function ensureTutorAlias(){
 }
 
 async function sendReset(email){
-  await sbFetch('/auth/v1/recover', {
+  await sbFetch('/auth/v1/recover?redirect_to=' + encodeURIComponent(APP_URL), {
     method:'POST', headers:{ Authorization:'Bearer ' + SKEY },
     body: JSON.stringify({ email: email.trim() })
   });
@@ -1589,7 +1670,7 @@ setInterval(function(){ if(!document.hidden && A.profile && dataLoaded) loadData
 
 /* ============================= INIT ============================= */
 load();
-restoreSession().then(function(){ render(); });
+consumeAuthLink().then(function(fromLink){ return fromLink ? null : restoreSession(); }).then(function(){ render(); });
 </script>
 </body>
 </html>
