@@ -608,7 +608,7 @@ function renderHome(c){
     </div>
 
     <div class="sectlabel">${S.mode==='tutor' ? 'Classes I tutor' : 'My classes'}</div>
-    ${classGrid(false)}
+    ${S[classKey()].length ? classGrid(false, false) : `<div class="card tiny" style="text-align:center">No classes yet — add them under Classes in the sidebar.</div>`}
   `;
 }
 
@@ -670,7 +670,7 @@ function sessionColumn(role){
 }
 
 // Cards for my classes, plus one to add more. removable shows the × on each.
-function classGrid(removable){
+function classGrid(removable, withAdd){
   return `<div class="grid">
     ${S[classKey()].map(course=>{
       const n=tutorsFor(course).length;
@@ -682,7 +682,7 @@ function classGrid(removable){
         <div class="tiny" style="margin-top:6px;color:${next?'var(--ink)':'var(--muted)'}">${next ? '📅 '+esc(fmtDate(next.date))+' · '+esc(next.title) : 'Nothing scheduled'}</div>
       </div>`;
     }).join('')}
-    <button class="card addcard" onclick="S.tab='classes'; openView({type:'addClasses'})">＋ Add class</button>
+    ${withAdd ? `<button class="card addcard" onclick="S.tab='classes'; openView({type:'addClasses'})">＋ Add class</button>` : ''}
   </div>`;
 }
 
@@ -702,7 +702,7 @@ function renderClasses(c){
   c.innerHTML = `
     <h2 class="title">${S.mode==='tutor' ? 'Classes I tutor' : 'My classes'}</h2>
     <div class="lead">${S[classKey()].length ? 'Open a class for its tutors and community. To drop a class, untick it under Add class.' : (S.mode==='tutor' ? 'Add the classes you can tutor to get started.' : 'Add the classes you are taking to get started.')}</div>
-    ${classGrid(true)}
+    ${classGrid(true, true)}
   `;
 }
 function renderAddClasses(c){
