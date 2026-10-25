@@ -202,6 +202,14 @@
   .takenrow .nm{font-weight:800; font-size:14px; flex:1 1 140px}
   .takenrow select{padding:7px 9px; border:1.5px solid #e5e2f0; border-radius:9px; font:inherit; font-size:13px; background:#fff}
 
+  /* Online status */
+  .avwrap{position:relative; flex:0 0 auto}
+  .avwrap .avatar{margin:0}
+  .odot{position:absolute; right:-1px; bottom:-1px; width:12px; height:12px; border-radius:50%; background:#c7ccd9; border:2px solid #fff}
+  .odot.on{background:#34c37a; box-shadow:0 0 0 2px rgba(52,195,122,.25)}
+  .seen{font-size:11px; font-weight:700; color:var(--muted)}
+  .seen.on{color:#2e9b6a}
+
   /* Bits */
   h2.title{font-size:22px; font-weight:800; margin:4px 2px 2px}
   .lead{color:var(--muted); font-size:13px; font-weight:600; margin:0 2px 14px}
@@ -434,7 +442,7 @@ function renderHead(){
   $('head').innerHTML = `
     <button class="menu" onclick="toggleSide(true)" aria-label="Open navigation">☰</button>
     <h1>${esc(title)}</h1>
-    <div class="right">${esc(currentAlias())} ${roleBadge(A.profile.role)}<br>Grade ${S.me.grade}</div>`;
+    <div class="right">${esc(currentAlias())} ${roleBadge(A.profile.role)}<br><span class="seen on">● Online</span> · Grade ${S.me.grade}</div>`;
 }
 
 function incomingCount(){
@@ -630,10 +638,11 @@ function sessionColumn(role){
     const dayLabel = r.date ? (r.date===today ? 'Today' : parseYmd(r.date).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})) : 'Day TBD';
     const pending = r.status==='pending' || r.status==='offered';
     const tag = r.status==='offered' ? (role==='student' ? 'Offer · see Tutoring' : 'Offered') : 'Waiting';
+    const seen = S.presence ? S.presence[r.id] : null;
     return `<div class="sessrow">
-      <div class="avatar" style="width:38px;height:38px;font-size:15px;background:${courseColor(r.course)}">${courseEmoji(r.course)}</div>
+      ${avatarDot(courseEmoji(r.course), seen, 'width:38px;height:38px;font-size:15px;background:'+courseColor(r.course))}
       <div style="min-width:0;flex:1">
-        <div class="who">${esc(other)} <span class="tiny">· ${esc(r.course)}</span></div>
+        <div class="who">${esc(other)} <span class="tiny">· ${esc(r.course)}</span> ${seenHtml(seen)}</div>
         <div class="meta">${esc(r.topic||'')}${r.topic?' · ':''}${esc(r.time||'Time TBD')} · ${esc(r.format)}${r.location?' · 📍 '+esc(r.location):''}</div>
       </div>
       ${pending ? `<span class="pill" style="background:#fbf1e2;color:#c98b34;cursor:pointer" onclick="go('tutoring')">${tag}</span>` : `<span class="when">${esc(dayLabel)}</span>`}
@@ -884,8 +893,8 @@ function tuteesHtml(course){
     ${canOffer ? '' : `<div class="card tiny" style="margin-top:10px">To offer help here, add ${esc(course)} to the classes you tutor first.${S.me.isTutor ? '' : ' <button class="btn ghost sm" style="margin-left:6px" onclick="openView({type:\'becomeTutor\'})">Become a tutor</button>'}</div>`}
     <div class="sectlabel">${students.length} student${students.length===1?'':'s'} taking ${esc(course)}</div>
     ${students.length ? students.map(st=>{ const r=stateFor(st.user_id); return `<div class="card row">
-      <div class="avatar" style="background:${courseColor(course)}">${initials(st.student_alias)}</div>
-      <div style="min-width:0;flex:1"><div style="font-weight:800">${esc(st.student_alias)}</div><div class="tiny">${st.grade_level?'Grade '+st.grade_level:''}${r ? (st.grade_level?' · ':'') + (r.status==='offered' ? 'You offered to help' : r.status==='pending' ? 'They asked you for help' : 'Session booked') : ''}</div></div>
+      ${avatarDot(initials(st.student_alias), st.last_seen_at, 'background:'+courseColor(course))}
+      <div style="min-width:0;flex:1"><div style="font-weight:800">${esc(st.student_alias)} ${seenHtml(st.last_seen_at)}</div><div class="tiny">${st.grade_level?'Grade '+st.grade_level:''}${r ? (st.grade_level?' · ':'') + (r.status==='offered' ? 'You offered to help' : r.status==='pending' ? 'They asked you for help' : 'Session booked') : ''}</div></div>
       ${r ? `<span class="pill" style="margin-left:auto;${r.status==='accepted'?'background:#e4f6ec;color:#2e9b6a':''}">${r.status==='offered'?'Offered':r.status==='pending'?'Requested':'Confirmed'}</span>`
           : canOffer ? `<button class="btn sm" style="margin-left:auto" onclick="offerHelp('${st.user_id}','${esc(st.student_alias)}','${esc(course)}',this)">Offer help</button>` : ''}
     </div>`; }).join('') : `<div class="empty"><div class="em">🎓</div>Nobody has added ${esc(course)} as a class yet.</div>`}`;
@@ -965,9 +974,9 @@ function tutorCard(t, course){
   const cc = t.courses.find(x=>x.course===course) || {};
   return `<div class="card tutorcard">
     <div class="top">
-      <div class="avatar" style="background:${t.color}">${initials(t.name)}</div>
+      ${avatarDot(initials(t.name), t.seen, 'background:'+t.color)}
       <div style="flex:1;min-width:0">
-        <div class="row" style="gap:8px"><h3>${esc(t.name)}</h3>${t.grade?`<span class="tiny">Grade ${t.grade}</span>`:''}
+        <div class="row" style="gap:8px"><h3>${esc(t.name)}</h3>${t.grade?`<span class="tiny">Grade ${t.grade}</span>`:''}${seenHtml(t.seen)}
           <span class="tiny" style="margin-left:auto">${t.sessions} session${t.sessions===1?'':'s'}</span></div>
         <div style="margin-top:4px">
           ${cc.grade ? `<span class="grade ${gradeClass(cc.grade)}">${esc(course)}: ${esc(cc.grade)}</span>` : `<span class="tiny">${esc(course)}</span>`}
@@ -992,9 +1001,9 @@ function renderTutorProfile(c){
   c.innerHTML=`
     <button class="back" onclick="closeView()">‹ Back</button>
     <div class="card">
-      <div class="row"><div class="avatar" style="background:${t.color};width:56px;height:56px;font-size:22px">${initials(t.name)}</div>
+      <div class="row">${avatarDot(initials(t.name), t.seen, 'background:'+t.color+';width:56px;height:56px;font-size:22px')}
         <div><h2 class="title" style="margin:0">${esc(t.name)}</h2>
-        <div class="tiny">${t.grade?'Grade '+t.grade+' · ':''}${t.sessions} session${t.sessions===1?'':'s'} completed</div></div></div>
+        <div class="tiny">${t.grade?'Grade '+t.grade+' · ':''}${t.sessions} session${t.sessions===1?'':'s'} completed ${seenHtml(t.seen)}</div></div></div>
       ${t.bio ? `<p style="font-size:14px;color:#555;margin:12px 0 4px">${esc(t.bio)}</p>` : ''}
       <div class="tiny" style="margin-top:8px">🗓️ ${esc(t.avail||'Availability not set')} · ${esc(t.format)}</div>
       <div class="sectlabel">Classes tutored</div>
@@ -1102,8 +1111,8 @@ function renderTutoring(c){
       <div class="sectlabel">Requests to you ${inc.length?`(${inc.length})`:''}</div>
       ${inc.length ? inc.map(r=>`
         <div class="card">
-          <div class="row"><div class="avatar" style="background:${courseColor(r.course)}">${initials(r.student_alias)}</div>
-            <div><div style="font-weight:800">${esc(r.student_alias)}</div><div class="tiny">${esc(r.course)} · ${esc(r.topic)}</div></div></div>
+          <div class="row">${avatarDot(initials(r.student_alias), S.presence && S.presence[r.id], 'background:'+courseColor(r.course))}
+            <div><div style="font-weight:800">${esc(r.student_alias)} ${seenHtml(S.presence && S.presence[r.id])}</div><div class="tiny">${esc(r.course)} · ${esc(r.topic)}</div></div></div>
           ${r.note ? `<div style="font-size:13px;margin:8px 0 0;color:#555">${esc(r.note)}</div>` : ''}
           <div class="tiny" style="margin:8px 0 10px">🗓️ ${esc(fmtDate(r.date))} · ${esc(r.time||'TBD')} · ${esc(r.format)}${r.location?' · 📍 '+esc(r.location):''}</div>
           <div class="row" style="gap:8px">
@@ -1115,8 +1124,8 @@ function renderTutoring(c){
 
     ${offers.length ? `<div class="sectlabel">Offers to help you (${offers.length})</div>
       ${offers.map(r=>`<div class="card">
-        <div class="row"><div class="avatar" style="background:${courseColor(r.course)}">${initials(r.tutor_alias)}</div>
-          <div><div style="font-weight:800">${esc(r.tutor_alias)}</div><div class="tiny">offers to help with ${esc(r.course)} · ${esc(r.format)}</div></div></div>
+        <div class="row">${avatarDot(initials(r.tutor_alias), S.presence && S.presence[r.id], 'background:'+courseColor(r.course))}
+          <div><div style="font-weight:800">${esc(r.tutor_alias)} ${seenHtml(S.presence && S.presence[r.id])}</div><div class="tiny">offers to help with ${esc(r.course)} · ${esc(r.format)}</div></div></div>
         <div class="row" style="gap:8px;margin-top:10px">
           <button class="btn sm gray" style="flex:1" onclick="respondOffer('${r.id}',false)">No thanks</button>
           <button class="btn sm green" style="flex:1" onclick="respondOffer('${r.id}',true)">Accept</button>
@@ -2084,7 +2093,7 @@ let dataLoaded = false, dataLoading = false, dataError = null;
 async function loadData(){
   if(!A.user) return;
   const me = A.user.id;
-  const [classes, tcourses, reqs, events, tutors, posts, myGrades, pendingGrades, materials, roster] = await Promise.all([
+  const [classes, tcourses, reqs, events, tutors, posts, myGrades, pendingGrades, materials, roster, presence] = await Promise.all([
     sbFetch('/rest/v1/sl_student_classes?select=course&user_id=eq.'+me+'&order=created_at'),
     sbFetch('/rest/v1/sl_tutor_courses?select=course,grade,year,availability&user_id=eq.'+me+'&order=created_at'),
     sbFetch('/rest/v1/sl_requests?select=*&or=(student_id.eq.'+me+',tutor_id.eq.'+me+')&order=created_at.desc'),
@@ -2095,6 +2104,7 @@ async function loadData(){
     isStaff() ? sbFetch('/rest/v1/sl_grades?select=id&status=eq.pending') : Promise.resolve([]),
     sbFetch('/rest/v1/sl_materials?select=*&order=created_at.desc&limit=500'),
     sbFetch('/rest/v1/sl_class_students?select=*'),
+    sbFetch('/rest/v1/sl_request_presence?select=*'),
   ]);
   S.myClasses = (classes||[]).map(r=>r.course);
   S.tutorClasses = (tcourses||[]).map(r=>r.course);
@@ -2109,6 +2119,7 @@ async function loadData(){
   S.posts = posts||[];
   S.materials = materials||[];
   S.roster = (roster||[]).filter(r => r.user_id !== me);
+  S.presence = {}; (presence||[]).forEach(function(x){ S.presence[x.request_id] = x.other_seen_at; });
   S.tutors = buildTutors(tutors||[], me);
   S.helped = S.incoming.filter(r=>r.status==='done').length;
   S.hours = Math.round(S.helped*0.75*100)/100;
@@ -2116,19 +2127,43 @@ async function loadData(){
   A.role = (S.mode==='tutor' && A.profile && A.profile.tutor_alias) ? 'tutor' : 'student';
   S.me.name = currentAlias();
   dataLoaded = true;
+  heartbeat();
 }
 // One row per class per tutor comes back; fold them into one tutor each.
 function buildTutors(rows, me){
   const by = {};
   rows.forEach(function(r){
     if(r.user_id===me) return;
-    const t = by[r.user_id] || (by[r.user_id] = { id:r.user_id, name:r.tutor_alias, grade:r.grade_level, bio:r.tutor_bio||'', format:r.tutor_format||'In person',
+    const t = by[r.user_id] || (by[r.user_id] = { id:r.user_id, name:r.tutor_alias, grade:r.grade_level, bio:r.tutor_bio||'', format:r.tutor_format||'In person', seen:r.last_seen_at,
       avail:'', sessions:Number(r.sessions_done)||0, courses:[], color:TUTOR_COLORS[hashStr(r.user_id)%TUTOR_COLORS.length] });
     t.courses.push({ course:r.course, grade:r.grade||'', year:r.year||'', verified:!!r.verified });
     if(r.availability && !t.avail) t.avail = r.availability;
   });
   return Object.values(by);
 }
+// Online status. The app pings while it is open; anyone seen in the last two
+// minutes shows as online. Only the alias and the dot are ever shown.
+function isOnline(ts){ return !!ts && (Date.now() - new Date(ts).getTime()) < 2*60*1000; }
+function seenLabel(ts){
+  if(!ts) return '';
+  const m = Math.round((Date.now() - new Date(ts).getTime())/60000);
+  if(m < 2) return 'Online now';
+  if(m < 60) return 'Active '+m+'m ago';
+  const h = Math.round(m/60); if(h < 24) return 'Active '+h+'h ago';
+  const d = Math.round(h/24); return d===1 ? 'Active yesterday' : 'Active '+d+' days ago';
+}
+const seenHtml = ts => ts ? `<span class="seen ${isOnline(ts)?'on':''}">${isOnline(ts)?'● ':''}${seenLabel(ts)}</span>` : '';
+// An avatar with the little status dot.
+const avatarDot = (inner, ts, style) => `<span class="avwrap"><div class="avatar" style="${style||''}">${inner}</div><span class="odot ${isOnline(ts)?'on':''}" title="${seenLabel(ts)||'Not seen yet'}"></span></span>`;
+let lastBeat = 0;
+function heartbeat(){
+  if(!A.user || !A.profile || Date.now() - lastBeat < 45000) return;
+  lastBeat = Date.now();
+  sbFetch('/rest/v1/sl_profiles?id=eq.'+A.user.id, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ last_seen_at:new Date().toISOString() }) }).catch(function(){});
+}
+setInterval(function(){ if(!document.hidden) heartbeat(); }, 60000);
+document.addEventListener('visibilitychange', function(){ if(!document.hidden) heartbeat(); });
+
 // Pick up what other people did while this tab was in the background.
 document.addEventListener('visibilitychange', function(){ if(!document.hidden && A.profile && dataLoaded) loadData().then(function(){ if(!S.overlay) render(); }).catch(function(){}); });
 setInterval(function(){ if(!document.hidden && A.profile && dataLoaded) loadData().then(function(){ if(!S.overlay) render(); }).catch(function(){}); }, 60000);
