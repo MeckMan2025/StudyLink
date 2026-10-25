@@ -539,11 +539,6 @@ function renderHome(c){
     <h2 class="title">${hi}, ${esc(currentAlias())}</h2>
     <div class="lead">${new Date().toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'})}</div>
 
-    <div class="statgrid">
-      <div class="stat" style="cursor:pointer" onclick="go('classes')"><div class="n" style="color:var(--blue-d)">${S[classKey()].length}</div><div class="l">${S.mode==='tutor' ? 'classes I tutor' : 'my classes'}</div></div>
-      <div class="stat" style="cursor:pointer" onclick="go('calendar')"><div class="n" style="color:var(--purple)">${soon.length}</div><div class="l">this week</div></div>
-      <div class="stat" style="cursor:pointer" onclick="go('tutoring')"><div class="n" style="color:var(--pink-d)">${pending + inc}</div><div class="l">${inc ? 'requests to you' : 'pending requests'}</div></div>
-    </div>
 
     <div class="sectlabel">This week</div>
     ${weekStrip()}
