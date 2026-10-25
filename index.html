@@ -134,6 +134,14 @@
   .auth-alias .big{font-size:32px; font-weight:800; margin:6px 0 4px; color:var(--ink)}
   .auth-foot{text-align:center; margin-top:18px; font-size:11.5px; color:var(--muted); font-weight:600}
 
+  /* Roles */
+  .rolebadge{display:inline-block; font-size:10.5px; font-weight:800; letter-spacing:.4px; text-transform:uppercase; padding:2px 8px; border-radius:8px; vertical-align:middle}
+  .rolebadge.admin{background:#e6eefb; color:#4d7fd6}
+  .rolebadge.board{background:#f1e9fd; color:#7c5fd0}
+  .verified{display:inline-block; font-size:11px; font-weight:800; color:#2e9b6a; background:#e4f6ec; border-radius:8px; padding:2px 7px; margin-left:6px}
+  .unverified{display:inline-block; font-size:11px; font-weight:700; color:#c98b34; background:#fbf1e2; border-radius:8px; padding:2px 7px; margin-left:6px}
+  .side .section{font-size:10.5px; font-weight:800; letter-spacing:.6px; text-transform:uppercase; color:var(--muted); padding:6px 12px 2px}
+
   /* Bits */
   h2.title{font-size:22px; font-weight:800; margin:4px 2px 2px}
   .lead{color:var(--muted); font-size:13px; font-weight:600; margin:0 2px 14px}
@@ -335,13 +343,15 @@ function render(){
 }
 
 let menuOpen = false;
-const TAB_TITLES = { settings:'Settings', help:'Help', home:'Home Screen', classes:'Classes', calendar:'Calendar', tutoring:'Tutoring', community:'Community', profile:'Profile' };
+const TAB_TITLES = { settings:'Settings', help:'Help', home:'Home Screen', classes:'Classes', calendar:'Calendar', tutoring:'Tutoring', community:'Community', profile:'Profile', 'admin-grades':'Grade checks', 'admin-requests':'All requests', 'admin-team':'Team' };
+const isStaff = () => !!(A.profile && (A.profile.role==='admin' || A.profile.role==='board'));
+const roleBadge = r => r==='admin' ? '<span class="rolebadge admin">Administrator</span>' : r==='board' ? '<span class="rolebadge board">Board</span>' : '';
 function renderHead(){
   const title = S.overlay?.type==='course' ? S.overlay.course : TAB_TITLES[S.tab] || 'StudyLink';
   $('head').innerHTML = `
     <button class="menu" onclick="toggleSide(true)" aria-label="Open navigation">☰</button>
     <h1>${esc(title)}</h1>
-    <div class="right">${esc(currentAlias())}<br>Grade ${S.me.grade}</div>`;
+    <div class="right">${esc(currentAlias())} ${roleBadge(A.profile.role)}<br>Grade ${S.me.grade}</div>`;
 }
 
 function incomingCount(){
@@ -390,6 +400,11 @@ function renderNav(){
       <hr>
       ${item('tutoring','🤝','Tutoring', inc ? `<span class="count">${inc}</span>` : '')}
       ${item('community','💬','Community')}
+      ${isStaff() ? `<hr>
+      <div class="section">${A.profile.role==='board' ? 'Board' : 'Administration'}</div>
+      ${item('admin-grades','✅','Grade checks', S.pendingGrades ? `<span class="count">${S.pendingGrades}</span>` : '')}
+      ${item('admin-requests','📋','All requests')}
+      ${item('admin-team','🛡️','Team')}` : ''}
     </nav>
 `;
 }
@@ -405,6 +420,9 @@ function renderBody(){
   if(S.tab==='calendar') return renderCalendar(c);
   if(S.tab==='settings') return renderSettings(c);
   if(S.tab==='help') return renderHelp(c);
+  if(S.tab==='admin-grades') return renderAdminGrades(c);
+  if(S.tab==='admin-requests') return renderAdminRequests(c);
+  if(S.tab==='admin-team') return renderAdminTeam(c);
 }
 
 /* -------- SETTINGS / HELP (from the ⋮ menu) -------- */
@@ -437,7 +455,9 @@ function renderHelp(c){
     ${q('Tutor or Tutee?', 'Use the switch at the top of the sidebar. Tutee is for classes you want help in; Tutor is for classes you can teach. Each side keeps its own list of classes.')}
     ${q('Adding classes', 'Press ＋ Add class under Classes in the sidebar and tap every class that applies.')}
     ${q('Getting help', 'Open a class to see its tutors, then send a request. Once it is accepted, it shows up on your calendar.')}
-    ${q('Privacy', 'Other students only see your alias. Coordination happens inside StudyLink — no phone numbers or personal emails are shared.')}`;
+    ${q('Privacy', 'Other students only see your alias. Coordination happens inside StudyLink — no phone numbers or personal emails are shared.')}
+    ${q('Verified grades', 'When you become a tutor, the grades you claim go to a school administrator, who checks them against your records. Verified grades show a ✓ on your tutor card.')}
+    ${q('Who runs this', 'Students use the app. Administrators verify grades and manage requests. The board maintains the app itself.')}`;
 }
 
 /* -------- HOME -------- */
@@ -702,6 +722,7 @@ function tutorCard(t, course){
           <span class="tiny" style="margin-left:auto">${t.sessions} session${t.sessions===1?'':'s'}</span></div>
         <div style="margin-top:4px">
           ${cc.grade ? `<span class="grade ${gradeClass(cc.grade)}">${esc(course)}: ${esc(cc.grade)}</span>` : `<span class="tiny">${esc(course)}</span>`}
+          ${cc.verified ? '<span class="verified">✓ Verified</span>' : ''}
           ${cc.year ? `<span class="tiny" style="margin-left:6px">Taken ${esc(cc.year)}</span>` : ''}
         </div>
         <div class="tiny" style="margin-top:5px">🗓️ ${esc(t.avail||'Availability not set')} · ${esc(t.format)}</div>
@@ -729,7 +750,7 @@ function renderTutorProfile(c){
       <div class="tiny" style="margin-top:8px">🗓️ ${esc(t.avail||'Availability not set')} · ${esc(t.format)}</div>
       <div class="sectlabel">Classes tutored</div>
       ${t.courses.map(cc=>`<div class="row" style="margin-bottom:6px">${cc.grade?`<span class="grade ${gradeClass(cc.grade)}">${esc(cc.grade)}</span>`:''}
-        <span style="font-weight:700;font-size:14px">${esc(cc.course)}</span><span class="tiny" style="margin-left:auto">${esc(cc.year||'')}</span></div>`).join('')}
+        <span style="font-weight:700;font-size:14px">${esc(cc.course)}</span>${cc.verified ? '<span class="verified">✓ Verified</span>' : ''}<span class="tiny" style="margin-left:auto">${esc(cc.year||'')}</span></div>`).join('')}
     </div>
     <div style="margin-top:12px"><button class="btn" onclick="open({type:'request',id:'${t.id}',course:'${esc(S.overlay.course||t.courses[0].course)}'})">Request tutoring</button></div>
   `;
@@ -914,7 +935,7 @@ function renderProfile(c){
     <div class="card">
       <div class="row"><div class="avatar" style="width:54px;height:54px;font-size:20px;background:linear-gradient(135deg,var(--blue),var(--purple))">${initials(me.name)}</div>
         <div style="flex:1"><div style="font-weight:800;font-size:17px">${esc(A.profile.student_alias)}</div>
-        <div class="tiny">${A.profile.tutor_alias ? 'Tutoring as '+esc(A.profile.tutor_alias)+' · ' : ''}${me.isTutor?'Tutor + Student':'Student'} · Grade ${me.grade}</div></div></div>
+        <div class="tiny">${A.profile.tutor_alias ? 'Tutoring as '+esc(A.profile.tutor_alias)+' · ' : ''}${me.isTutor?'Tutor + Student':'Student'} · Grade ${me.grade} ${roleBadge(A.profile.role)}</div></div></div>
     </div>
 
     ${me.isTutor ? `
@@ -927,7 +948,8 @@ function renderProfile(c){
       <div class="sectlabel">Classes you tutor</div>
       <div class="card">
         ${me.tutorCourses.length ? me.tutorCourses.map(tc=>`<div class="row" style="margin-bottom:6px">${tc.grade?`<span class="grade ${gradeClass(tc.grade)}">${esc(tc.grade)}</span>`:''}
-          <span style="font-weight:700;font-size:14px">${esc(tc.course)}</span><span class="tiny" style="margin-left:auto">${esc(tc.year||'')}</span></div>`).join('') : `<div class="tiny">No classes added yet.</div>`}
+          <span style="font-weight:700;font-size:14px">${esc(tc.course)}</span>${tc.verify==='verified' ? '<span class="verified">✓ Verified</span>' : tc.verify==='pending' ? '<span class="unverified">Awaiting check</span>' : tc.verify==='rejected' ? '<span class="unverified">Not verified</span>' : ''}<span class="tiny" style="margin-left:auto">${esc(tc.year||'')}</span></div>`).join('') : `<div class="tiny">No classes added yet.</div>`}
+        <div class="tiny" style="margin-top:8px">An administrator checks each grade against school records before it shows as verified.</div>
         <button class="btn ghost sm" style="width:100%;margin-top:10px" onclick="open({type:'becomeTutor'})">Edit tutoring classes</button>
       </div>
       <div class="tiny" style="margin:12px 2px">🗓️ Available: ${esc(me.avail||'not set')}</div>
@@ -997,7 +1019,7 @@ function renderBecomeTutor(c){
       <div class="card" style="margin-top:12px;text-align:center">
         <div style="font-size:34px">🎉</div>
         <div style="font-weight:800;margin:6px 0 2px">You're ready to tutor!</div>
-        <div class="tiny">${Object.keys(d.courses).length} classes · service hours will track automatically.</div>
+        <div class="tiny">${Object.keys(d.courses).length} classes · an administrator will verify your grades · service hours track automatically.</div>
       </div>
       <div style="margin-top:16px"><button class="btn green" id="ft_btn" onclick="finishTutor()">Finish — start tutoring</button></div>
     `;
@@ -1017,6 +1039,14 @@ async function finishTutor(){
     await sbFetch('/rest/v1/sl_tutor_courses?user_id=eq.'+me, { method:'DELETE', headers:{ Prefer:'return=minimal' } });
     const rows=Object.entries(d.courses).map(([course,v])=>({ user_id:me, course, grade:v.grade, year:v.year, availability:avail }));
     if(rows.length) await sbFetch('/rest/v1/sl_tutor_courses', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify(rows) });
+    // Each grade goes to an administrator to check. A grade already verified
+    // at the same mark is left alone; anything else is submitted afresh.
+    const have = await sbFetch('/rest/v1/sl_grades?select=id,course,grade,status&user_id=eq.'+me);
+    const keep = new Set((have||[]).filter(g=>g.status==='verified' && d.courses[g.course] && d.courses[g.course].grade===g.grade).map(g=>g.id));
+    const stale = (have||[]).filter(g=>!keep.has(g.id) && g.status==='pending').map(g=>g.id);
+    if(stale.length) await sbFetch('/rest/v1/sl_grades?id=in.('+stale.join(',')+')', { method:'DELETE', headers:{ Prefer:'return=minimal' } });
+    const submit = rows.filter(r => !(have||[]).some(g => keep.has(g.id) && g.course===r.course)).map(r=>({ user_id:me, course:r.course, grade:r.grade, year:r.year }));
+    if(submit.length) await sbFetch('/rest/v1/sl_grades', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify(submit) });
     await loadData();
     S.mode='tutor'; A.role='tutor'; S.me.name=currentAlias();
     close(); go('tutoring');
@@ -1024,6 +1054,125 @@ async function finishTutor(){
   }catch(e){
     toast(e.message); if(btn){ btn.disabled=false; btn.textContent='Finish — start tutoring'; }
   }
+}
+
+/* -------- ADMINISTRATION (admin + board) -------- */
+// Grade checks: every grade a tutor has claimed, waiting on someone with
+// access to school records. Real names show here and nowhere else.
+async function renderAdminGrades(c){
+  if(!isStaff()) return go('home');
+  c.innerHTML = '<h2 class="title">Grade checks</h2><div class="lead">Loading…</div>';
+  let rows;
+  try { rows = await sbFetch('/rest/v1/sl_grades?select=*,who:sl_profiles!sl_grades_user_id_fkey(real_name,grade_level,student_alias,tutor_alias)&order=status.desc,created_at'); }
+  catch(e){ c.innerHTML = '<h2 class="title">Grade checks</h2><div class="auth-msg err">' + esc(e.message) + '</div>'; return; }
+  if(S.tab!=='admin-grades') return;
+  const pending = rows.filter(r=>r.status==='pending'), rest = rows.filter(r=>r.status!=='pending');
+  const line = r => `<div class="card">
+      <div class="row"><div class="avatar" style="background:${courseColor(r.course)}">${courseEmoji(r.course)}</div>
+        <div style="min-width:0"><div style="font-weight:800">${esc(r.who ? r.who.real_name : 'Unknown')} <span class="tiny">· ${esc(r.who ? r.who.tutor_alias || r.who.student_alias : '')}${r.who && r.who.grade_level ? ' · Grade '+r.who.grade_level : ''}</span></div>
+          <div class="tiny">${esc(r.course)} · claims <b>${esc(r.grade)}</b>${r.year ? ' · taken '+esc(r.year) : ''} · submitted ${esc(new Date(r.created_at).toLocaleDateString())}</div></div>
+        ${r.status==='pending' ? '' : `<span class="pill" style="margin-left:auto;${r.status==='verified'?'background:#e4f6ec;color:#2e9b6a':'background:#fdecef;color:#c23b5e'}">${r.status==='verified'?'Verified':'Rejected'}</span>`}
+      </div>
+      ${r.status==='pending' ? `<div class="row" style="gap:8px;margin-top:10px">
+        <input id="gn_${r.id}" placeholder="Note (optional, e.g. transcript shows B+)" style="flex:1;padding:9px 11px;border:1.5px solid #e5e2f0;border-radius:10px;font:inherit;font-size:13px">
+        <button class="btn sm gray" onclick="reviewGrade('${r.id}','rejected')">Reject</button>
+        <button class="btn sm green" onclick="reviewGrade('${r.id}','verified')">Verify</button>
+      </div>` : (r.note ? `<div class="tiny" style="margin-top:6px">Note: ${esc(r.note)}</div>` : '')}
+    </div>`;
+  c.innerHTML = `
+    <h2 class="title">Grade checks</h2>
+    <div class="lead">Confirm each claimed grade against school records. Verified grades show a ✓ on the tutor's card.</div>
+    <div class="sectlabel">Waiting ${pending.length ? '('+pending.length+')' : ''}</div>
+    ${pending.length ? pending.map(line).join('') : '<div class="card tiny" style="text-align:center">Nothing waiting. New tutors will appear here.</div>'}
+    ${rest.length ? '<div class="sectlabel">Already reviewed</div>' + rest.map(line).join('') : ''}`;
+}
+function reviewGrade(id, status){
+  const note = ($('gn_'+id) && $('gn_'+id).value || '').trim();
+  sbFetch('/rest/v1/sl_grades?id=eq.'+id, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ status, note, reviewed_by:A.user.id, reviewed_at:new Date().toISOString() }) })
+    .then(loadData).then(function(){ toast(status==='verified' ? 'Grade verified ✓' : 'Grade rejected'); render(); })
+    .catch(function(e){ toast(e.message); });
+}
+
+// Every tutoring request in the school, newest first.
+async function renderAdminRequests(c){
+  if(!isStaff()) return go('home');
+  c.innerHTML = '<h2 class="title">All requests</h2><div class="lead">Loading…</div>';
+  let rows;
+  try { rows = await sbFetch('/rest/v1/sl_requests?select=*&order=created_at.desc&limit=300'); }
+  catch(e){ c.innerHTML = '<h2 class="title">All requests</h2><div class="auth-msg err">' + esc(e.message) + '</div>'; return; }
+  if(S.tab!=='admin-requests') return;
+  const f = S.adminReqFilter || 'all';
+  const shown = rows.filter(r => f==='all' || r.status===f);
+  const label = { pending:'Pending', accepted:'Confirmed', declined:'Declined', done:'Done', cancelled:'Cancelled' };
+  const style = { accepted:'background:#e4f6ec;color:#2e9b6a', done:'background:#eef0f6;color:#5b6077', declined:'background:#fdecef;color:#c23b5e', cancelled:'background:#fdecef;color:#c23b5e' };
+  const counts = {}; rows.forEach(r=>{ counts[r.status]=(counts[r.status]||0)+1; });
+  c.innerHTML = `
+    <h2 class="title">All requests</h2>
+    <div class="lead">${rows.length} request${rows.length===1?'':'s'} · ${counts.done||0} completed · ${(counts.done||0)*0.75} service hours logged</div>
+    <div class="chips" style="margin-bottom:8px">${['all','pending','accepted','done','declined','cancelled'].map(k=>`<button class="chip ${f===k?'dept':''}" style="${f===k?'background:var(--blue)':''}" onclick="S.adminReqFilter='${k}';render()">${k==='all'?'All':label[k]}${k!=='all'&&counts[k]?' · '+counts[k]:''}</button>`).join('')}</div>
+    ${shown.length ? shown.map(r=>`
+      <div class="card row">
+        <div class="avatar" style="background:${courseColor(r.course)}">${courseEmoji(r.course)}</div>
+        <div style="min-width:0"><div style="font-weight:800">${esc(r.course)} <span class="tiny">· ${esc(r.topic)}</span></div>
+          <div class="tiny">${esc(r.student_alias)} → ${esc(r.tutor_alias)} · ${esc(fmtDate(r.date))} ${esc(r.time||'')} · ${esc(r.format)} · sent ${esc(new Date(r.created_at).toLocaleDateString())}</div></div>
+        <span class="pill" style="margin-left:auto;${style[r.status]||''}">${label[r.status]||r.status}</span>
+        ${r.status==='pending' || r.status==='accepted' ? `<button class="del" title="Cancel this request" style="border:none;background:none;color:var(--muted);cursor:pointer;font-size:16px" onclick="adminCancel('${r.id}')">✕</button>` : ''}
+      </div>`).join('') : '<div class="card tiny" style="text-align:center">No requests here.</div>'}`;
+}
+function adminCancel(id){
+  sbFetch('/rest/v1/sl_requests?id=eq.'+id, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ status:'cancelled' }) })
+    .then(function(){ toast('Request cancelled'); render(); }).catch(function(e){ toast(e.message); });
+}
+
+// Who runs StudyLink. A seat is granted by email, so it applies the moment
+// that person signs up; removing the row takes it away again.
+async function renderAdminTeam(c){
+  if(!isStaff()) return go('home');
+  c.innerHTML = '<h2 class="title">Team</h2><div class="lead">Loading…</div>';
+  let staff, people;
+  try {
+    [staff, people] = await Promise.all([
+      sbFetch('/rest/v1/sl_staff?select=*&order=role,added_at'),
+      sbFetch('/rest/v1/sl_profiles?select=id,real_name,student_alias,role&role=in.(admin,board)'),
+    ]);
+  } catch(e){ c.innerHTML = '<h2 class="title">Team</h2><div class="auth-msg err">' + esc(e.message) + '</div>'; return; }
+  if(S.tab!=='admin-team') return;
+  const myEmail = ((A.user && A.user.email) || '').toLowerCase();
+  const group = (role, title, blurb) => `
+    <div class="sectlabel">${title}</div>
+    <div class="tiny" style="margin:-4px 2px 8px">${blurb}</div>
+    ${staff.filter(s=>s.role===role).map(s=>`<div class="card row">
+      <div class="avatar" style="background:${role==='board'?'var(--purple)':'var(--blue-d)'}">${initials(s.email)}</div>
+      <div style="min-width:0"><div style="font-weight:800">${esc(s.email)}${s.email.toLowerCase()===myEmail?' <span class="tiny">(you)</span>':''}</div>
+        <div class="tiny">${roleBadge(role)} added ${esc(new Date(s.added_at).toLocaleDateString())}${s.added_by_alias?' by '+esc(s.added_by_alias):''}</div></div>
+      ${s.email.toLowerCase()===myEmail ? '' : `<button class="del" title="Remove" style="margin-left:auto;border:none;background:none;color:var(--muted);cursor:pointer;font-size:16px" onclick="removeStaff('${esc(s.email)}')">✕</button>`}
+    </div>`).join('') || '<div class="card tiny" style="text-align:center">Nobody yet.</div>'}`;
+  c.innerHTML = `
+    <h2 class="title">Team</h2>
+    <div class="lead">Three levels: students use the app, administrators verify grades and manage requests, and the board changes the app itself. Administrators and the board can add either.</div>
+    <div class="card">
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <input id="st_email" type="email" placeholder="School or personal email they sign up with" style="flex:2;min-width:220px;padding:10px 12px;border:1.5px solid #e5e2f0;border-radius:11px;font:inherit;font-size:14px" onkeydown="if(event.key==='Enter')addStaff()">
+        <select id="st_role" style="flex:1;min-width:140px;padding:10px 12px;border:1.5px solid #e5e2f0;border-radius:11px;font:inherit;font-size:14px;background:#fff"><option value="admin">Administrator</option><option value="board">Board</option></select>
+        <button class="btn sm" onclick="addStaff()">Add</button>
+      </div>
+      <div class="tiny" style="margin-top:8px">The role applies as soon as that email signs in, or right away if they already have an account.</div>
+    </div>
+    ${group('board', 'Board', 'Maintain the app: fix errors and build new features. Everything an administrator can do, too.')}
+    ${group('admin', 'Administrators', 'Verify tutors\' grades against school records and keep an eye on tutoring requests.')}
+    <div class="sectlabel">Signed-up staff</div>
+    <div class="card">${people.length ? people.map(p=>`<div class="row" style="margin-bottom:6px"><span style="font-weight:700;font-size:14px">${esc(p.real_name)}</span><span class="tiny">${esc(p.student_alias)}</span><span style="margin-left:auto">${roleBadge(p.role)}</span></div>`).join('') : '<div class="tiny">None of the people above have signed up yet.</div>'}</div>`;
+}
+function addStaff(){
+  const email = ($('st_email').value||'').trim().toLowerCase(), role = $('st_role').value;
+  if(!email || !email.includes('@')){ $('st_email').focus(); return; }
+  sbFetch('/rest/v1/sl_staff', { method:'POST', headers:{ Prefer:'return=minimal,resolution=merge-duplicates' }, body:JSON.stringify({ email, role, added_by:A.user.id, added_by_alias:A.profile.student_alias }) })
+    .then(function(){ toast(email+' is now '+(role==='board'?'on the board':'an administrator')); render(); })
+    .catch(function(e){ toast(e.message); });
+}
+function removeStaff(email){
+  sbFetch('/rest/v1/sl_staff?email=eq.'+encodeURIComponent(email), { method:'DELETE', headers:{ Prefer:'return=minimal' } })
+    .then(function(){ toast('Removed '+email); render(); }).catch(function(e){ toast(e.message); });
 }
 
 /* -------- SEARCH (overlay) -------- */
@@ -1394,17 +1543,20 @@ let dataLoaded = false, dataLoading = false;
 async function loadData(){
   if(!A.user) return;
   const me = A.user.id;
-  const [classes, tcourses, reqs, events, tutors, posts] = await Promise.all([
+  const [classes, tcourses, reqs, events, tutors, posts, myGrades, pendingGrades] = await Promise.all([
     sbFetch('/rest/v1/sl_student_classes?select=course&user_id=eq.'+me+'&order=created_at'),
     sbFetch('/rest/v1/sl_tutor_courses?select=course,grade,year,availability&user_id=eq.'+me+'&order=created_at'),
     sbFetch('/rest/v1/sl_requests?select=*&or=(student_id.eq.'+me+',tutor_id.eq.'+me+')&order=created_at.desc'),
     sbFetch('/rest/v1/sl_events?select=*&user_id=eq.'+me+'&order=date'),
     sbFetch('/rest/v1/sl_tutors?select=*'),
     sbFetch('/rest/v1/sl_posts?select=*&order=created_at.desc&limit=500'),
+    sbFetch('/rest/v1/sl_grades?select=course,grade,status&user_id=eq.'+me),
+    isStaff() ? sbFetch('/rest/v1/sl_grades?select=id&status=eq.pending') : Promise.resolve([]),
   ]);
   S.myClasses = (classes||[]).map(r=>r.course);
   S.tutorClasses = (tcourses||[]).map(r=>r.course);
-  S.me.tutorCourses = (tcourses||[]).map(r=>({ course:r.course, grade:r.grade||'', year:r.year||'' }));
+  S.me.tutorCourses = (tcourses||[]).map(r=>{ const g=(myGrades||[]).find(x=>x.course===r.course); return { course:r.course, grade:r.grade||'', year:r.year||'', verify: g ? g.status : 'none' }; });
+  S.pendingGrades = (pendingGrades||[]).length;
   S.me.avail = ((tcourses||[]).find(r=>r.availability)||{}).availability || '';
   S.me.isTutor = !!(A.profile && A.profile.tutor_alias) && S.tutorClasses.length > 0;
   S.myRequests = (reqs||[]).filter(r=>r.student_id===me);
@@ -1426,7 +1578,7 @@ function buildTutors(rows, me){
     if(r.user_id===me) return;
     const t = by[r.user_id] || (by[r.user_id] = { id:r.user_id, name:r.tutor_alias, grade:r.grade_level, bio:r.tutor_bio||'', format:r.tutor_format||'In person',
       avail:'', sessions:Number(r.sessions_done)||0, courses:[], color:TUTOR_COLORS[hashStr(r.user_id)%TUTOR_COLORS.length] });
-    t.courses.push({ course:r.course, grade:r.grade||'', year:r.year||'' });
+    t.courses.push({ course:r.course, grade:r.grade||'', year:r.year||'', verified:!!r.verified });
     if(r.availability && !t.avail) t.avail = r.availability;
   });
   return Object.values(by);
