@@ -1384,6 +1384,13 @@ function renderProfile(c){
       </div>
     `}
 
+    <div class="sectlabel">Classes I've taken ${S.editTaken ? '' : `<button class="btn ghost sm" style="margin-left:8px;padding:4px 10px" onclick="startEditTaken()">Edit</button>`}</div>
+    ${S.editTaken ? takenEditorHtml() : `<div class="card">
+      ${(S.taken||[]).length ? (S.taken||[]).slice().sort((a,b)=>a.course.localeCompare(b.course)).map(g=>`<div class="row" style="margin-bottom:6px"><span class="grade ${gradeClass(g.grade)}">${esc(g.grade)}</span>
+        <span style="font-weight:700;font-size:14px">${esc(g.course)}</span>${g.status==='verified' ? '<span class="verified">✓ Verified</span>' : g.status==='rejected' ? '<span class="unverified">Not verified</span>' : '<span class="unverified">Awaiting check</span>'}<span class="tiny" style="margin-left:auto">${esc(g.year||'')}</span></div>`).join('') : `<div class="tiny">None entered yet. These are the classes you can tutor.</div>`}
+      <div class="tiny" style="margin-top:8px">An administrator checks each grade against school records. Only classes here can be tutored.</div>
+    </div>`}
+
     <div class="sectlabel">Account</div>
     <div class="card tiny">🔒 Other members only ever see your aliases. Your name and email stay with the school administrator; coordination happens in-app.</div>
     <button class="btn gray" style="margin-top:14px" onclick="logOut()">Log out</button>
@@ -1465,6 +1472,16 @@ function renderSetup(c){
   // Only a change of step jumps to the top; tapping a chip keeps your place.
   if(st.step !== S.setupShownStep){ S.setupShownStep = st.step; window.scrollTo(0,0); } else window.scrollTo(0,y);
 }
+// Classes taken: one claim per class. Verified claims at the same grade stay;
+// anything else pending is replaced; removed classes drop their pending claim.
+async function syncTakenClaims(taken){
+  const me=A.user.id, have=(S.taken||[]);
+  const keep=new Set(have.filter(g=>g.status==='verified' && taken[g.course] && taken[g.course].grade===g.grade).map(g=>g.id));
+  const drop=have.filter(g=>!keep.has(g.id) && (g.status!=='verified' || !taken[g.course])).map(g=>g.id);
+  if(drop.length) await sbFetch('/rest/v1/sl_grades?id=in.('+drop.join(',')+')', { method:'DELETE', headers:{ Prefer:'return=minimal' } });
+  const submit=Object.entries(taken).filter(([course])=>!have.some(g=>keep.has(g.id) && g.course===course)).map(([course,v])=>({ user_id:me, course, grade:v.grade, year:v.year }));
+  if(submit.length) await sbFetch('/rest/v1/sl_grades', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify(submit) });
+}
 function setupToggleTaking(course){ const a=S.setup.taking, i=a.indexOf(course); if(i<0) a.push(course); else a.splice(i,1); render(); }
 function setupToggleTaken(course){ const t=S.setup.taken; if(t[course]){ delete t[course]; S.setup.tutorPick=S.setup.tutorPick.filter(x=>x!==course); } else t[course]={ grade:'A', year:defaultTaken() }; render(); }
 function setupTogglePick(course){ const a=S.setup.tutorPick, i=a.indexOf(course); if(i<0) a.push(course); else a.splice(i,1); render(); }
@@ -1483,14 +1500,7 @@ async function finishSetup(btn){
     // Classes now.
     await sbFetch('/rest/v1/sl_student_classes?user_id=eq.'+me, { method:'DELETE', headers:{ Prefer:'return=minimal' } });
     if(st.taking.length) await sbFetch('/rest/v1/sl_student_classes', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify(st.taking.map(course=>({ user_id:me, course }))) });
-    // Classes taken: one claim per class. Verified claims at the same grade stay;
-    // anything else pending is replaced; removed classes drop their pending claim.
-    const have=(S.taken||[]);
-    const keep=new Set(have.filter(g=>g.status==='verified' && st.taken[g.course] && st.taken[g.course].grade===g.grade).map(g=>g.id));
-    const drop=have.filter(g=>!keep.has(g.id) && g.status!=='verified').map(g=>g.id);
-    if(drop.length) await sbFetch('/rest/v1/sl_grades?id=in.('+drop.join(',')+')', { method:'DELETE', headers:{ Prefer:'return=minimal' } });
-    const submit=Object.entries(st.taken).filter(([course])=>!have.some(g=>keep.has(g.id) && g.course===course)).map(([course,v])=>({ user_id:me, course, grade:v.grade, year:v.year }));
-    if(submit.length) await sbFetch('/rest/v1/sl_grades', { method:'POST', headers:{ Prefer:'return=minimal,resolution=merge-duplicates' }, body:JSON.stringify(submit) });
+    await syncTakenClaims(st.taken);
     // Tutoring.
     if(wantsTutor){
       await ensureTutorAlias();
@@ -1593,9 +1603,45 @@ function parseAvail(str){
   if(/Every day/.test(str)) days.push.apply(days, AVAIL_DAYS);
   return { days:Array.from(new Set(days)), times };
 }
+// Editing classes taken from the Profile page.
+function startEditTaken(){
+  const t={}; (S.taken||[]).forEach(g=>{ t[g.course]={ grade:g.grade||'A', year:g.year||defaultTaken(), status:g.status }; });
+  S.editTaken=t; render();
+}
+function takenEditorHtml(){
+  const t=S.editTaken, picked=Object.keys(t).sort();
+  return `<div class="card">
+    <div class="tiny" style="margin-bottom:6px">Tap every class you have finished. Changing a verified grade sends it back for checking.</div>
+    ${DEPTS.map(dep=>`<div class="sectlabel" style="margin-top:10px">${dep.emoji} ${dep.name}</div><div class="chips">
+      ${dep.courses.map(course=>`<button class="chip ${t[course]?'dept':''}" style="${t[course]?'background:'+dep.color:''}" onclick="toggleEditTaken('${esc(course)}')">${t[course]?'✓ ':''}${esc(course)}</button>`).join('')}
+    </div>`).join('')}
+    ${picked.length ? `<div class="sectlabel" style="margin-top:14px">Grades</div><div style="padding:0 4px">
+      ${picked.map(course=>`<div class="takenrow"><span class="nm">${courseEmoji(course)} ${esc(course)}${t[course].status==='verified'?' <span class="verified">✓</span>':''}</span>
+        <select onchange="S.editTaken['${esc(course)}'].grade=this.value">${LETTERS.map(g=>`<option ${t[course].grade===g?'selected':''}>${g}</option>`).join('')}</select>
+        <select onchange="S.editTaken['${esc(course)}'].year=this.value">${TAKEN_GRADES.map(y=>`<option ${t[course].year===y?'selected':''}>${y}</option>`).join('')}</select>
+      </div>`).join('')}</div>` : ''}
+    <div class="row" style="gap:8px;margin-top:14px">
+      <button class="btn gray" style="flex:1" onclick="S.editTaken=null;render()">Cancel</button>
+      <button class="btn" style="flex:2" id="tk_save" onclick="saveTaken()">Save</button>
+    </div>
+  </div>`;
+}
+function toggleEditTaken(course){ const t=S.editTaken; if(t[course]) delete t[course]; else t[course]={ grade:'A', year:defaultTaken() }; render(); }
+async function saveTaken(){
+  const btn=$('tk_save'); if(btn){ btn.disabled=true; btn.textContent='Saving…'; }
+  try{
+    const taken={}; Object.entries(S.editTaken).forEach(([c,v])=>{ taken[c]={ grade:v.grade, year:v.year }; });
+    await syncTakenClaims(taken);
+    // Tutoring stays limited to classes taken: drop tutor courses no longer on the list.
+    const gone=S.tutorClasses.filter(c=>!taken[c]);
+    if(gone.length) await sbFetch('/rest/v1/sl_tutor_courses?user_id=eq.'+A.user.id+'&course=in.('+gone.map(c=>'"'+c.replace(/"/g,'')+'"').join(',')+')', { method:'DELETE', headers:{ Prefer:'return=minimal' } });
+    await loadData();
+    S.editTaken=null; toast('Saved'); render();
+  }catch(e){ toast(e.message); if(btn){ btn.disabled=false; btn.textContent='Save'; } }
+}
 function toggleTutorCourse(course){ const d=S.overlay.draft; const g=(S.taken||[]).find(x=>x.course===course); if(!g) return; if(d.courses[course])delete d.courses[course]; else d.courses[course]={grade:g.grade||'A',year:g.year||defaultTaken()}; render(); }
 // Classes taken are edited in setup, step 3.
-function editTaken(){ S.overlay=null; S.setup=null; setupState().step=3; S.setupForce=true; render(); }
+function editTaken(){ S.overlay=null; go('profile'); startEditTaken(); }
 function d_grade(course,v){ S.overlay.draft.courses[course].grade=v; }
 function d_year(course,v){ S.overlay.draft.courses[course].year=v; }
 async function finishTutor(){
