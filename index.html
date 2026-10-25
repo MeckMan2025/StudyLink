@@ -15,37 +15,97 @@
   html,body{margin:0;padding:0;height:100%}
   body{
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-    background:#d8def0; color:var(--ink);
-    display:flex; align-items:center; justify-content:center; min-height:100vh;
+    background:var(--bg); color:var(--ink); min-height:100vh;
   }
-  /* Phone shell */
-  .phone{
-    width:100%; max-width:430px; height:100vh; max-height:920px; background:var(--bg);
-    display:flex; flex-direction:column; position:relative; overflow:hidden;
-    box-shadow:0 30px 80px rgba(60,50,110,.25);
+  /* App shell — a sidebar like ETS, content on the right */
+  .app{min-height:100vh}
+  .side{
+    position:fixed; top:0; left:0; bottom:0; width:256px; z-index:40;
+    background:rgba(255,255,255,.94); backdrop-filter:blur(8px);
+    box-shadow:0 0 24px rgba(60,50,110,.10); display:flex; flex-direction:column;
+    transform:translateX(-100%); transition:transform .25s ease;
   }
-  @media (min-width:460px){ .phone{ border-radius:34px; height:900px; } }
+  .app.open .side{transform:none}
+  .scrim{position:fixed; inset:0; background:rgba(0,0,0,.3); z-index:30; display:none}
+  .app.open .scrim{display:block}
+  .side .shead{display:flex; align-items:center; gap:9px; padding:16px; border-bottom:1px solid var(--line)}
+  .side .shead .logo{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--blue),var(--purple));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:16px}
+  .side .shead b{font-size:17px; font-weight:800}
+  .side .shead{position:relative}
+  .side .shead .dots{margin-left:auto; border:none; background:none; font-size:20px; font-weight:900; color:var(--muted); cursor:pointer; width:32px; height:32px; border-radius:8px}
+  .side .shead .dots:hover{background:#eef0f6}
+  .menuscrim{position:fixed; inset:0; z-index:44}
+  .menu-pop{position:absolute; top:52px; right:10px; z-index:45; width:190px; background:#fff; border:1px solid var(--line); border-radius:14px; padding:6px; box-shadow:0 12px 32px rgba(60,50,110,.18)}
+  .menu-pop hr{margin:4px}
+  .side .shead .x{ border:none; background:none; font-size:20px; color:var(--muted); cursor:pointer; padding:2px 6px; border-radius:6px}
+  .modes{display:flex; gap:4px; margin:10px 10px 2px; background:#eef0f6; padding:4px; border-radius:11px}
+  .modes button{flex:1; border:0; background:transparent; padding:8px 0; border-radius:8px; font:inherit; font-size:13.5px; font-weight:700; color:#6b7088; cursor:pointer}
+  .modes button.on{background:#fff; color:var(--ink); box-shadow:0 1px 3px rgba(20,25,40,.14)}
+  .side nav{flex:1; overflow-y:auto; padding:8px}
+  .nitem{display:flex; align-items:center; gap:10px; width:100%; border:none; background:none; cursor:pointer;
+    padding:9px 12px; border-radius:10px; font:inherit; font-size:14.5px; font-weight:600; color:#5b6077; text-align:left}
+  .nitem:hover{background:#e3ecfd}
+  .nitem.on{background:#fcdbe8; color:var(--ink)}
+  .nitem .ic{width:20px; text-align:center; font-size:16px}
+  .nitem .chev{margin-left:auto; color:var(--muted); font-size:12px; transition:transform .2s}
+  .nitem .chev.down{transform:rotate(90deg)}
+  .nitem .count{margin-left:auto; background:var(--pink-d); color:#fff; font-size:10.5px; font-weight:800; border-radius:9px; padding:1px 7px}
+  .sub{padding:2px 0 4px 18px}
+  .sub .nitem{font-size:13.5px; padding:7px 10px}
+  .sub .dot{width:9px; height:9px; border-radius:50%; flex:0 0 auto}
+  .sub .add{color:var(--blue-d)}
+  .side hr{border:none; border-top:1px solid var(--line); margin:8px 4px}
+  .side .sfoot{border-top:1px solid var(--line); padding:12px}
+  .side .who{display:flex; align-items:center; gap:10px; margin-bottom:2px}
+  .side .who .avatar{width:34px;height:34px;font-size:13px}
 
+  .main{min-height:100vh; display:flex; flex-direction:column}
   .head{
-    padding:16px 18px 12px; background:linear-gradient(135deg,#eaf0fe,#f6edf8);
-    border-bottom:1px solid var(--line); flex:0 0 auto;
+    position:sticky; top:0; z-index:20; display:flex; align-items:center; gap:10px;
+    padding:12px 18px; background:rgba(238,242,251,.9); backdrop-filter:blur(8px); border-bottom:1px solid var(--line);
   }
-  .head .brand{display:flex; align-items:center; gap:8px}
-  .head .brand .logo{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--blue),var(--purple));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:16px}
-  .head h1{font-size:18px;margin:0;font-weight:800;letter-spacing:.2px}
-  .head .sub{font-size:12px;color:var(--muted);font-weight:600}
-  .head .right{margin-left:auto;font-size:12px;color:var(--muted);font-weight:700;text-align:right}
+  .head .menu{border:none; background:#fff; border-radius:10px; width:38px; height:38px; font-size:18px; cursor:pointer; box-shadow:0 2px 8px rgba(60,50,110,.12)}
+  .head h1{font-size:17px; margin:0; font-weight:800}
+  .head .right{margin-left:auto; font-size:12px; color:var(--muted); font-weight:700; text-align:right}
+  .scroll{flex:1; width:100%; max-width:980px; margin:0 auto; padding:18px 18px 60px}
 
-  .scroll{flex:1 1 auto; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:16px 16px 90px}
-
-  /* Bottom nav */
-  .nav{
-    position:absolute; bottom:0; left:0; right:0; background:rgba(255,255,255,.92); backdrop-filter:blur(10px);
-    border-top:1px solid var(--line); display:flex; padding:8px 6px calc(8px + env(safe-area-inset-bottom));
+  @media (min-width:900px){
+    .side{transform:none}
+    .side .shead .x, .head .menu, .scrim{display:none !important}
+    .main{margin-left:256px}
   }
-  .nav button{flex:1; border:none; background:transparent; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:3px; padding:4px; color:var(--muted); font-size:10px; font-weight:700}
-  .nav button .ic{font-size:20px; line-height:1}
-  .nav button.active{color:var(--blue-d)}
+
+  /* Grids */
+  .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:12px}
+  .grid .card + .card{margin-top:0}
+  .classcard{cursor:pointer; position:relative; border-top:5px solid var(--c)}
+  .classcard .rm{position:absolute; top:8px; right:8px; border:none; background:#f3f1f9; color:var(--muted); width:26px; height:26px; border-radius:50%; cursor:pointer; font-size:14px}
+  .addcard{display:flex; align-items:center; justify-content:center; gap:8px; min-height:96px; cursor:pointer; border:2px dashed #d6dcf0; background:transparent; box-shadow:none; color:var(--blue-d); font-weight:800}
+  .cols{display:grid; grid-template-columns:1fr; gap:16px}
+  @media (min-width:760px){ .cols{grid-template-columns:3fr 2fr} }
+
+  /* Calendar */
+  .calhead{display:flex; align-items:center; gap:8px; margin-bottom:10px}
+  .calhead h3{margin:0; font-size:18px; font-weight:800; flex:1}
+  .calhead button{border:1px solid var(--line); background:#fff; border-radius:10px; padding:7px 12px; font-weight:800; cursor:pointer; color:var(--ink)}
+  .cal{display:grid; grid-template-columns:repeat(7,1fr); gap:4px}
+  .cal .dow{font-size:11px; font-weight:800; color:var(--muted); text-align:center; padding:4px 0; text-transform:uppercase}
+  .cal .day{background:#fff; border:1px solid var(--line); border-radius:10px; min-height:84px; padding:5px; cursor:pointer; overflow:hidden; text-align:left; font:inherit; color:var(--ink); display:flex; flex-direction:column; justify-content:flex-start; min-width:0}
+  .cal .day.out{opacity:.4}
+  .cal .day.today .n{background:var(--blue-d); color:#fff}
+  .cal .day.sel{border-color:var(--purple); box-shadow:0 0 0 2px #e4dcfa}
+  .cal .day .n{align-self:flex-start; display:inline-flex; width:24px; height:24px; align-items:center; justify-content:center; border-radius:50%; font-size:12.5px; font-weight:800}
+  .cal .ev{font-size:10.5px; font-weight:700; padding:2px 5px; border-radius:6px; margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; background:#f2f0fb; border-left:3px solid var(--c)}
+  .cal .more{font-size:10px; color:var(--muted); font-weight:700; margin-top:2px}
+  @media (max-width:600px){
+    .cal .day{min-height:52px}
+    .cal .ev{font-size:0; padding:0; height:6px; border-left:none; background:var(--c)}
+    .cal .more{display:none}
+  }
+  .evrow{display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--line)}
+  .evrow:last-child{border-bottom:none}
+  .evrow .bar{width:4px; align-self:stretch; border-radius:3px; background:var(--c)}
+  .evrow .del{margin-left:auto; border:none; background:none; color:var(--muted); cursor:pointer; font-size:16px}
 
   /* Bits */
   h2.title{font-size:22px; font-weight:800; margin:4px 2px 2px}
@@ -101,7 +161,7 @@
   .empty{text-align:center; color:var(--muted); padding:34px 16px; font-size:14px}
   .empty .em{font-size:38px; margin-bottom:8px}
 
-  .toast{position:absolute; left:50%; bottom:78px; transform:translateX(-50%) translateY(20px); background:#2f3350; color:#fff; padding:11px 16px; border-radius:12px; font-size:13px; font-weight:700; opacity:0; transition:.3s; pointer-events:none; z-index:50; max-width:88%; text-align:center; box-shadow:0 8px 24px rgba(0,0,0,.2)}
+  .toast{position:fixed; left:50%; bottom:78px; transform:translateX(-50%) translateY(20px); background:#2f3350; color:#fff; padding:11px 16px; border-radius:12px; font-size:13px; font-weight:700; opacity:0; transition:.3s; pointer-events:none; z-index:50; max-width:88%; text-align:center; box-shadow:0 8px 24px rgba(0,0,0,.2)}
   .toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
 
   .statgrid{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px}
@@ -121,14 +181,26 @@
   <script>(function(){try{var k='pv-studylink-'+new Date().toISOString().slice(0,10);if(localStorage.getItem(k))return;localStorage.setItem(k,'1');fetch('https://ejmiqtizvuuilsztbafk.supabase.co/rest/v1/pageviews',{method:'POST',headers:{apikey:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVqbWlxdGl6dnV1aWxzenRiYWZrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUzNjkzMjAsImV4cCI6MjA3MDk0NTMyMH0.mHjzI8hth6JMFW6WeDg2Dy0nFOprC0Tj4p5Cjs7Aq0E',Authorization:'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVqbWlxdGl6dnV1aWxzenRiYWZrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUzNjkzMjAsImV4cCI6MjA3MDk0NTMyMH0.mHjzI8hth6JMFW6WeDg2Dy0nFOprC0Tj4p5Cjs7Aq0E','Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({site:'studylink'})}).catch(function(){});}catch(e){}})();</script>
 </head>
 <body>
-<div class="phone">
-  <div class="head" id="head"></div>
-  <div class="scroll" id="scroll"></div>
-  <div class="nav" id="nav"></div>
+<div class="app" id="app">
+  <aside class="side" id="nav"></aside>
+  <div class="scrim" onclick="toggleSide(false)"></div>
+  <main class="main">
+    <div class="head" id="head"></div>
+    <div class="scroll" id="scroll"></div>
+  </main>
   <div class="toast" id="toast"></div>
 </div>
 
 <script>
+/* ============================= DATES ============================= */
+// Calendar dates are kept as 'YYYY-MM-DD' in local time, so a day never
+// slides across midnight the way an ISO timestamp would.
+const ymd = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const parseYmd = k => { const [y,m,d]=k.split('-').map(Number); return new Date(y,m-1,d); };
+const addDays = (d,n) => { const x=new Date(d); x.setDate(x.getDate()+n); return x; };
+const fmtDate = k => k ? parseYmd(k).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'}) : 'TBD';
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
 /* ============================= DATA ============================= */
 const DEPTS = [
   { name:'Math', emoji:'📐', color:'#7aa7f0', courses:['Algebra I','Geometry','Algebra II','Precalculus','AP Calculus'] },
@@ -183,9 +255,9 @@ const SEED_POSTS = {
   ],
 };
 const SEED_INCOMING = [
-  { id:'r_seed1', from:'Jordan L.', course:'AP Human Geography', topic:'Migration push/pull factors', day:'Thursday', time:'3:30 PM', format:'In person', status:'incoming' },
-  { id:'r_seed2', from:'Casey W.', course:'Algebra II', topic:'Factoring & quadratics', day:'Tuesday', time:'Lunch', format:'In person', status:'incoming' },
-];
+  { id:'r_seed1', from:'Jordan L.', course:'AP Human Geography', topic:'Migration push/pull factors', date:ymd(addDays(new Date(),2)), time:'3:30 PM', format:'In person', status:'incoming' },
+  { id:'r_seed2', from:'Casey W.', course:'Algebra II', topic:'Factoring & quadratics', date:ymd(addDays(new Date(),4)), time:'Lunch', format:'In person', status:'incoming' },
+].map(r => ({ ...r, day:fmtDate(r.date) }));
 
 /* ============================= STATE ============================= */
 const LS='studylink-v1';
@@ -199,6 +271,12 @@ let S = {
   sessions:[],              // confirmed upcoming/completed
   hours:0, helped:0,
   posts:{},                 // course -> extra posts I added
+  mode:'tutee',             // which side of the sidebar is showing: 'tutee' or 'tutor'
+  myClasses:[],             // classes I'm taking (Tutee side); they fill the sidebar
+  tutorClasses:[],          // classes I can tutor (Tutor side)
+  events:[],                // my calendar: tests, homework, study time
+  classesOpen:true,         // Classes group expanded in the sidebar
+  cal:null,                 // { y, m, sel } — the month on screen
 };
 function load(){ try{ const s=JSON.parse(localStorage.getItem(LS)); if(s) S={...S,...s}; }catch(e){} }
 function save(){ localStorage.setItem(LS, JSON.stringify(S)); }
@@ -209,7 +287,21 @@ const $ = id => document.getElementById(id);
 const esc = s => (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const initials = n => (n||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
 function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),2600); }
-function go(tab){ S.tab=tab; S.overlay=null; render(); }
+function go(tab){ S.tab=tab; S.overlay=null; S.confirmReset=false; toggleSide(false); render(); window.scrollTo(0,0); }
+function openClass(course){ S.tab='classes'; S.overlay={type:'course',course}; toggleSide(false); render(); window.scrollTo(0,0); }
+// First tap opens Classes; tapping it again while there folds the list.
+function navClasses(){ if(S.tab==='classes' && !S.overlay) S.classesOpen=!S.classesOpen; else S.classesOpen=true; go('classes'); }
+// Tutor and Tutee share the same tabs; each keeps its own list of classes.
+const classKey = () => S.mode==='tutor' ? 'tutorClasses' : 'myClasses';
+function setMode(m){ S.mode=m; S.overlay=null; render(); }
+function toggleMenu(v){ menuOpen = v===undefined ? !menuOpen : v; renderNav(); }
+function menuGo(tab){ menuOpen=false; go(tab); }
+function logOut(){
+  menuOpen=false;
+  if(A.demo){ renderNav(); toast('Sign-in is turned off for now, so there is nothing to log out of.'); return; }
+  signOut();
+}
+function toggleSide(v){ $('app').classList.toggle('open', v); }
 function open(ov){ S.overlay=ov; render(); }
 function close(){ S.overlay=null; render(); }
 function postsFor(course){ return [ ...(S.posts[course]||[]), ...(SEED_POSTS[course]||[]) ]; }
@@ -218,6 +310,8 @@ function postsFor(course){ return [ ...(S.posts[course]||[]), ...(SEED_POSTS[cou
 function render(){
   // Nothing in the app renders until you're signed in. Names, grades and
   // requests all belong to somebody, so there's no sensible signed-out view.
+  // Sign-in is parked for now (SKIP_LOGIN) — everyone lands on a demo profile.
+  if(!A.profile && SKIP_LOGIN) useDemoProfile();
   if(!A.profile){
     document.getElementById('head').innerHTML = '';
     document.getElementById('nav').innerHTML  = '';
@@ -227,33 +321,64 @@ function render(){
   renderHead(); renderBody(); renderNav(); save();
 }
 
+let menuOpen = false;
+const TAB_TITLES = { settings:'Settings', help:'Help', home:'Home Screen', classes:'Classes', calendar:'Calendar', tutoring:'Tutoring', community:'Community', profile:'Profile' };
 function renderHead(){
-  const pendingIncoming = S.incoming.filter(r=>r.status==='incoming').length + (S.me.isTutor ? SEED_INCOMING.length : 0);
+  const title = S.overlay?.type==='course' ? S.overlay.course : TAB_TITLES[S.tab] || 'StudyLink';
   $('head').innerHTML = `
-    <div class="brand">
-      <div class="logo">S</div>
-      <div>
-        <h1>StudyLink</h1>
-        <div class="sub">Peer tutoring, arranged anonymously</div>
-      </div>
-      <div class="right">${esc(currentAlias())}<br>Grade ${S.me.grade}</div>
-    </div>
-    <div class="roleswitch">
-      <button class="${A.role==='student'?'on':''}" onclick="setRole('student')">Seeking help</button>
-      <button class="${A.role==='tutor'?'on':''}" onclick="setRole('tutor')">Tutoring</button>
-    </div>`;
+    <button class="menu" onclick="toggleSide(true)" aria-label="Open navigation">☰</button>
+    <h1>${esc(title)}</h1>
+    <div class="right">${esc(currentAlias())}<br>Grade ${S.me.grade}</div>`;
 }
 
+function incomingCount(){
+  return (S.me.isTutor ? SEED_INCOMING.filter(s=>!S.incoming.find(i=>i.id===s.id)).length : 0) + S.incoming.filter(r=>r.status==='incoming').length;
+}
+
+// The sidebar: Home Screen, your Classes (a group, like boards in ETS), Calendar.
 function renderNav(){
-  const incCount = (S.me.isTutor ? SEED_INCOMING.filter(s=>!S.incoming.find(i=>i.id===s.id)).length : 0) + S.incoming.filter(r=>r.status==='incoming').length;
-  const tabs=[
-    ['home','🏠','Home'],['classes','📚','Classes'],['tutoring','🤝','Tutoring',incCount],['community','💬','Community'],['profile','👤','Profile']
-  ];
-  $('nav').innerHTML = tabs.map(([id,ic,label,badge])=>`
-    <button class="${S.tab===id&&!S.overlay?'active':''}" onclick="go('${id}')" style="position:relative">
-      ${badge?`<span class="badge">${badge}</span>`:''}
-      <span class="ic">${ic}</span>${label}
-    </button>`).join('');
+  const ov = S.overlay;
+  const item = (id, ic, label, extra='') =>
+    `<button class="nitem ${S.tab===id && !ov ? 'on' : ''}" onclick="go('${id}')"><span class="ic">${ic}</span>${label}${extra}</button>`;
+  const inc = incomingCount();
+  $('nav').innerHTML = `
+    <div class="shead">
+      <div class="logo">S</div><b>StudyLink</b>
+      <button class="dots" onclick="toggleMenu()" aria-label="More options">⋮</button>
+      <button class="x" onclick="toggleSide(false)" aria-label="Close navigation">✕</button>
+      ${menuOpen ? `<div class="menuscrim" onclick="toggleMenu(false)"></div>
+      <div class="menu-pop">
+        <button class="nitem" onclick="menuGo('profile')"><span class="ic">👤</span>Account</button>
+        <button class="nitem" onclick="menuGo('settings')"><span class="ic">⚙️</span>Settings</button>
+        <button class="nitem" onclick="menuGo('help')"><span class="ic">❓</span>Help</button>
+        <hr>
+        <button class="nitem" style="color:#d9534f" onclick="logOut()"><span class="ic">🚪</span>Log out</button>
+      </div>` : ''}
+    </div>
+    <div class="modes">
+      <button class="${S.mode==='tutor'?'on':''}" onclick="setMode('tutor')">🎓 Tutor</button>
+      <button class="${S.mode==='tutee'?'on':''}" onclick="setMode('tutee')">📖 Tutee</button>
+    </div>
+    <nav>
+      ${item('home','🏠','Home Screen')}
+      <hr>
+      <button class="nitem ${S.tab==='classes' && (!ov || ov.type==='addClasses') ? 'on' : ''}" onclick="navClasses()">
+        <span class="ic">📚</span>Classes<span class="chev ${S.classesOpen?'down':''}">▶</span>
+      </button>
+      ${S.classesOpen ? `<div class="sub">
+        ${S[classKey()].map(course=>`
+          <button class="nitem ${ov?.type==='course' && ov.course===course ? 'on' : ''}" onclick="openClass('${esc(course)}')">
+            <span class="dot" style="background:${courseColor(course)}"></span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(course)}</span>
+          </button>`).join('')}
+        <button class="nitem add" onclick="S.tab='classes'; open({type:'addClasses'}); toggleSide(false)"><span class="ic">＋</span>Add class</button>
+      </div>` : ''}
+      <hr>
+      ${item('calendar','📅','Calendar')}
+      <hr>
+      ${item('tutoring','🤝','Tutoring', inc ? `<span class="count">${inc}</span>` : '')}
+      ${item('community','💬','Community')}
+    </nav>
+`;
 }
 
 function renderBody(){
@@ -264,40 +389,108 @@ function renderBody(){
   if(S.tab==='tutoring') return renderTutoring(c);
   if(S.tab==='community') return renderCommunity(c);
   if(S.tab==='profile') return renderProfile(c);
+  if(S.tab==='calendar') return renderCalendar(c);
+  if(S.tab==='settings') return renderSettings(c);
+  if(S.tab==='help') return renderHelp(c);
+}
+
+/* -------- SETTINGS / HELP (from the ⋮ menu) -------- */
+function renderSettings(c){
+  c.innerHTML = `
+    <h2 class="title">Settings</h2>
+    <div class="lead">These stay on this device.</div>
+    <div class="card">
+      <div class="field"><label>Grade</label>
+        <select onchange="S.me.grade=+this.value; render()">${[9,10,11,12].map(g=>`<option ${S.me.grade===g?'selected':''}>${g}</option>`).join('')}</select></div>
+      <div class="field" style="margin-bottom:0"><label>Open the sidebar on</label>
+        <div class="seg">
+          <button class="${S.mode==='tutor'?'on':''}" onclick="setMode('tutor')">🎓 Tutor</button>
+          <button class="${S.mode==='tutee'?'on':''}" onclick="setMode('tutee')">📖 Tutee</button>
+        </div></div>
+    </div>
+    <div class="sectlabel">Data</div>
+    <div class="card">
+      <div class="tiny" style="margin-bottom:10px">Clears your classes, calendar and requests on this device.</div>
+      ${S.confirmReset
+        ? `<div class="row" style="gap:8px"><button class="btn sm gray" style="flex:1" onclick="S.confirmReset=false; render()">Cancel</button>
+             <button class="btn sm pink" style="flex:1" onclick="localStorage.removeItem(LS); location.reload()">Yes, clear it</button></div>`
+        : `<button class="btn gray" onclick="S.confirmReset=true; render()">Reset my data</button>`}
+    </div>`;
+}
+function renderHelp(c){
+  const q = (h, t) => `<div class="card"><div style="font-weight:800;margin-bottom:4px">${h}</div><div class="tiny" style="font-size:13px;line-height:1.5">${t}</div></div>`;
+  c.innerHTML = `
+    <h2 class="title">Help</h2>
+    <div class="lead">How StudyLink works.</div>
+    ${q('Tutor or Tutee?', 'Use the switch at the top of the sidebar. Tutee is for classes you want help in; Tutor is for classes you can teach. Each side keeps its own list of classes.')}
+    ${q('Adding classes', 'Press ＋ Add class under Classes in the sidebar and tap every class that applies.')}
+    ${q('Getting help', 'Open a class to see its tutors, then send a request. Once it is accepted, it shows up on your calendar.')}
+    ${q('Privacy', 'Other students only see your alias. Coordination happens inside StudyLink — no phone numbers or personal emails are shared.')}`;
 }
 
 /* -------- HOME -------- */
 function renderHome(c){
-  const upcoming = S.sessions.filter(s=>s.status!=='done');
-  const popular = ['AP Human Geography','Algebra II','Chemistry','AP Biology'];
+  const today = ymd(new Date());
+  const week = ymd(addDays(new Date(),7));
+  const soon = calItems().filter(e => e.date>=today && e.date<=week).sort(byWhen).slice(0,6);
+  const pending = S.myRequests.filter(r=>r.status==='pending').length;
+  const inc = incomingCount();
+  const hour = new Date().getHours();
+  const hi = hour<12 ? 'Good morning' : hour<17 ? 'Good afternoon' : 'Good evening';
   c.innerHTML = `
-    <h2 class="title">What do you need help with?</h2>
-    <div class="lead">Find a classmate who recently aced it.</div>
-    <div class="search" onclick="open({type:'search'})">
-      <span class="mag">🔍</span><input placeholder="Search classes…" readonly>
+    <h2 class="title">${hi}, ${esc(currentAlias())}</h2>
+    <div class="lead">${new Date().toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'})}</div>
+
+    <div class="statgrid">
+      <div class="stat" style="cursor:pointer" onclick="go('classes')"><div class="n" style="color:var(--blue-d)">${S[classKey()].length}</div><div class="l">${S.mode==='tutor' ? 'classes I tutor' : 'my classes'}</div></div>
+      <div class="stat" style="cursor:pointer" onclick="go('calendar')"><div class="n" style="color:var(--purple)">${soon.length}</div><div class="l">this week</div></div>
+      <div class="stat" style="cursor:pointer" onclick="go('tutoring')"><div class="n" style="color:var(--pink-d)">${pending + inc}</div><div class="l">${inc ? 'requests to you' : 'pending requests'}</div></div>
     </div>
 
-    <div class="sectlabel">Upcoming tutoring</div>
-    ${upcoming.length ? upcoming.map(sessionCard).join('') : `<div class="card tiny" style="text-align:center">No sessions yet — find a tutor to get started.</div>`}
-
-    <div class="sectlabel">Popular classes</div>
-    <div class="chips">
-      ${popular.map(c=>`<button class="chip" onclick="open({type:'course',course:'${esc(c)}'})">${courseEmoji(c)} ${esc(c)}</button>`).join('')}
+    <div class="cols" style="margin-top:6px">
+      <div>
+        <div class="sectlabel">Coming up this week</div>
+        <div class="card">
+          ${soon.length ? soon.map(eventRow).join('') : `<div class="tiny" style="text-align:center;padding:10px">Nothing on your calendar this week.</div>`}
+          <button class="btn ghost sm" style="width:100%;margin-top:10px" onclick="go('calendar')">Open calendar</button>
+        </div>
+      </div>
+      <div>
+        <div class="sectlabel">Find help</div>
+        <div class="search" onclick="open({type:'search'})" style="cursor:pointer">
+          <span class="mag">🔍</span><input placeholder="Search any class…" readonly style="cursor:pointer">
+        </div>
+        ${!S.me.isTutor && S.mode!=='tutor' ? `<div class="card row" onclick="open({type:'becomeTutor'})" style="cursor:pointer;margin-top:10px">
+          <div class="avatar" style="background:#63c39a">✋</div>
+          <div><div style="font-weight:800">Become a tutor</div><div class="tiny">Help classmates · earn service hours</div></div>
+          <div style="margin-left:auto;color:var(--muted)">›</div>
+        </div>` : ''}
+      </div>
     </div>
 
-    <div class="sectlabel">Jump in</div>
-    <div class="card row" onclick="go('classes')" style="cursor:pointer">
-      <div class="avatar" style="background:${'#7aa7f0'}">📚</div>
-      <div><div style="font-weight:800">Browse all classes</div><div class="tiny">${ALL_COURSES.length} courses · ${TUTORS.length} tutors available</div></div>
-      <div style="margin-left:auto;color:var(--muted)">›</div>
-    </div>
-    ${!S.me.isTutor ? `<div class="card row" onclick="open({type:'becomeTutor'})" style="cursor:pointer;margin-top:10px">
-      <div class="avatar" style="background:${'#63c39a'}">✋</div>
-      <div><div style="font-weight:800">Become a tutor</div><div class="tiny">Help classmates · earn service hours</div></div>
-      <div style="margin-left:auto;color:var(--muted)">›</div>
-    </div>`:''}
+    <div class="sectlabel">${S.mode==='tutor' ? 'Classes I tutor' : 'My classes'}</div>
+    ${classGrid(false)}
   `;
 }
+
+// Cards for my classes, plus one to add more. removable shows the × on each.
+function classGrid(removable){
+  return `<div class="grid">
+    ${S[classKey()].map(course=>{
+      const n=tutorsFor(course).length;
+      const next=calItems().filter(e=>e.course===course && e.date>=ymd(new Date())).sort(byWhen)[0];
+      return `<div class="card classcard" style="--c:${courseColor(course)}" onclick="openClass('${esc(course)}')">
+        ${removable ? `<button class="rm" title="Remove class" onclick="event.stopPropagation(); removeClass('${esc(course)}')">✕</button>` : ''}
+        <div style="font-size:22px">${courseEmoji(course)}</div>
+        <div style="font-weight:800;margin-top:4px">${esc(course)}</div>
+        <div class="tiny">${n} tutor${n===1?'':'s'} · ${postsFor(course).length} post${postsFor(course).length===1?'':'s'}</div>
+        <div class="tiny" style="margin-top:6px;color:${next?'var(--ink)':'var(--muted)'}">${next ? '📅 '+esc(fmtDate(next.date))+' · '+esc(next.title) : 'Nothing scheduled'}</div>
+      </div>`;
+    }).join('')}
+    <button class="card addcard" onclick="S.tab='classes'; open({type:'addClasses'})">＋ Add class</button>
+  </div>`;
+}
+
 function sessionCard(s){
   return `<div class="card row">
     <div class="avatar" style="background:${courseColor(s.course)}">${courseEmoji(s.course)}</div>
@@ -312,21 +505,141 @@ function sessionCard(s){
 /* -------- CLASSES -------- */
 function renderClasses(c){
   c.innerHTML = `
-    <h2 class="title">Classes</h2>
-    <div class="lead">Tap a class to find tutors and join the community.</div>
-    ${DEPTS.map(d=>`
-      <div class="sectlabel">${d.emoji} ${d.name}</div>
-      ${d.courses.map(course=>{
-        const n=tutorsFor(course).length;
-        return `<div class="card row" style="cursor:pointer" onclick="open({type:'course',course:'${esc(course)}'})">
-          <div class="avatar" style="background:${d.color}">${d.emoji}</div>
-          <div><div style="font-weight:800">${esc(course)}</div>
-            <div class="tiny">${n} tutor${n===1?'':'s'} · ${postsFor(course).length} community post${postsFor(course).length===1?'':'s'}</div></div>
-          <div style="margin-left:auto;color:var(--muted)">›</div>
-        </div>`;
-      }).join('')}
-    `).join('')}
+    <h2 class="title">${S.mode==='tutor' ? 'Classes I tutor' : 'My classes'}</h2>
+    <div class="lead">${S[classKey()].length ? 'Open a class for its tutors and community.' : (S.mode==='tutor' ? 'Add the classes you can tutor to get started.' : 'Add the classes you are taking to get started.')}</div>
+    ${classGrid(true)}
   `;
+}
+function renderAddClasses(c){
+  c.innerHTML = `
+    <button class="back" onclick="close()">‹ Back</button>
+    <h2 class="title">Add classes</h2>
+    <div class="lead">${S.mode==='tutor' ? 'Tap the classes you can tutor.' : 'Tap the classes you are taking.'} They show up in your sidebar.</div>
+    <div class="search"><span class="mag">🔍</span><input id="acq" placeholder="Search classes…" oninput="filterAdd(this.value)"></div>
+    <div id="addlist">
+    ${DEPTS.map(d=>`<div class="adddept"><div class="sectlabel">${d.emoji} ${d.name}</div><div class="chips">
+      ${d.courses.map(course=>{
+        const on=S[classKey()].includes(course);
+        return `<button class="chip ${on?'dept':''}" data-name="${esc(course.toLowerCase())}" style="${on?'background:'+d.color:''}" onclick="toggleClass('${esc(course)}')">${on?'✓ ':''}${esc(course)}</button>`;
+      }).join('')}
+    </div></div>`).join('')}
+    </div>
+    <div style="margin-top:20px"><button class="btn" onclick="close()">Done · ${S[classKey()].length} class${S[classKey()].length===1?'':'es'}</button></div>
+  `;
+}
+function filterAdd(q){
+  q=q.toLowerCase();
+  document.querySelectorAll('#addlist .adddept').forEach(dep=>{
+    let any=false;
+    dep.querySelectorAll('.chip').forEach(ch=>{ const hit=ch.dataset.name.includes(q); ch.hidden=!hit; any=any||hit; });
+    dep.hidden=!any;
+  });
+}
+function toggleClass(course){
+  const q=$('acq')?.value||'';
+  if(S[classKey()].includes(course)) S[classKey()]=S[classKey()].filter(x=>x!==course);
+  else S[classKey()].push(course);
+  render();
+  if(q){ $('acq').value=q; filterAdd(q); }
+}
+function removeClass(course){
+  S[classKey()]=S[classKey()].filter(x=>x!==course);
+  render(); toast('Removed '+course);
+}
+
+/* -------- CALENDAR -------- */
+const EVENT_KINDS = { test:'📝 Test', homework:'📚 Homework', study:'📖 Study', other:'📌 Other', session:'🤝 Tutoring', pending:'⏳ Requested' };
+// Everything with a date: my own events, booked sessions, and requests still waiting.
+function calItems(){
+  return [
+    ...S.events,
+    ...S.sessions.filter(x=>x.date && x.status!=='done').map(x=>({ id:x.id, date:x.date, time:x.time, course:x.course, kind:'session', title:(x.role==='tutor'?'Tutoring ':'Session with ')+x.with, fixed:true })),
+    ...S.myRequests.filter(r=>r.date && r.status==='pending').map(r=>({ id:r.id, date:r.date, time:r.time, course:r.course, kind:'pending', title:'Waiting on '+r.tutor, fixed:true })),
+  ];
+}
+const byWhen = (a,b) => a.date.localeCompare(b.date) || (a.time||'').localeCompare(b.time||'');
+function eventRow(e){
+  return `<div class="evrow" style="--c:${courseColor(e.course)}">
+    <div class="bar"></div>
+    <div style="min-width:0">
+      <div style="font-weight:800;font-size:14px">${esc(e.title)}</div>
+      <div class="tiny">${esc(fmtDate(e.date))}${e.time?' · '+esc(e.time):''} · ${EVENT_KINDS[e.kind]||''}${e.course?' · '+esc(e.course):''}</div>
+    </div>
+    ${e.fixed ? '' : `<button class="del" title="Delete" onclick="deleteEvent('${e.id}')">✕</button>`}
+  </div>`;
+}
+function renderCalendar(c){
+  const now=new Date();
+  S.cal = S.cal || { y:now.getFullYear(), m:now.getMonth(), sel:ymd(now) };
+  const { y, m, sel } = S.cal;
+  const first = new Date(y, m, 1);
+  const start = addDays(first, -first.getDay());
+  const items = calItems();
+  const today = ymd(now);
+  let cells='';
+  for(let i=0;i<42;i++){
+    const d=addDays(start,i), k=ymd(d);
+    if(i>=35 && d.getMonth()!==m) break;   // drop a sixth row that is all next month
+    const evs=items.filter(e=>e.date===k).sort(byWhen);
+    cells += `<button class="day ${d.getMonth()!==m?'out':''} ${k===today?'today':''} ${k===sel?'sel':''}" onclick="S.cal.sel='${k}'; render()">
+      <span class="n">${d.getDate()}</span>
+      ${evs.slice(0,2).map(e=>`<div class="ev" style="--c:${courseColor(e.course)}">${esc(e.title)}</div>`).join('')}
+      ${evs.length>2?`<div class="more">+${evs.length-2} more</div>`:''}
+    </button>`;
+  }
+  const dayEvs = items.filter(e=>e.date===sel).sort(byWhen);
+  c.innerHTML = `
+    <div class="calhead">
+      <h3>${MONTHS[m]} ${y}</h3>
+      <button onclick="calMove(-1)" aria-label="Previous month">‹</button>
+      <button onclick="S.cal={y:${now.getFullYear()},m:${now.getMonth()},sel:'${today}'}; render()">Today</button>
+      <button onclick="calMove(1)" aria-label="Next month">›</button>
+    </div>
+    <div class="cal">
+      ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div class="dow">${d}</div>`).join('')}
+      ${cells}
+    </div>
+
+    <div class="cols" style="margin-top:16px">
+      <div>
+        <div class="sectlabel">${esc(parseYmd(sel).toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'}))}</div>
+        <div class="card">${dayEvs.length ? dayEvs.map(eventRow).join('') : `<div class="tiny" style="text-align:center;padding:8px">Nothing on this day.</div>`}</div>
+      </div>
+      <div>
+        <div class="sectlabel">Add to this day</div>
+        <div class="card">
+          <div class="field"><label>What</label><input id="ev_title" placeholder="e.g. Unit 3 test" onkeydown="if(event.key==='Enter')addEvent()"></div>
+          <div class="row" style="gap:10px">
+            <div class="field" style="flex:1"><label>Type</label><select id="ev_kind">
+              ${['test','homework','study','other'].map(k=>`<option value="${k}">${EVENT_KINDS[k]}</option>`).join('')}</select></div>
+            <div class="field" style="flex:1"><label>Time</label><input id="ev_time" type="time"></div>
+          </div>
+          <div class="field"><label>Class</label><select id="ev_course">
+            <option value="">No class</option>
+            ${S[classKey()].map(x=>`<option>${esc(x)}</option>`).join('')}</select></div>
+          <button class="btn" onclick="addEvent()">Add to calendar</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+function calMove(n){
+  let { y, m } = S.cal; m+=n;
+  if(m<0){ m=11; y--; } if(m>11){ m=0; y++; }
+  S.cal = { y, m, sel: ymd(new Date(y,m,1)) };
+  render();
+}
+function addEvent(){
+  const title=$('ev_title').value.trim();
+  if(!title){ $('ev_title').focus(); return; }
+  const t=$('ev_time').value;
+  const time = t ? new Date('2000-01-01T'+t).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}) : '';
+  S.events.push({ id:uid(), date:S.cal.sel, time, title, kind:$('ev_kind').value, course:$('ev_course').value });
+  render(); toast('Added to '+fmtDate(S.cal.sel));
+}
+function deleteEvent(id){
+  S.events=S.events.filter(e=>e.id!==id);
+  render();
 }
 
 /* -------- COURSE DETAIL (overlay) -------- */
@@ -337,6 +650,7 @@ function renderCourseDetail(c, course){
   if(f.format) tutors = tutors.filter(t=>t.format.toLowerCase().includes(f.format));
   c.innerHTML = `
     <button class="back" onclick="close()">‹ Back</button>
+    ${S[classKey()].includes(course) ? '' : `<button class="btn sm green" style="float:right" onclick="toggleClass('${esc(course)}'); toast('Added to your classes')">＋ Add to my classes</button>`}
     <div class="row" style="margin:2px 0 10px">
       <div class="avatar" style="background:${courseColor(course)};width:52px;height:52px;font-size:22px">${courseEmoji(course)}</div>
       <div><h2 class="title" style="margin:0">${esc(course)}</h2>
@@ -413,7 +727,7 @@ function renderRequest(c){
       <div class="field"><label>Topic</label><input id="rq_topic" placeholder="e.g. Migration models"></div>
       <div class="field"><label>What do you need help with?</label><textarea id="rq_desc" rows="2" placeholder="A sentence or two…"></textarea></div>
       <div class="row" style="gap:10px">
-        <div class="field" style="flex:1;margin:0"><label>Day</label><input id="rq_day" placeholder="Thursday"></div>
+        <div class="field" style="flex:1;margin:0"><label>Day</label><input id="rq_day" type="date" value="${ymd(addDays(new Date(),1))}" min="${ymd(new Date())}"></div>
         <div class="field" style="flex:1;margin:0"><label>Time</label><input id="rq_time" placeholder="3:30 PM"></div>
       </div>
       <div class="field" style="margin-top:12px"><label>Format</label>
@@ -431,10 +745,11 @@ function submitRequest(tid){
   const t=TUTORS.find(x=>x.id===tid);
   const course=$('rq_course').value;
   const topic=$('rq_topic').value.trim()||'General help';
-  const day=$('rq_day').value.trim()||'TBD';
+  const date=$('rq_day').value||'';
+  const day=fmtDate(date);
   const time=$('rq_time').value.trim()||'TBD';
   const fmt=document.querySelector('#rq_fmt button.on')?.dataset.v||'In person';
-  const req={ id:uid(), tutor:t.name, tutorId:tid, course, topic, day, time, format:fmt, status:'pending' };
+  const req={ id:uid(), tutor:t.name, tutorId:tid, course, topic, date, day, time, format:fmt, status:'pending' };
   S.myRequests.unshift(req);
   close(); go('tutoring');
   toast('Request sent to '+t.name.split(' ')[0]+' 🎉');
@@ -442,7 +757,7 @@ function submitRequest(tid){
   setTimeout(()=>{
     const r=S.myRequests.find(x=>x.id===req.id); if(!r||r.status!=='pending')return;
     r.status='confirmed';
-    S.sessions.unshift({ id:uid(), course:r.course, day:r.day, time:r.time, with:r.tutor, format:r.format, role:'student', status:'upcoming' });
+    S.sessions.unshift({ id:uid(), course:r.course, date:r.date, day:r.day, time:r.time, with:r.tutor, format:r.format, role:'student', status:'upcoming' });
     save(); if(!S.overlay) render();
     toast(t.name.split(' ')[0]+' accepted your request ✅');
   }, 4500);
@@ -488,7 +803,7 @@ function respondRequest(id, accept){
   const r=S.incoming.find(x=>x.id===id); if(!r)return;
   r.status=accept?'accepted':'declined';
   if(accept){
-    S.sessions.unshift({ id:uid(), course:r.course, day:r.day, time:r.time, with:r.from, format:r.format, role:'tutor', status:'upcoming' });
+    S.sessions.unshift({ id:uid(), course:r.course, date:r.date, day:r.day, time:r.time, with:r.from, format:r.format, role:'tutor', status:'upcoming' });
     toast('Session confirmed with '+r.from.split(' ')[0]+' ✅');
   } else toast('Request declined');
   render();
@@ -677,6 +992,7 @@ function renderOverlay(c){
   if(o.type==='board') return renderBoard(c);
   if(o.type==='becomeTutor') return renderBecomeTutor(c);
   if(o.type==='search') return renderSearch(c);
+  if(o.type==='addClasses') return renderAddClasses(c);
 }
 
 
@@ -820,8 +1136,17 @@ function currentAlias(){
   if(!A.profile) return 'You';
   return A.role === 'tutor' ? (A.profile.tutor_alias || 'Tutor') : A.profile.student_alias;
 }
+// Login is parked while the signed-in screens get built. Flip to false to
+// bring the sign-in screen back.
+const SKIP_LOGIN = true;
+function useDemoProfile(){
+  A.demo = true;
+  A.profile = { student_alias:'Student 14', tutor_alias:null };
+  S.me.name = currentAlias();
+}
 async function setRole(r){
-  if(r === 'tutor'){ try { await ensureTutorAlias(); } catch(e){ toast(e.message); return; } }
+  if(r === 'tutor' && A.demo){ A.profile.tutor_alias = A.profile.tutor_alias || randomAlias(); }
+  else if(r === 'tutor'){ try { await ensureTutorAlias(); } catch(e){ toast(e.message); return; } }
   A.role = r; S.me.name = currentAlias(); render();
 }
 
