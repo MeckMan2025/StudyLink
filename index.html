@@ -391,8 +391,8 @@ const $ = id => document.getElementById(id);
 const esc = s => (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const initials = n => (n||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
 function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),2600); }
-function go(tab){ S.tab=tab; S.overlay=null; S.confirmReset=false; toggleSide(false); render(); window.scrollTo(0,0); }
-function openClass(course){ S.tab='classes'; S.overlay={type:'course',course}; toggleSide(false); render(); window.scrollTo(0,0); }
+function go(tab){ S.tab=tab; S.overlay=null; S.confirmReset=false; toggleSide(false); S._top=true; render(); }
+function openClass(course){ S.tab='classes'; S.overlay={type:'course',course}; toggleSide(false); S._top=true; render(); }
 // First tap opens Classes; tapping it again while there folds the list.
 function navClasses(){ if(S.tab==='classes' && !S.overlay) S.classesOpen=!S.classesOpen; else S.classesOpen=true; go('classes'); }
 // Tutor and Tutee share the same tabs; each keeps its own list of classes.
@@ -406,8 +406,8 @@ function logOut(){ menuOpen=false; signOut(); }
 function toggleSide(v){ $('app').classList.toggle('open', v); }
 // Not 'open' or 'close': inside an inline onclick those names resolve to
 // document.open and document.close, and document.open blanks the page.
-function openView(ov){ S.overlay=ov; render(); }
-function closeView(){ S.overlay=null; render(); }
+function openView(ov){ S.overlay=ov; S._top=true; render(); }
+function closeView(){ S.overlay=null; S._top=true; render(); }
 // Top-level posts for a class, each with its replies, oldest reply first.
 function postsFor(course){
   const all = S.posts || [], me = A.user ? A.user.id : null;
@@ -426,7 +426,10 @@ function sessionsList(){
 }
 
 /* ============================= RENDER ============================= */
+// Re-drawing must not move the page. Only navigation (go, openView, closeView,
+// a new setup step) asks for the top, by setting S._top before render.
 function render(){
+  const y = window.scrollY;
   try { renderInner(); }
   catch(e){
     // A rendering bug must never leave an empty screen.
@@ -434,6 +437,8 @@ function render(){
     const c = document.getElementById('scroll');
     if(c) c.innerHTML = '<div class="card" style="margin:24px auto;max-width:520px;text-align:center"><div style="font-size:34px">😵</div><div style="font-weight:800;margin:6px 0">Something went wrong on this screen</div><div class="tiny" style="margin-bottom:12px">' + esc(String(e && e.message || e)) + '</div><div class="row" style="gap:8px;justify-content:center"><button class="btn sm gray" onclick="S.overlay=null;S.tab=\'home\';render()">Go home</button><button class="btn sm" onclick="location.reload()">Reload</button></div></div>';
   }
+  if(S._top){ S._top = false; window.scrollTo(0,0); }
+  else { window.scrollTo(0, y); requestAnimationFrame(function(){ window.scrollTo(0, y); }); }
 }
 function renderInner(){
   // Nothing in the app renders until you're signed in. Names, grades and
@@ -468,13 +473,14 @@ function renderInner(){
 let menuOpen = false;
 const TAB_TITLES = { settings:'Settings', help:'Help', home:'Home Screen', classes:'Classes', calendar:'Calendar', tutoring:'Tutoring', community:'Community', profile:'Profile', 'admin-grades':'Grade checks', 'admin-requests':'All requests', 'admin-team':'Members', admin:'Administration' };
 const isStaff = () => !!(A.profile && (A.profile.role==='admin' || A.profile.role==='board'));
+const hasGrade = () => !!(A.profile && A.profile.role==='student');   // staff accounts carry no grade
 const roleBadge = r => r==='admin' ? '<span class="rolebadge admin">Administrator</span>' : r==='board' ? '<span class="rolebadge board">Board</span>' : '';
 function renderHead(){
   const title = S.overlay?.type==='course' ? S.overlay.course : TAB_TITLES[S.tab] || 'StudyLink';
   $('head').innerHTML = `
     <button class="menu" onclick="toggleSide(true)" aria-label="Open navigation">☰</button>
     <h1>${esc(title)}</h1>
-    <div class="right">${esc(currentAlias())} ${roleBadge(A.profile.role)}<br><span class="seen on">● Online</span> · Grade ${S.me.grade}</div>`;
+    <div class="right">${esc(currentAlias())} ${roleBadge(A.profile.role)}<br><span class="seen on">● Online</span>${hasGrade() ? ' · Grade '+S.me.grade : ''}</div>`;
 }
 
 function incomingCount(){
@@ -530,7 +536,7 @@ function renderNav(){
 }
 
 function renderBody(){
-  const c=$('scroll'); c.scrollTop=c.scrollTop; // keep
+  const c=$('scroll'); if(!['admin-grades','admin-requests','admin-team'].includes(S.tab) || S.overlay) c.dataset.page = '';
   if(S.overlay) return renderOverlay(c);
   if(S.tab==='home') return renderHome(c);
   if(S.tab==='classes') return renderClasses(c);
@@ -553,8 +559,8 @@ function renderSettings(c){
     <h2 class="title">Settings</h2>
     <div class="lead">Saved to your account.</div>
     <div class="card">
-      <div class="field"><label>Grade</label>
-        <select onchange="setGrade(+this.value)">${[6,7,8,9,10,11,12].map(g=>`<option ${S.me.grade===g?'selected':''}>${g}</option>`).join('')}</select></div>
+      ${hasGrade() ? `<div class="field"><label>Grade</label>
+        <select onchange="setGrade(+this.value)">${[6,7,8,9,10,11,12].map(g=>`<option ${S.me.grade===g?'selected':''}>${g}</option>`).join('')}</select></div>` : ''}
       <div class="field" style="margin-bottom:0"><label>Open the sidebar on</label>
         <div class="seg">
           <button class="${S.mode==='tutor'?'on':''}" onclick="setMode('tutor')">🎓 Tutor</button>
@@ -564,7 +570,7 @@ function renderSettings(c){
     <div class="sectlabel">Account</div>
     <div class="card">
       <div style="font-weight:800">${esc(A.profile.student_alias)}</div>
-      <div class="tiny">${A.profile.tutor_alias ? 'Tutoring as ' + esc(A.profile.tutor_alias) + ' · ' : ''}Grade ${S.me.grade}</div>
+      <div class="tiny">${A.profile.tutor_alias ? 'Tutoring as ' + esc(A.profile.tutor_alias) + ' · ' : ''}${hasGrade() ? 'Grade '+S.me.grade : (A.profile.role==='board'?'Board':'Administrator')}</div>
       <div class="row" style="gap:8px;margin-top:12px">
         <button class="btn gray" style="flex:1" onclick="S.setup=null;S.setupForce=true;render()">Redo setup</button>
         <button class="btn gray" style="flex:1" onclick="logOut()">Log out</button>
@@ -1495,7 +1501,7 @@ function renderProfile(c){
     <div class="card">
       <div class="row"><div class="avatar" style="width:54px;height:54px;font-size:20px;background:linear-gradient(135deg,var(--blue),var(--purple))">${initials(me.name)}</div>
         <div style="flex:1"><div style="font-weight:800;font-size:17px">${esc(A.profile.student_alias)}</div>
-        <div class="tiny">${A.profile.tutor_alias ? 'Tutoring as '+esc(A.profile.tutor_alias)+' · ' : ''}${me.isTutor?'Tutor + Student':'Student'} · Grade ${me.grade} ${roleBadge(A.profile.role)}</div></div>
+        <div class="tiny">${A.profile.tutor_alias ? 'Tutoring as '+esc(A.profile.tutor_alias)+' · ' : ''}${hasGrade() ? (me.isTutor?'Tutor + Student':'Student')+' · Grade '+me.grade : (A.profile.role==='board'?'Board':'Administrator')} ${roleBadge(A.profile.role)}</div></div>
         ${adminButtonHtml()}</div>
     </div>
 
@@ -1545,7 +1551,7 @@ function setupState(){
   if(S.setup) return S.setup;
   const taken={}; (S.taken||[]).forEach(g=>{ taken[g.course]={ grade:g.grade||'A', year:g.year||defaultTaken() }; });
   const parsed=parseAvail(S.me.avail||'');
-  S.setup = { step:1, grade:S.me.grade||10, taking:S.myClasses.slice(), taken,
+  S.setup = { step: hasGrade() ? 1 : 2, grade: hasGrade() ? (S.me.grade||10) : null, taking:S.myClasses.slice(), taken,
     use: S.me.isTutor ? (S.myClasses.length ? 'both' : 'tutor') : 'help',
     tutorPick: S.tutorClasses.slice(), days:parsed.days, times:parsed.times,
     format:(A.profile&&A.profile.tutor_format)||'In person', bio:(A.profile&&A.profile.tutor_bio)||'' };
@@ -1558,7 +1564,7 @@ function renderSetup(c){
       ${dep.courses.map(course=>`<button class="chip ${sel(course)?'dept':''}" style="${sel(course)?'background:'+dep.color:''}" onclick="${fn}('${esc(course)}')">${sel(course)?'✓ ':''}${esc(course)}</button>`).join('')}
     </div>`).join('');
   const nav = (backStep, nextLabel, nextFn, disabled) => `<div class="row" style="gap:8px;margin-top:18px">
-      ${backStep ? `<button class="btn gray" style="flex:1" onclick="S.setup.step=${backStep};render()">Back</button>` : (S.setupForce ? `<button class="btn gray" style="flex:1" onclick="S.setupForce=false;S.setup=null;render()">Cancel</button>` : '')}
+      ${backStep && !(backStep===1 && !hasGrade()) ? `<button class="btn gray" style="flex:1" onclick="S.setup.step=${backStep};render()">Back</button>` : (S.setupForce ? `<button class="btn gray" style="flex:1" onclick="S.setupForce=false;S.setup=null;render()">Cancel</button>` : '')}
       <button class="btn" style="flex:2" ${disabled?'disabled':''} onclick="${nextFn}">${nextLabel}</button>
     </div>`;
   let body='';
@@ -1568,8 +1574,8 @@ function renderSetup(c){
       <div class="chips" style="justify-content:center">${[6,7,8,9,10,11,12].map(g=>`<button class="chip ${st.grade===g?'dept':''}" style="${st.grade===g?'background:var(--blue-d)':''};padding:12px 18px;font-size:15px" onclick="S.setup.grade=${g};render()">Grade ${g}</button>`).join('')}</div>
       ${nav(0, 'Next', 'S.setup.step=2;render()', !st.grade)}`;
   } else if(step===2){
-    body = `<h2>What are you taking this year?</h2>
-      <div class="lead">Tap every class. These fill your sidebar and your Community page.</div>
+    body = `<h2>${hasGrade() ? 'What are you taking this year?' : 'Welcome, '+esc(A.profile.student_alias)}</h2>
+      <div class="lead">${hasGrade() ? 'Tap every class. These fill your sidebar and your Community page.' : 'Which classes do you want to follow? These fill your sidebar and Community page. Skip if none.'}</div>
       ${chipsFor(c=>st.taking.includes(c), 'setupToggleTaking')}
       ${nav(1, st.taking.length ? 'Next · '+st.taking.length+' class'+(st.taking.length===1?'':'es') : 'Next', 'S.setup.step=3;render()', false)}`;
   } else if(step===3){
@@ -1606,10 +1612,9 @@ function renderSetup(c){
       ` : ''}
       ${nav(3, 'Finish', 'finishSetup(this)', false)}`;
   }
-  const y = window.scrollY;
   c.innerHTML = `<div class="auth-wrap"><div class="auth-card setup-card"><div class="auth-logo">S</div>${bar}${body}${A.setupMsg ? '<div class="auth-msg err">'+esc(A.setupMsg)+'</div>' : ''}</div></div>`;
   // Only a change of step jumps to the top; tapping a chip keeps your place.
-  if(st.step !== S.setupShownStep){ S.setupShownStep = st.step; window.scrollTo(0,0); } else window.scrollTo(0,y);
+  if(st.step !== S.setupShownStep){ S.setupShownStep = st.step; S._top = true; }
 }
 // Classes taken: one claim per class. Verified claims at the same grade stay;
 // anything else pending is replaced; removed classes drop their pending claim.
@@ -1635,7 +1640,7 @@ async function finishSetup(btn){
   if(wantsTutor && !avail){ A.setupMsg='Pick at least one day and one time you can help.'; return render(); }
   A.setupMsg=''; if(btn){ btn.disabled=true; btn.textContent='Saving…'; }
   try{
-    await sbFetch('/rest/v1/sl_profiles?id=eq.'+me, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ grade_level:st.grade, onboarded_at:new Date().toISOString(), ...(wantsTutor ? { tutor_bio:st.bio, tutor_format:st.format } : {}) }) });
+    await sbFetch('/rest/v1/sl_profiles?id=eq.'+me, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ ...(hasGrade() ? { grade_level:st.grade } : { grade_level:null }), onboarded_at:new Date().toISOString(), ...(wantsTutor ? { tutor_bio:st.bio, tutor_format:st.format } : {}) }) });
     // Classes now.
     await sbFetch('/rest/v1/sl_student_classes?user_id=eq.'+me, { method:'DELETE', headers:{ Prefer:'return=minimal' } });
     if(st.taking.length) await sbFetch('/rest/v1/sl_student_classes', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify(st.taking.map(course=>({ user_id:me, course }))) });
@@ -1854,11 +1859,12 @@ function adminButtonHtml(){
 // access to school records. Real names show here and nowhere else.
 async function renderAdminGrades(c){
   if(!isStaff()) return go('home');
-  c.innerHTML = '<h2 class="title">Grade checks</h2><div class="lead">Loading…</div>';
+  if(c.dataset.page !== 'Grade checks') c.innerHTML = '<h2 class="title">Grade checks</h2><div class="lead">Loading…</div>';
   let rows;
   try { rows = await sbFetch('/rest/v1/sl_grades?select=*,who:sl_profiles!sl_grades_user_id_fkey(real_name,grade_level,student_alias,tutor_alias,last_seen_at)&order=created_at'); }
   catch(e){ c.innerHTML = '<h2 class="title">Grade checks</h2><div class="auth-msg err">' + esc(e.message) + '</div>'; return; }
   if(S.tab!=='admin-grades') return;
+  c.dataset.page = 'Grade checks'; const keepY = window.scrollY;
   // One entry per student, pending ones first.
   const by={}; rows.forEach(r=>{ const k=r.user_id; (by[k]=by[k]||{ id:k, who:r.who||{}, pending:[], done:[] })[r.status==='pending'?'pending':'done'].push(r); });
   const people=Object.values(by).sort((a,b)=>(b.pending.length-a.pending.length) || String(a.who.real_name||'').localeCompare(String(b.who.real_name||'')));
@@ -1877,6 +1883,7 @@ async function renderAdminGrades(c){
         ${pp.pending.length ? `<span class="count" style="background:var(--pink-d);color:#fff;font-size:11px;font-weight:800;border-radius:9px;padding:2px 8px">${pp.pending.length}</span>` : ''}
         <div style="color:var(--muted)">›</div>
       </div>`).join('') : '<div class="card tiny" style="text-align:center">No grade claims yet.</div>'}`;
+    window.scrollTo(0, keepY);
     return;
   }
 
@@ -1904,6 +1911,7 @@ async function renderAdminGrades(c){
     <div class="sectlabel">To check ${sel.pending.length ? '('+sel.pending.length+')' : ''}</div>
     ${sel.pending.length ? sel.pending.map(line).join('') : '<div class="card tiny" style="text-align:center">Nothing waiting for this student.</div>'}
     ${sel.done.length ? '<div class="sectlabel">Already reviewed</div>' + sel.done.map(line).join('') : ''}`;
+  window.scrollTo(0, keepY);
 }
 function verifyAll(userId){
   sbFetch('/rest/v1/sl_grades?user_id=eq.'+userId+'&status=eq.pending', { method:'PATCH', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ status:'verified', reviewed_by:A.user.id, reviewed_at:new Date().toISOString() }) })
@@ -1921,11 +1929,12 @@ function reviewGrade(id, status){
 // Every tutoring request in the school, newest first.
 async function renderAdminRequests(c){
   if(!isStaff()) return go('home');
-  c.innerHTML = '<h2 class="title">All requests</h2><div class="lead">Loading…</div>';
+  if(c.dataset.page !== 'All requests') c.innerHTML = '<h2 class="title">All requests</h2><div class="lead">Loading…</div>';
   let rows;
   try { rows = await sbFetch('/rest/v1/sl_requests?select=*&order=created_at.desc&limit=300'); }
   catch(e){ c.innerHTML = '<h2 class="title">All requests</h2><div class="auth-msg err">' + esc(e.message) + '</div>'; return; }
   if(S.tab!=='admin-requests') return;
+  c.dataset.page = 'All requests'; const keepY = window.scrollY;
   const f = S.adminReqFilter || 'all';
   const shown = rows.filter(r => f==='all' || r.status===f);
   const label = { pending:'Pending', accepted:'Confirmed', declined:'Declined', done:'Done', cancelled:'Cancelled' };
@@ -1944,6 +1953,7 @@ async function renderAdminRequests(c){
         <span class="pill" style="margin-left:auto;${style[r.status]||''}">${label[r.status]||r.status}</span>
         ${r.status==='pending' || r.status==='accepted' ? `<button class="del" title="Cancel this request" style="border:none;background:none;color:var(--muted);cursor:pointer;font-size:16px" onclick="adminCancel('${r.id}')">✕</button>` : ''}
       </div>`).join('') : '<div class="card tiny" style="text-align:center">No requests here.</div>'}`;
+  window.scrollTo(0, keepY);
 }
 function adminCancel(id){
   sbFetch('/rest/v1/sl_requests?id=eq.'+id, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ status:'cancelled' }) })
@@ -1954,7 +1964,7 @@ function adminCancel(id){
 // that person signs up; removing the row takes it away again.
 async function renderAdminTeam(c){
   if(!isStaff()) return go('home');
-  c.innerHTML = '<h2 class="title">Members</h2><div class="lead">Loading…</div>';
+  if(c.dataset.page !== 'Members') c.innerHTML = '<h2 class="title">Members</h2><div class="lead">Loading…</div>';
   let list, people;
   try {
     [list, people] = await Promise.all([
@@ -1963,6 +1973,7 @@ async function renderAdminTeam(c){
     ]);
   } catch(e){ c.innerHTML = '<h2 class="title">Members</h2><div class="auth-msg err">' + esc(e.message) + '</div>'; return; }
   if(S.tab!=='admin-team') return;
+  c.dataset.page = 'Members'; const keepY = window.scrollY;
   const myEmail = ((A.user && A.user.email) || '').toLowerCase();
   const signedUp = {}; people.forEach(p => { signedUp[p.id] = p; });
   const q = (S.memberQuery || '').toLowerCase();
@@ -2025,6 +2036,7 @@ async function renderAdminTeam(c){
       <button class="btn ghost sm" style="${S.onlineOnly?'background:#e4f6ec;border-color:#bfe8d0;color:#2e9b6a':''}" onclick="S.onlineOnly=!S.onlineOnly;render()">● Online only</button></div>
     <div id="memberlist">${students.map(row).join('') || '<div class="card tiny" style="text-align:center">No students yet. Press ＋ to add the first one.</div>'}</div>`;
   A.memberRows = list;
+  window.scrollTo(0, keepY);
 }
 function filterMembers(){
   const q=(S.memberQuery||'').toLowerCase();
