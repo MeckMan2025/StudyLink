@@ -1247,7 +1247,7 @@ const defaultTaken = () => 'Grade ' + Math.max(7, Math.min(12, (S.me.grade||10) 
 // Availability is picked, not typed: days and times of day, stored as one
 // readable line such as "Mon, Wed · After school, Evenings".
 const AVAIL_DAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-const AVAIL_TIMES=['Before school','Lunch','After school','Evenings'];
+const AVAIL_TIMES=['Before school','After school','Evenings'];
 function togglePick(k, v){ const a=S.overlay.draft[k]; const i=a.indexOf(v); if(i<0) a.push(v); else a.splice(i,1); render(); }
 function availText(d){
   const days=AVAIL_DAYS.filter(x=>d.days.includes(x)), times=AVAIL_TIMES.filter(x=>d.times.includes(x));
