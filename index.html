@@ -1497,6 +1497,10 @@ async function finishSetup(btn){
       await sbFetch('/rest/v1/sl_tutor_courses?user_id=eq.'+me, { method:'DELETE', headers:{ Prefer:'return=minimal' } });
       await sbFetch('/rest/v1/sl_tutor_courses', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify(picks.map(course=>({ user_id:me, course, grade:st.taken[course].grade, year:st.taken[course].year, availability:avail }))) });
     }
+    // Re-read the profile so onboarded_at (and any new tutor alias) is current;
+    // otherwise the stale copy sends people straight back into setup.
+    A.profile.onboarded_at = new Date().toISOString();
+    await loadProfile();
     await loadData();
     S.setup=null; S.setupForce=false;
     S.mode = st.use==='tutor' ? 'tutor' : 'tutee'; A.role=(S.mode==='tutor' && A.profile.tutor_alias) ? 'tutor' : 'student'; S.me.name=currentAlias();
@@ -1614,7 +1618,7 @@ async function finishTutor(){
     if(stale.length) await sbFetch('/rest/v1/sl_grades?id=in.('+stale.join(',')+')', { method:'DELETE', headers:{ Prefer:'return=minimal' } });
     const submit = rows.filter(r => !(have||[]).some(g => keep.has(g.id) && g.course===r.course)).map(r=>({ user_id:me, course:r.course, grade:r.grade, year:r.year }));
     if(submit.length) await sbFetch('/rest/v1/sl_grades', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify(submit) });
-    await loadData();
+    await loadProfile(); await loadData();
     S.mode='tutor'; A.role='tutor'; S.me.name=currentAlias();
     closeView(); go('tutoring');
     toast('You\'re now tutoring as '+A.profile.tutor_alias+' 🎓');
@@ -2265,6 +2269,7 @@ let dataLoaded = false, dataLoading = false, dataError = null;
 async function loadData(){
   if(!A.user) return;
   const me = A.user.id;
+  if(dataLoaded) { try { await loadProfile(); } catch(e) {} }   // background refreshes pick up profile changes too
   const [classes, tcourses, reqs, events, tutors, posts, myGrades, pendingGrades, materials, roster, presence, people, avail] = await Promise.all([
     sbFetch('/rest/v1/sl_student_classes?select=course&user_id=eq.'+me+'&order=created_at'),
     sbFetch('/rest/v1/sl_tutor_courses?select=course,grade,year,availability&user_id=eq.'+me+'&order=created_at'),
