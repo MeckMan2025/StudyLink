@@ -1509,33 +1509,64 @@ async function renderAdminGrades(c){
   if(!isStaff()) return go('home');
   c.innerHTML = '<h2 class="title">Grade checks</h2><div class="lead">Loading…</div>';
   let rows;
-  try { rows = await sbFetch('/rest/v1/sl_grades?select=*,who:sl_profiles!sl_grades_user_id_fkey(real_name,grade_level,student_alias,tutor_alias,last_seen_at)&order=status.desc,created_at'); }
+  try { rows = await sbFetch('/rest/v1/sl_grades?select=*,who:sl_profiles!sl_grades_user_id_fkey(real_name,grade_level,student_alias,tutor_alias,last_seen_at)&order=created_at'); }
   catch(e){ c.innerHTML = '<h2 class="title">Grade checks</h2><div class="auth-msg err">' + esc(e.message) + '</div>'; return; }
   if(S.tab!=='admin-grades') return;
-  const pending = rows.filter(r=>r.status==='pending'), rest = rows.filter(r=>r.status!=='pending');
+  // One entry per student, pending ones first.
+  const by={}; rows.forEach(r=>{ const k=r.user_id; (by[k]=by[k]||{ id:k, who:r.who||{}, pending:[], done:[] })[r.status==='pending'?'pending':'done'].push(r); });
+  const people=Object.values(by).sort((a,b)=>(b.pending.length-a.pending.length) || String(a.who.real_name||'').localeCompare(String(b.who.real_name||'')));
+  const sel = S.gradeStudent ? by[S.gradeStudent] : null;
+  const totalPending = rows.filter(r=>r.status==='pending').length;
+
+  if(!sel){
+    c.innerHTML = `
+      <h2 class="title">Grade checks</h2>
+      <div class="lead">${totalPending ? totalPending+' grade'+(totalPending===1?'':'s')+' waiting. Tap a student to review theirs.' : 'Nothing waiting. New tutors show up here.'}</div>
+      ${people.length ? people.map(pp=>`<div class="card row" style="cursor:pointer" onclick="S.gradeStudent='${pp.id}';render()">
+        ${avatarDot(initials(pp.who.real_name||'?'), pp.who.last_seen_at, 'background:'+(pp.pending.length?'var(--orange)':'var(--green)'))}
+        <div style="min-width:0;flex:1"><div style="font-weight:800">${esc(pp.who.real_name||'Unknown')} <span class="tiny">· ${esc(pp.who.tutor_alias||pp.who.student_alias||'')}${pp.who.grade_level?' · Grade '+pp.who.grade_level:''}</span> ${seenHtml(pp.who.last_seen_at)}</div>
+          <div class="tiny">${pp.pending.length ? `<b style="color:#c98b34">${pp.pending.length} to check</b>` : 'All checked'} · ${pp.done.filter(g=>g.status==='verified').length} verified${pp.done.some(g=>g.status==='rejected')?' · '+pp.done.filter(g=>g.status==='rejected').length+' rejected':''}</div></div>
+        ${pp.pending.length ? `<span class="count" style="background:var(--pink-d);color:#fff;font-size:11px;font-weight:800;border-radius:9px;padding:2px 8px">${pp.pending.length}</span>` : ''}
+        <div style="color:var(--muted)">›</div>
+      </div>`).join('') : '<div class="card tiny" style="text-align:center">No grade claims yet.</div>'}`;
+    return;
+  }
+
+  const w=sel.who;
   const line = r => `<div class="card">
       <div class="row"><div class="avatar" style="background:${courseColor(r.course)}">${courseEmoji(r.course)}</div>
-        <div style="min-width:0"><div style="font-weight:800">${esc(r.who ? r.who.real_name : 'Unknown')} <span class="tiny">· ${esc(r.who ? r.who.tutor_alias || r.who.student_alias : '')}${r.who && r.who.grade_level ? ' · Grade '+r.who.grade_level : ''}</span> ${r.who ? seenHtml(r.who.last_seen_at) : ''}</div>
-          <div class="tiny">${esc(r.course)} · claims <b>${esc(r.grade)}</b>${r.year ? ' · taken '+(/^Grade/.test(r.year)?'in ':'')+esc(r.year) : ''} · submitted ${esc(new Date(r.created_at).toLocaleDateString())}</div></div>
-        ${r.status==='pending' ? '' : `<span class="pill" style="margin-left:auto;${r.status==='verified'?'background:#e4f6ec;color:#2e9b6a':'background:#fdecef;color:#c23b5e'}">${r.status==='verified'?'Verified':'Rejected'}</span>`}
+        <div style="min-width:0;flex:1"><div style="font-weight:800">${esc(r.course)}</div>
+          <div class="tiny">claims <b>${esc(r.grade)}</b>${r.year ? ' · taken '+(/^Grade/.test(r.year)?'in ':'')+esc(r.year) : ''} · submitted ${esc(new Date(r.created_at).toLocaleDateString())}</div></div>
+        ${r.status==='pending' ? '' : `<span class="pill" style="${r.status==='verified'?'background:#e4f6ec;color:#2e9b6a':'background:#fdecef;color:#c23b5e'}">${r.status==='verified'?'Verified':'Rejected'}</span>`}
       </div>
-      ${r.status==='pending' ? `<div class="row" style="gap:8px;margin-top:10px">
-        <input id="gn_${r.id}" placeholder="Note (optional, e.g. transcript shows B+)" style="flex:1;padding:9px 11px;border:1.5px solid #e5e2f0;border-radius:10px;font:inherit;font-size:13px">
+      ${r.status==='pending' ? `<div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap">
+        <input id="gn_${r.id}" placeholder="Note (optional, e.g. transcript shows B+)" style="flex:1;min-width:180px;padding:9px 11px;border:1.5px solid #e5e2f0;border-radius:10px;font:inherit;font-size:13px">
         <button class="btn sm gray" onclick="reviewGrade('${r.id}','rejected')">Reject</button>
         <button class="btn sm green" onclick="reviewGrade('${r.id}','verified')">Verify</button>
-      </div>` : (r.note ? `<div class="tiny" style="margin-top:6px">Note: ${esc(r.note)}</div>` : '')}
+      </div>` : (r.note ? `<div class="tiny" style="margin-top:6px">Note: ${esc(r.note)}</div>` : '') + `<div style="margin-top:6px"><button class="btn ghost sm" onclick="reviewGrade('${r.id}','pending')">Undo</button></div>`}
     </div>`;
   c.innerHTML = `
-    <h2 class="title">Grade checks</h2>
-    <div class="lead">Confirm each claimed grade against school records. Verified grades show a ✓ on the tutor's card.</div>
-    <div class="sectlabel">Waiting ${pending.length ? '('+pending.length+')' : ''}</div>
-    ${pending.length ? pending.map(line).join('') : '<div class="card tiny" style="text-align:center">Nothing waiting. New tutors will appear here.</div>'}
-    ${rest.length ? '<div class="sectlabel">Already reviewed</div>' + rest.map(line).join('') : ''}`;
+    <button class="back" onclick="S.gradeStudent=null;render()">‹ All students</button>
+    <div class="row" style="margin:2px 0 10px">
+      ${avatarDot(initials(w.real_name||'?'), w.last_seen_at, 'background:var(--blue-d);width:52px;height:52px;font-size:20px')}
+      <div><h2 class="title" style="margin:0">${esc(w.real_name||'Unknown')}</h2>
+      <div class="tiny">${esc(w.tutor_alias||w.student_alias||'')}${w.grade_level?' · Grade '+w.grade_level:''} ${seenHtml(w.last_seen_at)}</div></div>
+      ${sel.pending.length>1 ? `<button class="btn sm green" style="margin-left:auto" onclick="verifyAll('${sel.id}')">Verify all ${sel.pending.length}</button>` : ''}
+    </div>
+    <div class="sectlabel">To check ${sel.pending.length ? '('+sel.pending.length+')' : ''}</div>
+    ${sel.pending.length ? sel.pending.map(line).join('') : '<div class="card tiny" style="text-align:center">Nothing waiting for this student.</div>'}
+    ${sel.done.length ? '<div class="sectlabel">Already reviewed</div>' + sel.done.map(line).join('') : ''}`;
+}
+function verifyAll(userId){
+  sbFetch('/rest/v1/sl_grades?user_id=eq.'+userId+'&status=eq.pending', { method:'PATCH', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ status:'verified', reviewed_by:A.user.id, reviewed_at:new Date().toISOString() }) })
+    .then(loadData).then(function(){ toast('All verified ✓'); render(); })
+    .catch(function(e){ toast(e.message); });
 }
 function reviewGrade(id, status){
   const note = ($('gn_'+id) && $('gn_'+id).value || '').trim();
-  sbFetch('/rest/v1/sl_grades?id=eq.'+id, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ status, note, reviewed_by:A.user.id, reviewed_at:new Date().toISOString() }) })
-    .then(loadData).then(function(){ toast(status==='verified' ? 'Grade verified ✓' : 'Grade rejected'); render(); })
+  const patch = status==='pending' ? { status, reviewed_by:null, reviewed_at:null } : { status, note, reviewed_by:A.user.id, reviewed_at:new Date().toISOString() };
+  sbFetch('/rest/v1/sl_grades?id=eq.'+id, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body:JSON.stringify(patch) })
+    .then(loadData).then(function(){ toast(status==='verified' ? 'Grade verified ✓' : status==='rejected' ? 'Grade rejected' : 'Back to waiting'); render(); })
     .catch(function(e){ toast(e.message); });
 }
 
