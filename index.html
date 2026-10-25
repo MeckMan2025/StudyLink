@@ -1812,57 +1812,63 @@ async function renderAdminTeam(c){
   const signedUp = {}; people.forEach(p => { signedUp[p.id] = p; });
   const q = (S.memberQuery || '').toLowerCase();
   const LEVELS = [['student','Student'],['admin','Administrator'],['board','Board']];
+  const inp = 'padding:10px 12px;border:1.5px solid #e5e2f0;border-radius:11px;font:inherit;font-size:14px;background:#fff';
+  // A quiet row: avatar, name, level, status. The pencil opens everything else.
   const row = s => {
     const me = s.email.toLowerCase()===myEmail;
-    const editing = S.editMember === s.email;
-    return `<div class="card mrow" data-email="${esc(s.email)}">
+    const open = S.editMember === s.email;
+    return `<div class="card mrow" data-email="${esc(s.email)}" style="${open?'border-color:var(--blue)':''}">
       ${s.joined ? avatarDot(initials(s.real_name || s.email), s.seen, 'background:'+(s.role==='board'?'var(--purple)':s.role==='admin'?'var(--blue-d)':courseColor(''))) : `<div class="avatar" style="background:${s.role==='board'?'var(--purple)':s.role==='admin'?'var(--blue-d)':courseColor('')}">${initials(s.real_name || s.email)}</div>`}
       <div class="info">
         <div style="font-weight:800">${esc(s.real_name || s.email)}${me?' <span class="tiny">(you)</span>':''} ${roleBadge(s.role)} ${s.joined ? seenHtml(s.seen) : ''}</div>
-        <div class="tiny">${esc(s.email)}${s.grade_level?' · Grade '+s.grade_level:''} · ${s.joined ? 'signed up ' + esc(new Date(s.joined).toLocaleDateString()) : 'approved, not signed up yet'}${s.added_by_alias?' · added by '+esc(s.added_by_alias):''}</div>
+        <div class="tiny">${s.joined ? esc(s.email) : 'Not signed up yet · code <b>'+esc(s.join_code||'—')+'</b>'}${s.grade_level?' · Grade '+s.grade_level:''}</div>
       </div>
-      <div class="ctl">
-        <select class="lvl" title="${me ? 'Another administrator or board member changes your level' : 'Account level'}" ${me?'disabled':''} onchange="setMemberLevel('${esc(s.email)}', this.value, this)">
-          ${LEVELS.map(([v,l])=>`<option value="${v}" ${s.role===v?'selected':''}>${l}</option>`).join('')}
-        </select>
-        <button class="mini" onclick="S.editMember = ${editing ? 'null' : `'${esc(s.email)}'`}; render()">${editing ? 'Cancel' : 'Edit'}</button>
-        ${s.joined ? '' : `<button class="mini" title="Copy the join code" onclick="copyCode('${esc(s.join_code||'')}', this)">Code ${esc(s.join_code||'—')}</button><button class="mini" onclick="newCode('${esc(s.email)}')">New code</button>`}
-        ${me ? '' : `<button class="mini danger" onclick="removeMember('${esc(s.email)}')">Remove</button>`}
-      </div>
-      ${editing ? `<div class="medit">
-        <input id="me_name" value="${esc(s.real_name)}" placeholder="Full name" style="flex:2;min-width:160px">
-        <select id="me_grade" style="flex:0 0 120px"><option value="">No grade</option>${[6,7,8,9,10,11,12].map(g=>`<option value="${g}" ${s.grade_level===g?'selected':''}>Grade ${g}</option>`).join('')}</select>
-        <button class="btn sm" onclick="saveMember('${esc(s.email)}')">Save</button>
+      <button class="mini" title="${open?'Close':'Edit'}" style="margin-left:auto;width:36px;padding:7px 0;text-align:center" onclick="S.editMember = ${open ? 'null' : `'${esc(s.email)}'`}; render()">${open ? '✕' : '✎'}</button>
+      ${open ? `<div class="medit" style="flex-direction:column;align-items:stretch;gap:10px;padding-top:10px;border-top:1px solid var(--line)">
+        <div class="row" style="gap:8px;flex-wrap:wrap">
+          <input id="me_name" value="${esc(s.real_name)}" placeholder="Full name" style="flex:2;min-width:160px;${inp}">
+          <select id="me_grade" style="flex:0 0 120px;${inp}"><option value="">No grade</option>${[6,7,8,9,10,11,12].map(g=>`<option value="${g}" ${s.grade_level===g?'selected':''}>Grade ${g}</option>`).join('')}</select>
+          <select class="lvl" style="flex:0 0 150px;${inp}" ${me?'disabled title="Another administrator or board member changes your level"':''} onchange="setMemberLevel('${esc(s.email)}', this.value, this)">
+            ${LEVELS.map(([v,l])=>`<option value="${v}" ${s.role===v?'selected':''}>${l}</option>`).join('')}
+          </select>
+          <button class="btn sm" onclick="saveMember('${esc(s.email)}')">Save</button>
+        </div>
+        <div class="tiny">${esc(s.email)}${s.joined ? ' · signed up ' + esc(new Date(s.joined).toLocaleDateString()) : ''}${s.added_by_alias?' · added by '+esc(s.added_by_alias):''}</div>
+        <div class="row" style="gap:8px;flex-wrap:wrap">
+          ${s.joined ? '' : `<button class="mini" title="Copy the join code" onclick="copyCode('${esc(s.join_code||'')}', this)">Copy code ${esc(s.join_code||'—')}</button><button class="mini" onclick="newCode('${esc(s.email)}')">New code</button>`}
+          ${me ? '' : `<button class="mini danger" style="margin-left:auto" onclick="removeMember('${esc(s.email)}')">Remove</button>`}
+        </div>
       </div>` : ''}
     </div>`;
   };
-  // Each approval points at the profile it became, once that person has signed up.
   list.forEach(s => { const p = s.user_id ? signedUp[s.user_id] : null; s.joined = p ? p.created_at : null; s.seen = p ? p.last_seen_at : null; });
   const online = list.filter(s => isOnline(s.seen)).length;
   const students = list.filter(s => s.role==='student' && (!q || (s.real_name+' '+s.email).toLowerCase().includes(q)) && (!S.onlineOnly || isOnline(s.seen)));
-  const group = (role, title, blurb) => `
+  const group = (role, title) => `
     <div class="sectlabel">${title} (${list.filter(s=>s.role===role).length})</div>
     ${list.filter(s=>s.role===role).map(row).join('') || '<div class="card tiny" style="text-align:center">Nobody yet.</div>'}`;
   c.innerHTML = `
     <button class="back" onclick="go('admin')">‹ ${A.profile.role==='board' ? 'Board' : 'Administration'}</button>
-    <h2 class="title">Members <span class="seen on" style="font-size:13px;vertical-align:middle">● ${online} online now</span></h2>
-    <div class="lead">${list.length} member${list.length===1?'':'s'}</div>
-    <div class="card">
+    <div class="row" style="align-items:center">
+      <div style="flex:1"><h2 class="title" style="margin-bottom:0">Members</h2><div class="lead" style="margin-bottom:0">${list.length} member${list.length===1?'':'s'} · <span class="seen on">● ${online} online</span></div></div>
+      <button class="btn sm ${S.addMemberOpen?'gray':''}" style="width:auto;padding:10px 14px;font-size:18px;line-height:1" title="Add a member" onclick="S.addMemberOpen=!S.addMemberOpen;render()">${S.addMemberOpen?'✕':'＋'}</button>
+    </div>
+    ${S.addMemberOpen ? `<div class="card" style="margin-top:12px;border-color:var(--blue)">
+      <div style="font-weight:800;margin-bottom:8px">Add a member</div>
       <div class="row" style="gap:8px;flex-wrap:wrap">
-        <input id="mb_name" placeholder="Full name" style="flex:1;min-width:160px;padding:10px 12px;border:1.5px solid #e5e2f0;border-radius:11px;font:inherit;font-size:14px">
-        <input id="mb_email" type="email" placeholder="Email they will sign in with" style="flex:2;min-width:220px;padding:10px 12px;border:1.5px solid #e5e2f0;border-radius:11px;font:inherit;font-size:14px" onkeydown="if(event.key==='Enter')addMember()">
-        <select id="mb_grade" style="flex:0 0 110px;padding:10px 12px;border:1.5px solid #e5e2f0;border-radius:11px;font:inherit;font-size:14px;background:#fff"><option value="">Grade</option>${[6,7,8,9,10,11,12].map(g=>`<option value="${g}">Grade ${g}</option>`).join('')}</select>
-        <select id="mb_role" style="flex:0 0 150px;padding:10px 12px;border:1.5px solid #e5e2f0;border-radius:11px;font:inherit;font-size:14px;background:#fff"><option value="student">Student</option><option value="admin">Administrator</option><option value="board">Board</option></select>
+        <input id="mb_name" placeholder="Full name" style="flex:1;min-width:160px;${inp}">
+        <input id="mb_email" type="email" placeholder="Email they will sign in with" style="flex:2;min-width:220px;${inp}" onkeydown="if(event.key==='Enter')addMember()">
+        <select id="mb_grade" style="flex:0 0 110px;${inp}"><option value="">Grade</option>${[6,7,8,9,10,11,12].map(g=>`<option value="${g}">Grade ${g}</option>`).join('')}</select>
+        <select id="mb_role" style="flex:0 0 150px;${inp}"><option value="student">Student</option><option value="admin">Administrator</option><option value="board">Board</option></select>
         <button class="btn sm" id="mb_add" onclick="addMember()">Add</button>
       </div>
-
-    </div>
-    ${group('board', 'Board', 'Maintain the app: fix errors and build new features. Everything an administrator can do, too.')}
-    ${group('admin', 'Administrators', 'Verify tutors\' grades against school records and keep an eye on tutoring requests.')}
+    </div>` : ''}
+    ${group('board', 'Board')}
+    ${group('admin', 'Administrators')}
     <div class="sectlabel">Students (${list.filter(s=>s.role==='student').length})</div>
     <div class="row" style="gap:8px;margin-bottom:10px"><div class="search" style="flex:1;margin:0"><span class="mag">🔍</span><input placeholder="Search students…" value="${esc(S.memberQuery||'')}" oninput="S.memberQuery=this.value; filterMembers()"></div>
-      <button class="btn ghost sm ${S.onlineOnly?'':''}" style="${S.onlineOnly?'background:#e4f6ec;border-color:#bfe8d0;color:#2e9b6a':''}" onclick="S.onlineOnly=!S.onlineOnly;render()">● Online only</button></div>
-    <div id="memberlist">${students.map(row).join('') || '<div class="card tiny" style="text-align:center">No students yet. Invite the first one above.</div>'}</div>`;
+      <button class="btn ghost sm" style="${S.onlineOnly?'background:#e4f6ec;border-color:#bfe8d0;color:#2e9b6a':''}" onclick="S.onlineOnly=!S.onlineOnly;render()">● Online only</button></div>
+    <div id="memberlist">${students.map(row).join('') || '<div class="card tiny" style="text-align:center">No students yet. Press ＋ to add the first one.</div>'}</div>`;
   A.memberRows = list;
 }
 function filterMembers(){
@@ -1875,7 +1881,7 @@ function addMember(){
   if(!email || !email.includes('@')){ $('mb_email').focus(); return; }
   const btn=$('mb_add'); if(btn){ btn.disabled=true; btn.textContent='Adding…'; }
   sbFetch('/rest/v1/sl_staff', { method:'POST', headers:{ Prefer:'return=representation,resolution=merge-duplicates' }, body:JSON.stringify({ email, real_name:name, grade_level: grade ? Number(grade) : null, role, added_by:A.user.id, added_by_alias:A.profile.student_alias, join_code:makeCode() }) })
-    .then(function(rows){ const r = rows && rows[0]; toast(r && r.join_code ? name + ' added · code ' + r.join_code : name + ' added'); render(); })
+    .then(function(rows){ const r = rows && rows[0]; S.addMemberOpen=false; toast(r && r.join_code ? name + ' added · code ' + r.join_code : name + ' added'); render(); })
     .catch(function(e){ toast(e.message); if(btn){ btn.disabled=false; btn.textContent='Add'; } });
 }
 // Codes are made here and stored on the approval row; the join function
