@@ -616,7 +616,6 @@ function classGrid(removable){
       const n=tutorsFor(course).length;
       const next=calItems().filter(e=>e.course===course && e.date>=ymd(new Date())).sort(byWhen)[0];
       return `<div class="card classcard" style="--c:${courseColor(course)}" onclick="openClass('${esc(course)}')">
-        ${removable ? `<button class="rm" title="Remove class" onclick="event.stopPropagation(); removeClass('${esc(course)}')">✕</button>` : ''}
         <div style="font-size:22px">${courseEmoji(course)}</div>
         <div style="font-weight:800;margin-top:4px">${esc(course)}</div>
         <div class="tiny">${n} tutor${n===1?'':'s'} · ${postsFor(course).length} post${postsFor(course).length===1?'':'s'}</div>
@@ -642,7 +641,7 @@ function sessionCard(s){
 function renderClasses(c){
   c.innerHTML = `
     <h2 class="title">${S.mode==='tutor' ? 'Classes I tutor' : 'My classes'}</h2>
-    <div class="lead">${S[classKey()].length ? 'Open a class for its tutors and community.' : (S.mode==='tutor' ? 'Add the classes you can tutor to get started.' : 'Add the classes you are taking to get started.')}</div>
+    <div class="lead">${S[classKey()].length ? 'Open a class for its tutors and community. To drop a class, untick it under Add class.' : (S.mode==='tutor' ? 'Add the classes you can tutor to get started.' : 'Add the classes you are taking to get started.')}</div>
     ${classGrid(true)}
   `;
 }
