@@ -241,50 +241,13 @@ const courseColor = c => (DEPTS.find(d => d.courses.includes(c))?.color) || '#7a
 const courseEmoji = c => (DEPTS.find(d => d.courses.includes(c))?.emoji) || '📚';
 const gradeClass = g => g?.startsWith('A') ? 'g-A' : g?.startsWith('B') ? 'g-B' : 'g-C';
 
-const TUTORS = [
-  { id:'t1', name:'Emma R.', grade:12, color:'#f28fb4', rating:4.9, sessions:12, format:'In person + Virtual',
-    bio:'AP Hug was my favorite class — happy to make the models make sense!',
-    avail:'Tue & Thu after school',
-    courses:[{course:'AP Human Geography',grade:'A',year:'2024–25'},{course:'World History',grade:'A-',year:'2023–24'}] },
-  { id:'t2', name:'Jake T.', grade:11, color:'#7aa7f0', rating:4.7, sessions:8, format:'In person',
-    bio:'I like breaking big topics into simple steps.',
-    avail:'Wed & Fri after school',
-    courses:[{course:'AP Human Geography',grade:'A-',year:'2024–25'},{course:'Algebra II',grade:'B+',year:'2023–24'}] },
-  { id:'t3', name:'Taylor M.', grade:11, color:'#a78be6', rating:4.8, sessions:15, format:'In person + Virtual',
-    bio:'Math clicked for me late, so I get where you\'re stuck.',
-    avail:'Mon & Wed lunch + after school',
-    courses:[{course:'Algebra II',grade:'A',year:'2024–25'},{course:'Precalculus',grade:'B+',year:'2024–25'},{course:'Geometry',grade:'A',year:'2022–23'}] },
-  { id:'t4', name:'Priya S.', grade:12, color:'#63c39a', rating:5.0, sessions:20, format:'Virtual',
-    bio:'Pre-med hopeful — bio & chem are my thing.',
-    avail:'Weeknights (virtual)',
-    courses:[{course:'Chemistry',grade:'A',year:'2023–24'},{course:'AP Biology',grade:'A-',year:'2024–25'},{course:'Biology',grade:'A',year:'2022–23'}] },
-  { id:'t5', name:'Marcus L.', grade:12, color:'#f0a868', rating:4.6, sessions:6, format:'In person',
-    bio:'Physics and calc — I love a good diagram.',
-    avail:'Thu after school',
-    courses:[{course:'AP Calculus',grade:'A',year:'2024–25'},{course:'Physics',grade:'B+',year:'2023–24'}] },
-  { id:'t6', name:'Sofia D.', grade:10, color:'#e0679a', rating:4.9, sessions:9, format:'In person + Virtual',
-    bio:'Native Spanish speaker, patient with the basics.',
-    avail:'Tue & Fri after school',
-    courses:[{course:'Spanish 3',grade:'A',year:'2024–25'},{course:'Spanish 2',grade:'A',year:'2023–24'},{course:'English 10',grade:'A-',year:'2024–25'}] },
-];
-const tutorsFor = course => TUTORS.filter(t => t.courses.some(c => c.course === course));
+// Tutors come from the sl_tutors view: alias, grade, bio and the classes they
+// tutor — never a real name. Grouped per tutor after loading.
+const tutorsFor = course => (S.tutors || []).filter(t => t.courses.some(c => c.course === course));
+const findTutor = id => (S.tutors || []).find(t => t.id === id);
+const TUTOR_COLORS = ['#f28fb4','#7aa7f0','#a78be6','#63c39a','#f0a868','#e0679a','#4d7fd6'];
+const hashStr = str => Array.from(str || '').reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7);
 
-const SEED_POSTS = {
-  'AP Human Geography':[
-    { id:'p1', who:'Sarah K.', txt:'Does anyone actually get the difference between centrifugal and centripetal forces?', replies:[{who:'Jake T.', txt:'Centripetal pulls a country together, centrifugal splits it apart. I can walk you through examples!'}] },
-    { id:'p2', who:'Devon M.', txt:'What\'s on the unit 3 test — is it all migration models?', replies:[] },
-  ],
-  'Algebra II':[
-    { id:'p3', who:'Alex P.', txt:'Can someone explain how to factor when a ≠ 1?', replies:[{who:'Taylor M.', txt:'Try the AC method — multiply a·c, find factors that add to b. Ping me for a session.'}] },
-  ],
-  'Chemistry':[
-    { id:'p4', who:'Nina B.', txt:'Stoichiometry is destroying me. Study group before Thursday?', replies:[{who:'Priya S.', txt:'I\'m down! Library at 3:30?'}] },
-  ],
-};
-const SEED_INCOMING = [
-  { id:'r_seed1', from:'Jordan L.', course:'AP Human Geography', topic:'Migration push/pull factors', date:ymd(addDays(new Date(),2)), time:'3:30 PM', format:'In person', status:'incoming' },
-  { id:'r_seed2', from:'Casey W.', course:'Algebra II', topic:'Factoring & quadratics', date:ymd(addDays(new Date(),4)), time:'Lunch', format:'In person', status:'incoming' },
-].map(r => ({ ...r, day:fmtDate(r.date) }));
 
 /* ============================= STATE ============================= */
 const LS='studylink-v1';
@@ -295,9 +258,9 @@ let S = {
   me:{ name:'You', grade:11, isTutor:false, tutorCourses:[], avail:'' },
   myRequests:[],            // requests I sent to tutors (as student)
   incoming:[],              // requests sent to me (as tutor)
-  sessions:[],              // confirmed upcoming/completed
-  hours:0, helped:0,
-  posts:{},                 // course -> extra posts I added
+  hours:0, helped:0,        // service hours, from completed sessions
+  posts:[],                 // every class-board post (replies have parent_id)
+  tutors:[],                // everyone offering tutoring, grouped per tutor
   mode:'tutee',             // which side of the sidebar is showing: 'tutee' or 'tutor'
   myClasses:[],             // classes I'm taking (Tutee side); they fill the sidebar
   tutorClasses:[],          // classes I can tutor (Tutor side)
@@ -305,8 +268,10 @@ let S = {
   classesOpen:true,         // Classes group expanded in the sidebar
   cal:null,                 // { y, m, sel } — the month on screen
 };
-function load(){ try{ const s=JSON.parse(localStorage.getItem(LS)); if(s) S={...S,...s}; }catch(e){} }
-function save(){ localStorage.setItem(LS, JSON.stringify(S)); }
+// Only preferences live on the device now; everything else is on the server.
+const PREFS = ['mode','classesOpen'];
+function load(){ try{ const s=JSON.parse(localStorage.getItem(LS)); if(s) PREFS.forEach(k=>{ if(k in s) S[k]=s[k]; }); }catch(e){} }
+function save(){ const o={}; PREFS.forEach(k=>o[k]=S[k]); localStorage.setItem(LS, JSON.stringify(o)); }
 const uid = () => 'x'+Math.random().toString(36).slice(2,8);
 
 /* ============================= HELPERS ============================= */
@@ -320,18 +285,31 @@ function openClass(course){ S.tab='classes'; S.overlay={type:'course',course}; t
 function navClasses(){ if(S.tab==='classes' && !S.overlay) S.classesOpen=!S.classesOpen; else S.classesOpen=true; go('classes'); }
 // Tutor and Tutee share the same tabs; each keeps its own list of classes.
 const classKey = () => S.mode==='tutor' ? 'tutorClasses' : 'myClasses';
-function setMode(m){ S.mode=m; S.overlay=null; render(); }
+// The sidebar side also picks which alias you act as: tutor posts and
+// replies go out under the tutor alias, everything else under the student one.
+function setMode(m){ S.mode=m; S.overlay=null; A.role = (m==='tutor' && A.profile && A.profile.tutor_alias) ? 'tutor' : 'student'; S.me.name=currentAlias(); render(); }
 function toggleMenu(v){ menuOpen = v===undefined ? !menuOpen : v; renderNav(); }
 function menuGo(tab){ menuOpen=false; go(tab); }
-function logOut(){
-  menuOpen=false;
-  if(A.demo){ renderNav(); toast('Sign-in is turned off for now, so there is nothing to log out of.'); return; }
-  signOut();
-}
+function logOut(){ menuOpen=false; signOut(); }
 function toggleSide(v){ $('app').classList.toggle('open', v); }
 function open(ov){ S.overlay=ov; render(); }
 function close(){ S.overlay=null; render(); }
-function postsFor(course){ return [ ...(S.posts[course]||[]), ...(SEED_POSTS[course]||[]) ]; }
+// Top-level posts for a class, each with its replies, oldest reply first.
+function postsFor(course){
+  const all = S.posts || [], me = A.user ? A.user.id : null;
+  return all.filter(p => p.course===course && !p.parent_id).map(p => ({
+    id:p.id, who:p.author_alias, txt:p.body, mine:p.author_id===me,
+    replies: all.filter(r => r.parent_id===p.id).sort((a,b)=>a.created_at.localeCompare(b.created_at)).map(r => ({ who:r.author_alias, txt:r.body })),
+  }));
+}
+// Accepted requests, seen from my side of them.
+function sessionsList(){
+  const me = A.user ? A.user.id : null;
+  return [...S.myRequests, ...S.incoming].filter(r => r.status==='accepted').map(r => ({
+    id:r.id, course:r.course, date:r.date, day:fmtDate(r.date), time:r.time||'TBD', format:r.format,
+    with: r.tutor_id===me ? r.student_alias : r.tutor_alias, role: r.tutor_id===me ? 'tutor' : 'student', status:'upcoming',
+  }));
+}
 
 /* ============================= RENDER ============================= */
 function render(){
@@ -344,6 +322,13 @@ function render(){
     document.getElementById('head').innerHTML = '';
     document.getElementById('nav').innerHTML  = '';
     renderAuth();
+    return;
+  }
+  if(!dataLoaded){
+    if(!dataLoading){ dataLoading = true; loadData().then(function(){ dataLoading=false; render(); }).catch(function(e){ dataLoading=false; toast(e.message || 'Could not load your data'); }); }
+    document.getElementById('head').innerHTML = '';
+    document.getElementById('nav').innerHTML  = '';
+    document.getElementById('scroll').innerHTML = '<div class="empty" style="padding-top:80px"><div class="em">📚</div>Loading your StudyLink…</div>';
     return;
   }
   renderHead(); renderBody(); renderNav(); save();
@@ -360,7 +345,7 @@ function renderHead(){
 }
 
 function incomingCount(){
-  return (S.me.isTutor ? SEED_INCOMING.filter(s=>!S.incoming.find(i=>i.id===s.id)).length : 0) + S.incoming.filter(r=>r.status==='incoming').length;
+  return S.incoming.filter(r=>r.status==='pending').length;
 }
 
 // The sidebar: Home Screen, your Classes (a group, like boards in ETS), Calendar.
@@ -426,25 +411,24 @@ function renderBody(){
 function renderSettings(c){
   c.innerHTML = `
     <h2 class="title">Settings</h2>
-    <div class="lead">These stay on this device.</div>
+    <div class="lead">Saved to your account.</div>
     <div class="card">
       <div class="field"><label>Grade</label>
-        <select onchange="S.me.grade=+this.value; render()">${[9,10,11,12].map(g=>`<option ${S.me.grade===g?'selected':''}>${g}</option>`).join('')}</select></div>
+        <select onchange="setGrade(+this.value)">${[9,10,11,12].map(g=>`<option ${S.me.grade===g?'selected':''}>${g}</option>`).join('')}</select></div>
       <div class="field" style="margin-bottom:0"><label>Open the sidebar on</label>
         <div class="seg">
           <button class="${S.mode==='tutor'?'on':''}" onclick="setMode('tutor')">🎓 Tutor</button>
           <button class="${S.mode==='tutee'?'on':''}" onclick="setMode('tutee')">📖 Tutee</button>
         </div></div>
     </div>
-    <div class="sectlabel">Data</div>
+    <div class="sectlabel">Account</div>
     <div class="card">
-      <div class="tiny" style="margin-bottom:10px">Clears your classes, calendar and requests on this device.</div>
-      ${S.confirmReset
-        ? `<div class="row" style="gap:8px"><button class="btn sm gray" style="flex:1" onclick="S.confirmReset=false; render()">Cancel</button>
-             <button class="btn sm pink" style="flex:1" onclick="localStorage.removeItem(LS); location.reload()">Yes, clear it</button></div>`
-        : `<button class="btn gray" onclick="S.confirmReset=true; render()">Reset my data</button>`}
+      <div style="font-weight:800">${esc(A.profile.student_alias)}</div>
+      <div class="tiny">${A.profile.tutor_alias ? 'Tutoring as ' + esc(A.profile.tutor_alias) + ' · ' : ''}Grade ${S.me.grade}</div>
+      <button class="btn gray" style="margin-top:12px" onclick="logOut()">Log out</button>
     </div>`;
 }
+function setGrade(g){ S.me.grade=g; render(); sbFetch('/rest/v1/sl_profiles?id=eq.'+A.user.id, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ grade_level:g }) }).catch(e=>toast(e.message)); }
 function renderHelp(c){
   const q = (h, t) => `<div class="card"><div style="font-weight:800;margin-bottom:4px">${h}</div><div class="tiny" style="font-size:13px;line-height:1.5">${t}</div></div>`;
   c.innerHTML = `
@@ -560,14 +544,25 @@ function filterAdd(q){
 }
 function toggleClass(course){
   const q=$('acq')?.value||'';
-  if(S[classKey()].includes(course)) S[classKey()]=S[classKey()].filter(x=>x!==course);
-  else S[classKey()].push(course);
+  const key=classKey(), had=S[key].includes(course);
+  S[key] = had ? S[key].filter(x=>x!==course) : [...S[key], course];
   render();
   if(q){ $('acq').value=q; filterAdd(q); }
+  saveClass(course, !had);
+}
+// The class lists are written straight through; a failure reloads from the server.
+function saveClass(course, add){
+  const me=A.user.id, tutor=S.mode==='tutor';
+  const table = tutor ? 'sl_tutor_courses' : 'sl_student_classes';
+  const p = add
+    ? sbFetch('/rest/v1/'+table, { method:'POST', headers:{ Prefer:'return=minimal,resolution=ignore-duplicates' }, body:JSON.stringify(tutor ? { user_id:me, course, availability:S.me.avail||'' } : { user_id:me, course }) })
+    : sbFetch('/rest/v1/'+table+'?user_id=eq.'+me+'&course=eq.'+encodeURIComponent(course), { method:'DELETE', headers:{ Prefer:'return=minimal' } });
+  p.then(function(){ if(tutor) return loadData().then(render); }).catch(function(e){ toast(e.message); loadData().then(render); });
 }
 function removeClass(course){
   S[classKey()]=S[classKey()].filter(x=>x!==course);
   render(); toast('Removed '+course);
+  saveClass(course, false);
 }
 
 /* -------- CALENDAR -------- */
@@ -576,8 +571,8 @@ const EVENT_KINDS = { test:'📝 Test', homework:'📚 Homework', study:'📖 St
 function calItems(){
   return [
     ...S.events,
-    ...S.sessions.filter(x=>x.date && x.status!=='done').map(x=>({ id:x.id, date:x.date, time:x.time, course:x.course, kind:'session', title:(x.role==='tutor'?'Tutoring ':'Session with ')+x.with, fixed:true })),
-    ...S.myRequests.filter(r=>r.date && r.status==='pending').map(r=>({ id:r.id, date:r.date, time:r.time, course:r.course, kind:'pending', title:'Waiting on '+r.tutor, fixed:true })),
+    ...sessionsList().filter(x=>x.date).map(x=>({ id:x.id, date:x.date, time:x.time, course:x.course, kind:'session', title:(x.role==='tutor'?'Tutoring ':'Session with ')+x.with, fixed:true })),
+    ...S.myRequests.filter(r=>r.date && r.status==='pending').map(r=>({ id:r.id, date:r.date, time:r.time, course:r.course, kind:'pending', title:'Waiting on '+r.tutor_alias, fixed:true })),
   ];
 }
 const byWhen = (a,b) => a.date.localeCompare(b.date) || (a.time||'').localeCompare(b.time||'');
@@ -657,12 +652,17 @@ function addEvent(){
   if(!title){ $('ev_title').focus(); return; }
   const t=$('ev_time').value;
   const time = t ? new Date('2000-01-01T'+t).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}) : '';
-  S.events.push({ id:uid(), date:S.cal.sel, time, title, kind:$('ev_kind').value, course:$('ev_course').value });
+  const ev={ id:uid(), user_id:A.user.id, date:S.cal.sel, time, title, kind:$('ev_kind').value, course:$('ev_course').value };
+  S.events.push(ev);
   render(); toast('Added to '+fmtDate(S.cal.sel));
+  sbFetch('/rest/v1/sl_events', { method:'POST', body:JSON.stringify({ user_id:ev.user_id, date:ev.date, time, title, kind:ev.kind, course:ev.course }) })
+    .then(function(rows){ if(rows && rows[0]) ev.id = rows[0].id; })
+    .catch(function(e){ toast(e.message); loadData().then(render); });
 }
 function deleteEvent(id){
   S.events=S.events.filter(e=>e.id!==id);
   render();
+  sbFetch('/rest/v1/sl_events?id=eq.'+id, { method:'DELETE', headers:{ Prefer:'return=minimal' } }).catch(function(e){ toast(e.message); loadData().then(render); });
 }
 
 /* -------- COURSE DETAIL (overlay) -------- */
@@ -693,19 +693,19 @@ function renderCourseDetail(c, course){
   `;
 }
 function tutorCard(t, course){
-  const cc = t.courses.find(x=>x.course===course);
+  const cc = t.courses.find(x=>x.course===course) || {};
   return `<div class="card tutorcard">
     <div class="top">
       <div class="avatar" style="background:${t.color}">${initials(t.name)}</div>
       <div style="flex:1;min-width:0">
-        <div class="row" style="gap:8px"><h3>${esc(t.name)}</h3><span class="tiny">Grade ${t.grade}</span>
-          <span class="stars" style="margin-left:auto">★ ${t.rating}</span></div>
+        <div class="row" style="gap:8px"><h3>${esc(t.name)}</h3>${t.grade?`<span class="tiny">Grade ${t.grade}</span>`:''}
+          <span class="tiny" style="margin-left:auto">${t.sessions} session${t.sessions===1?'':'s'}</span></div>
         <div style="margin-top:4px">
-          <span class="grade ${gradeClass(cc.grade)}">${esc(course)}: ${cc.grade}</span>
-          <span class="tiny" style="margin-left:6px">Taken ${cc.year}</span>
+          ${cc.grade ? `<span class="grade ${gradeClass(cc.grade)}">${esc(course)}: ${esc(cc.grade)}</span>` : `<span class="tiny">${esc(course)}</span>`}
+          ${cc.year ? `<span class="tiny" style="margin-left:6px">Taken ${esc(cc.year)}</span>` : ''}
         </div>
-        <div class="tiny" style="margin-top:5px">🗓️ ${esc(t.avail)} · ${esc(t.format)}</div>
-        <div class="tiny" style="margin-top:2px">${t.sessions} sessions completed</div>
+        <div class="tiny" style="margin-top:5px">🗓️ ${esc(t.avail||'Availability not set')} · ${esc(t.format)}</div>
+        ${t.bio ? `<div class="tiny" style="margin-top:2px">${esc(t.bio)}</div>` : ''}
       </div>
     </div>
     <div style="margin-top:10px" class="row">
@@ -718,32 +718,32 @@ function setFilter(k,v){ S.overlay.filter={...(S.overlay.filter||{})}; if(v) S.o
 
 /* -------- TUTOR PROFILE (overlay) -------- */
 function renderTutorProfile(c){
-  const t=TUTORS.find(x=>x.id===S.overlay.id); if(!t){close();return;}
+  const t=findTutor(S.overlay.id); if(!t){close();return;}
   c.innerHTML=`
     <button class="back" onclick="close()">‹ Back</button>
     <div class="card">
       <div class="row"><div class="avatar" style="background:${t.color};width:56px;height:56px;font-size:22px">${initials(t.name)}</div>
         <div><h2 class="title" style="margin:0">${esc(t.name)}</h2>
-        <div class="tiny">Grade ${t.grade} · ★ ${t.rating} · ${t.sessions} sessions</div></div></div>
-      <p style="font-size:14px;color:#555;margin:12px 0 4px">${esc(t.bio)}</p>
-      <div class="tiny">🗓️ ${esc(t.avail)} · ${esc(t.format)}</div>
-      <div class="sectlabel">Classes taken</div>
-      ${t.courses.map(cc=>`<div class="row" style="margin-bottom:6px"><span class="grade ${gradeClass(cc.grade)}">${cc.grade}</span>
-        <span style="font-weight:700;font-size:14px">${esc(cc.course)}</span><span class="tiny" style="margin-left:auto">${cc.year}</span></div>`).join('')}
+        <div class="tiny">${t.grade?'Grade '+t.grade+' · ':''}${t.sessions} session${t.sessions===1?'':'s'} completed</div></div></div>
+      ${t.bio ? `<p style="font-size:14px;color:#555;margin:12px 0 4px">${esc(t.bio)}</p>` : ''}
+      <div class="tiny" style="margin-top:8px">🗓️ ${esc(t.avail||'Availability not set')} · ${esc(t.format)}</div>
+      <div class="sectlabel">Classes tutored</div>
+      ${t.courses.map(cc=>`<div class="row" style="margin-bottom:6px">${cc.grade?`<span class="grade ${gradeClass(cc.grade)}">${esc(cc.grade)}</span>`:''}
+        <span style="font-weight:700;font-size:14px">${esc(cc.course)}</span><span class="tiny" style="margin-left:auto">${esc(cc.year||'')}</span></div>`).join('')}
     </div>
-    <div style="margin-top:12px"><button class="btn" onclick="open({type:'request',id:'${t.id}',course:'${esc(t.courses[0].course)}'})">Request tutoring</button></div>
+    <div style="margin-top:12px"><button class="btn" onclick="open({type:'request',id:'${t.id}',course:'${esc(S.overlay.course||t.courses[0].course)}'})">Request tutoring</button></div>
   `;
 }
 
 /* -------- REQUEST TUTORING (overlay) -------- */
 function renderRequest(c){
-  const t=TUTORS.find(x=>x.id===S.overlay.id); if(!t){close();return;}
+  const t=findTutor(S.overlay.id); if(!t){close();return;}
   const course=S.overlay.course;
   const coursesTutored=t.courses.map(x=>x.course);
   c.innerHTML=`
     <button class="back" onclick="close()">‹ Back</button>
     <h2 class="title">Request tutoring</h2>
-    <div class="lead">with ${esc(t.name)} · ★ ${t.rating}</div>
+    <div class="lead">with ${esc(t.name)}</div>
     <div class="card">
       <div class="field"><label>Course</label>
         <select id="rq_course">${coursesTutored.map(x=>`<option ${x===course?'selected':''}>${esc(x)}</option>`).join('')}</select></div>
@@ -759,49 +759,51 @@ function renderRequest(c){
           <button data-v="Virtual">Virtual</button>
         </div></div>
     </div>
-    <div style="margin-top:14px"><button class="btn" onclick="submitRequest('${t.id}')">Send request to ${esc(t.name.split(' ')[0])}</button></div>
+    <div style="margin-top:14px"><button class="btn" id="rq_send" onclick="submitRequest('${t.id}')">Send request to ${esc(t.name)}</button></div>
     <p class="tiny" style="text-align:center;margin-top:10px">🔒 Coordination stays inside StudyLink — no phone numbers or personal emails shared.</p>
   `;
   c.querySelectorAll('#rq_fmt button').forEach(b=>b.onclick=()=>{ c.querySelectorAll('#rq_fmt button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); });
 }
-function submitRequest(tid){
-  const t=TUTORS.find(x=>x.id===tid);
+async function submitRequest(tid){
+  const t=findTutor(tid); if(!t) return;
   const course=$('rq_course').value;
   const topic=$('rq_topic').value.trim()||'General help';
-  const date=$('rq_day').value||'';
-  const day=fmtDate(date);
+  const note=($('rq_desc').value||'').trim();
+  const date=$('rq_day').value||null;
   const time=$('rq_time').value.trim()||'TBD';
   const fmt=document.querySelector('#rq_fmt button.on')?.dataset.v||'In person';
-  const req={ id:uid(), tutor:t.name, tutorId:tid, course, topic, date, day, time, format:fmt, status:'pending' };
-  S.myRequests.unshift(req);
-  close(); go('tutoring');
-  toast('Request sent to '+t.name.split(' ')[0]+' 🎉');
-  // Simulate the tutor accepting shortly (prototype).
-  setTimeout(()=>{
-    const r=S.myRequests.find(x=>x.id===req.id); if(!r||r.status!=='pending')return;
-    r.status='confirmed';
-    S.sessions.unshift({ id:uid(), course:r.course, date:r.date, day:r.day, time:r.time, with:r.tutor, format:r.format, role:'student', status:'upcoming' });
-    save(); if(!S.overlay) render();
-    toast(t.name.split(' ')[0]+' accepted your request ✅');
-  }, 4500);
+  const btn=$('rq_send'); if(btn){ btn.disabled=true; btn.textContent='Sending…'; }
+  try{
+    await sbFetch('/rest/v1/sl_requests', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({
+      student_id:A.user.id, tutor_id:tid, student_alias:A.profile.student_alias, tutor_alias:t.name,
+      course, topic, note, date, time, format:fmt }) });
+    await loadData();
+    close(); go('tutoring');
+    toast('Request sent to '+t.name+' 🎉');
+  }catch(e){
+    toast(e.message); if(btn){ btn.disabled=false; btn.textContent='Send request to '+t.name; }
+  }
 }
 
 /* -------- TUTORING -------- */
 function renderTutoring(c){
-  // merge seeded incoming (once) into state so they persist actions
-  if(S.me.isTutor){ SEED_INCOMING.forEach(s=>{ if(!S.incoming.find(i=>i.id===s.id)) S.incoming.push({...s}); }); }
-  const inc = S.incoming.filter(r=>r.status==='incoming');
+  const inc = S.incoming.filter(r=>r.status==='pending');
+  const mine = S.myRequests.filter(r=>r.status!=='cancelled');
+  const tutoring = sessionsList().filter(s=>s.role==='tutor');
+  const label = { pending:'Pending', accepted:'Confirmed', declined:'Declined', done:'Done' };
+  const style = { accepted:'background:#e4f6ec;color:#2e9b6a', done:'background:#eef0f6;color:#5b6077', declined:'background:#fdecef;color:#c23b5e' };
   c.innerHTML=`
     <h2 class="title">Tutoring</h2>
     <div class="lead">Your requests and sessions.</div>
 
-    ${S.me.isTutor ? `
+    ${S.me.isTutor || inc.length ? `
       <div class="sectlabel">Requests to you ${inc.length?`(${inc.length})`:''}</div>
       ${inc.length ? inc.map(r=>`
         <div class="card">
-          <div class="row"><div class="avatar" style="background:${courseColor(r.course)}">${initials(r.from)}</div>
-            <div><div style="font-weight:800">${esc(r.from)}</div><div class="tiny">${esc(r.course)} · ${esc(r.topic)}</div></div></div>
-          <div class="tiny" style="margin:8px 0 10px">🗓️ ${esc(r.day)} · ${esc(r.time)} · ${esc(r.format)}</div>
+          <div class="row"><div class="avatar" style="background:${courseColor(r.course)}">${initials(r.student_alias)}</div>
+            <div><div style="font-weight:800">${esc(r.student_alias)}</div><div class="tiny">${esc(r.course)} · ${esc(r.topic)}</div></div></div>
+          ${r.note ? `<div style="font-size:13px;margin:8px 0 0;color:#555">${esc(r.note)}</div>` : ''}
+          <div class="tiny" style="margin:8px 0 10px">🗓️ ${esc(fmtDate(r.date))} · ${esc(r.time||'TBD')} · ${esc(r.format)}</div>
           <div class="row" style="gap:8px">
             <button class="btn sm gray" style="flex:1" onclick="respondRequest('${r.id}',false)">Decline</button>
             <button class="btn sm green" style="flex:1" onclick="respondRequest('${r.id}',true)">Accept</button>
@@ -809,51 +811,51 @@ function renderTutoring(c){
         </div>`).join('') : `<div class="card tiny" style="text-align:center">No new requests right now.</div>`}
     ` : ''}
 
+    ${tutoring.length ? `<div class="sectlabel">Sessions you're tutoring</div>${tutoring.map(sessionCard).join('')}` : ''}
+
     <div class="sectlabel">Your tutoring (as student)</div>
-    ${S.myRequests.length ? S.myRequests.map(r=>`
+    ${mine.length ? mine.map(r=>`
       <div class="card row">
         <div class="avatar" style="background:${courseColor(r.course)}">${courseEmoji(r.course)}</div>
         <div style="min-width:0"><div style="font-weight:800">${esc(r.course)}</div>
-          <div class="tiny">${esc(r.topic)} · with ${esc(r.tutor)} · ${esc(r.day)} ${esc(r.time)}</div></div>
-        <span class="pill" style="margin-left:auto;${r.status==='confirmed'?'background:#e4f6ec;color:#2e9b6a':''}">${r.status==='confirmed'?'Confirmed':'Pending'}</span>
-      </div>`).join('') : `<div class="card tiny" style="text-align:center">You haven\'t requested tutoring yet. Head to Classes to find a tutor.</div>`}
-
-    ${S.sessions.filter(s=>s.role==='tutor').length ? `<div class="sectlabel">Sessions you're tutoring</div>
-      ${S.sessions.filter(s=>s.role==='tutor').map(sessionCard).join('')}`:''}
+          <div class="tiny">${esc(r.topic)} · with ${esc(r.tutor_alias)} · ${esc(fmtDate(r.date))} ${esc(r.time||'')}</div></div>
+        <span class="pill" style="margin-left:auto;${style[r.status]||''}">${label[r.status]||r.status}</span>
+        ${r.status==='pending' ? `<button class="del" title="Cancel request" style="border:none;background:none;color:var(--muted);cursor:pointer;font-size:16px" onclick="cancelRequest('${r.id}')">✕</button>` : ''}
+      </div>`).join('') : `<div class="card tiny" style="text-align:center">You haven't requested tutoring yet. Open a class to find a tutor.</div>`}
   `;
 }
+// Status changes go to the server, then everything reloads so both sides agree.
+function patchRequest(id, patch, okMsg){
+  return sbFetch('/rest/v1/sl_requests?id=eq.'+id, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body:JSON.stringify(patch) })
+    .then(loadData).then(function(){ render(); if(okMsg) toast(okMsg); })
+    .catch(function(e){ toast(e.message); });
+}
+function cancelRequest(id){ patchRequest(id, { status:'cancelled' }, 'Request cancelled'); }
 function respondRequest(id, accept){
   const r=S.incoming.find(x=>x.id===id); if(!r)return;
-  r.status=accept?'accepted':'declined';
-  if(accept){
-    S.sessions.unshift({ id:uid(), course:r.course, date:r.date, day:r.day, time:r.time, with:r.from, format:r.format, role:'tutor', status:'upcoming' });
-    toast('Session confirmed with '+r.from.split(' ')[0]+' ✅');
-  } else toast('Request declined');
-  render();
+  patchRequest(id, { status: accept ? 'accepted' : 'declined' }, accept ? 'Session confirmed with '+r.student_alias+' ✅' : 'Request declined');
 }
 function completeSession(id){
-  const s=S.sessions.find(x=>x.id===id); if(!s)return;
-  s.status='done';
-  S.hours=Math.round((S.hours+0.75)*100)/100; S.helped+=1;
-  toast('Logged 0.75 service hours 🎉');
-  render();
+  patchRequest(id, { status:'done', done_at:new Date().toISOString() }, 'Logged 0.75 service hours 🎉');
 }
 
 /* -------- COMMUNITY -------- */
 function renderCommunity(c){
-  const active = ['AP Human Geography','Algebra II','Chemistry','AP Biology','Spanish 3'];
+  // Your classes on both sides, plus any class that already has a conversation.
+  const withPosts = (S.posts||[]).map(p=>p.course);
+  const active = ALL_COURSES.filter(x => S.myClasses.includes(x) || S.tutorClasses.includes(x) || withPosts.includes(x));
   c.innerHTML=`
     <h2 class="title">Community</h2>
     <div class="lead">Ask a question — someone in your class can help.</div>
-    ${active.map(course=>{
+    ${active.length ? active.map(course=>{
       const posts=postsFor(course);
       return `<div class="card row" style="cursor:pointer" onclick="open({type:'board',course:'${esc(course)}'})">
         <div class="avatar" style="background:${courseColor(course)}">${courseEmoji(course)}</div>
         <div style="min-width:0"><div style="font-weight:800">${esc(course)}</div>
-          <div class="tiny">${posts.length} post${posts.length===1?'':'s'} · ${tutorsFor(course).length} tutors here</div></div>
+          <div class="tiny">${posts.length} post${posts.length===1?'':'s'} · ${tutorsFor(course).length} tutor${tutorsFor(course).length===1?'':'s'} here</div></div>
         <div style="margin-left:auto;color:var(--muted)">›</div>
       </div>`;
-    }).join('')}
+    }).join('') : `<div class="empty"><div class="em">💬</div>Add a class and its community shows up here.</div>`}
   `;
 }
 function renderBoard(c){
@@ -872,9 +874,14 @@ function renderBoard(c){
       ${posts.length ? posts.map(p=>`
         <div class="post">
           <div class="row"><div class="avatar" style="width:30px;height:30px;font-size:12px;background:${courseColor(course)}">${initials(p.who)}</div>
-            <div class="who">${esc(p.who)}</div></div>
+            <div class="who">${esc(p.who)}</div>
+            ${p.mine ? `<button class="del" title="Delete post" style="margin-left:auto;border:none;background:none;color:var(--muted);cursor:pointer" onclick="deletePost('${p.id}')">✕</button>` : ''}</div>
           <div class="txt">${esc(p.txt)}</div>
           ${(p.replies||[]).map(r=>`<div class="reply"><b>${esc(r.who)}</b> · ${esc(r.txt)}</div>`).join('')}
+          <div class="composer" style="margin-top:8px">
+            <input id="rp_${p.id}" placeholder="Reply as ${esc(currentAlias())}…" onkeydown="if(event.key==='Enter')addReply('${p.id}','${esc(course)}')">
+            <button class="btn ghost sm" onclick="addReply('${p.id}','${esc(course)}')">Reply</button>
+          </div>
           <button class="btn ghost sm" style="margin-top:8px" onclick="open({type:'course',course:'${esc(course)}'})">Find a tutor for this</button>
         </div>`).join('') : `<div class="empty"><div class="em">💬</div>No posts yet — be the first to ask!</div>`}
     </div>
@@ -882,9 +889,21 @@ function renderBoard(c){
 }
 function addPost(course){
   const inp=$('post_in'); const txt=(inp.value||'').trim(); if(!txt)return;
-  S.posts[course]=S.posts[course]||[];
-  S.posts[course].unshift({ id:uid(), who:S.me.name, txt, replies:[] });
-  render(); toast('Posted to '+course);
+  inp.value='';
+  sendPost(course, txt, null).then(function(){ toast('Posted to '+course); });
+}
+function addReply(postId, course){
+  const inp=$('rp_'+postId); const txt=(inp && inp.value||'').trim(); if(!txt)return;
+  inp.value='';
+  sendPost(course, txt, postId);
+}
+function sendPost(course, body, parent_id){
+  return sbFetch('/rest/v1/sl_posts', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ course, body, parent_id, author_id:A.user.id, author_alias:currentAlias() }) })
+    .then(loadData).then(render).catch(function(e){ toast(e.message); });
+}
+function deletePost(id){
+  S.posts = S.posts.filter(p => p.id!==id && p.parent_id!==id); render();
+  sbFetch('/rest/v1/sl_posts?id=eq.'+id, { method:'DELETE', headers:{ Prefer:'return=minimal' } }).catch(function(e){ toast(e.message); loadData().then(render); });
 }
 
 /* -------- PROFILE -------- */
@@ -894,21 +913,21 @@ function renderProfile(c){
     <h2 class="title">Profile</h2>
     <div class="card">
       <div class="row"><div class="avatar" style="width:54px;height:54px;font-size:20px;background:linear-gradient(135deg,var(--blue),var(--purple))">${initials(me.name)}</div>
-        <div style="flex:1"><input id="me_name" value="${esc(me.name)}" style="font-weight:800;font-size:17px;border:none;outline:none;width:100%" onchange="S.me.name=this.value.trim()||'You';render()">
-        <div class="tiny">${me.isTutor?'Tutor + Student':'Student'} · Grade ${me.grade}</div></div></div>
+        <div style="flex:1"><div style="font-weight:800;font-size:17px">${esc(A.profile.student_alias)}</div>
+        <div class="tiny">${A.profile.tutor_alias ? 'Tutoring as '+esc(A.profile.tutor_alias)+' · ' : ''}${me.isTutor?'Tutor + Student':'Student'} · Grade ${me.grade}</div></div></div>
     </div>
 
     ${me.isTutor ? `
       <div class="sectlabel">Community service</div>
       <div class="statgrid">
-        <div class="stat"><div class="n" style="color:var(--green)">${me.tutorCourses.length?S.hours:0}</div><div class="l">hours</div></div>
+        <div class="stat"><div class="n" style="color:var(--green)">${S.hours}</div><div class="l">hours</div></div>
         <div class="stat"><div class="n" style="color:var(--blue-d)">${S.helped}</div><div class="l">students helped</div></div>
         <div class="stat"><div class="n" style="color:var(--purple)">${me.tutorCourses.length}</div><div class="l">subjects</div></div>
       </div>
       <div class="sectlabel">Classes you tutor</div>
       <div class="card">
-        ${me.tutorCourses.length ? me.tutorCourses.map(tc=>`<div class="row" style="margin-bottom:6px"><span class="grade ${gradeClass(tc.grade)}">${tc.grade}</span>
-          <span style="font-weight:700;font-size:14px">${esc(tc.course)}</span><span class="tiny" style="margin-left:auto">${esc(tc.year)}</span></div>`).join('') : `<div class="tiny">No classes added yet.</div>`}
+        ${me.tutorCourses.length ? me.tutorCourses.map(tc=>`<div class="row" style="margin-bottom:6px">${tc.grade?`<span class="grade ${gradeClass(tc.grade)}">${esc(tc.grade)}</span>`:''}
+          <span style="font-weight:700;font-size:14px">${esc(tc.course)}</span><span class="tiny" style="margin-left:auto">${esc(tc.year||'')}</span></div>`).join('') : `<div class="tiny">No classes added yet.</div>`}
         <button class="btn ghost sm" style="width:100%;margin-top:10px" onclick="open({type:'becomeTutor'})">Edit tutoring classes</button>
       </div>
       <div class="tiny" style="margin:12px 2px">🗓️ Available: ${esc(me.avail||'not set')}</div>
@@ -922,15 +941,18 @@ function renderProfile(c){
     `}
 
     <div class="sectlabel">Account</div>
-    <div class="card tiny">🔒 Riverside High students only. Your schedule and contact info stay private; coordination happens in-app.</div>
-    <button class="btn gray" style="margin-top:14px" onclick="if(confirm('Reset the prototype data?')){localStorage.removeItem(LS);location.reload()}">Reset prototype</button>
+    <div class="card tiny">🔒 Other members only ever see your aliases. Your name and email stay with the school administrator; coordination happens in-app.</div>
+    <button class="btn gray" style="margin-top:14px" onclick="logOut()">Log out</button>
   `;
 }
 
 /* -------- BECOME A TUTOR (overlay, multi-step) -------- */
 function renderBecomeTutor(c){
   S.overlay.step = S.overlay.step || 1;
-  S.overlay.draft = S.overlay.draft || { courses:{}, avail:S.me.avail||'' };
+  if(!S.overlay.draft){
+    const courses={}; S.me.tutorCourses.forEach(tc=>{ courses[tc.course]={ grade:tc.grade||'A', year:tc.year||'2024–25' }; });
+    S.overlay.draft = { courses, avail:S.me.avail||'', bio:(A.profile&&A.profile.tutor_bio)||'', format:(A.profile&&A.profile.tutor_format)||'In person' };
+  }
   const d=S.overlay.draft, step=S.overlay.step;
   const GRADES=['A','A-','B+','B','B-','C+','C'];
   if(step===1){
@@ -964,27 +986,44 @@ function renderBecomeTutor(c){
       <button class="back" onclick="S.overlay.step=2;render()">‹ Back</button>
       <h2 class="title">Availability</h2>
       <div class="lead">Step 3 of 3 · When can you help?</div>
-      <div class="card"><div class="field" style="margin:0"><label>Your availability</label>
-        <input id="av" value="${esc(d.avail)}" placeholder="e.g. Tue & Thu after school" oninput="d.avail=this.value"></div></div>
+      <div class="card">
+        <div class="field"><label>Your availability</label>
+          <input id="av" value="${esc(d.avail)}" placeholder="e.g. Tue & Thu after school" oninput="S.overlay.draft.avail=this.value"></div>
+        <div class="field"><label>Format</label>
+          <div class="seg">${['In person','Virtual','In person + Virtual'].map(f=>`<button class="${d.format===f?'on':''}" onclick="S.overlay.draft.format='${f}';render()">${f}</button>`).join('')}</div></div>
+        <div class="field" style="margin:0"><label>A line about you (optional)</label>
+          <input id="bio" value="${esc(d.bio)}" maxlength="140" placeholder="e.g. Math clicked for me late, so I get where you're stuck." oninput="S.overlay.draft.bio=this.value"></div>
+      </div>
       <div class="card" style="margin-top:12px;text-align:center">
         <div style="font-size:34px">🎉</div>
         <div style="font-weight:800;margin:6px 0 2px">You're ready to tutor!</div>
         <div class="tiny">${Object.keys(d.courses).length} classes · service hours will track automatically.</div>
       </div>
-      <div style="margin-top:16px"><button class="btn green" onclick="finishTutor()">Finish — start tutoring</button></div>
+      <div style="margin-top:16px"><button class="btn green" id="ft_btn" onclick="finishTutor()">Finish — start tutoring</button></div>
     `;
   }
 }
 function toggleTutorCourse(course){ const d=S.overlay.draft; if(d.courses[course])delete d.courses[course]; else d.courses[course]={grade:'A',year:'2024–25'}; render(); }
 function d_grade(course,v){ S.overlay.draft.courses[course].grade=v; }
 function d_year(course,v){ S.overlay.draft.courses[course].year=v; }
-function finishTutor(){
-  const d=S.overlay.draft;
-  S.me.isTutor=true;
-  S.me.avail=$('av')?$('av').value.trim():d.avail;
-  S.me.tutorCourses=Object.entries(d.courses).map(([course,v])=>({course,grade:v.grade,year:v.year}));
-  close(); go('tutoring');
-  toast('You\'re now a tutor! 🎓');
+async function finishTutor(){
+  const d=S.overlay.draft, me=A.user.id;
+  const avail=$('av')?$('av').value.trim():d.avail;
+  const bio=$('bio')?$('bio').value.trim():d.bio;
+  const btn=$('ft_btn'); if(btn){ btn.disabled=true; btn.textContent='Saving…'; }
+  try{
+    await ensureTutorAlias();
+    await sbFetch('/rest/v1/sl_profiles?id=eq.'+me, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ tutor_bio:bio, tutor_format:d.format }) });
+    await sbFetch('/rest/v1/sl_tutor_courses?user_id=eq.'+me, { method:'DELETE', headers:{ Prefer:'return=minimal' } });
+    const rows=Object.entries(d.courses).map(([course,v])=>({ user_id:me, course, grade:v.grade, year:v.year, availability:avail }));
+    if(rows.length) await sbFetch('/rest/v1/sl_tutor_courses', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify(rows) });
+    await loadData();
+    S.mode='tutor'; A.role='tutor'; S.me.name=currentAlias();
+    close(); go('tutoring');
+    toast('You\'re now tutoring as '+A.profile.tutor_alias+' 🎓');
+  }catch(e){
+    toast(e.message); if(btn){ btn.disabled=false; btn.textContent='Finish — start tutoring'; }
+  }
 }
 
 /* -------- SEARCH (overlay) -------- */
@@ -1194,7 +1233,7 @@ function currentAlias(){
 }
 // Login is parked while the signed-in screens get built. Flip to false to
 // bring the sign-in screen back.
-const SKIP_LOGIN = true;
+const SKIP_LOGIN = false;
 function useDemoProfile(){
   A.demo = true;
   A.profile = { student_alias:'Student 14', tutor_alias:null };
@@ -1262,7 +1301,7 @@ async function signIn(idOrEmail, password){
     method:'POST', headers:{ Authorization:'Bearer ' + SKEY },
     body: JSON.stringify({ email, password })
   });
-  A.token = d.access_token; A.user = d.user; saveSession();
+  A.token = d.access_token; A.user = d.user; saveSession(); dataLoaded = false;
   return await ensureProfile();   // issues the alias if this is their first sign-in
 }
 
@@ -1336,12 +1375,65 @@ async function restoreSession(){
   try{
     const raw = localStorage.getItem(AUTH_LS); if(!raw) return false;
     const s = JSON.parse(raw); if(!s || !s.token) return false;
-    A.token = s.token; A.user = s.user;
+    A.token = s.token; A.user = s.user; dataLoaded = false;
     await loadProfile();
     return !!A.profile;
   }catch(e){ clearSession(); return false; }
 }
-function signOut(){ clearSession(); A.authView='signin'; render(); }
+function signOut(){
+  clearSession(); dataLoaded=false; A.role='student';
+  Object.assign(S, { myRequests:[], incoming:[], posts:[], tutors:[], myClasses:[], tutorClasses:[], events:[], hours:0, helped:0, tab:'home', overlay:null });
+  S.me = { name:'You', grade:11, isTutor:false, tutorCourses:[], avail:'' };
+  A.authView='signin'; render();
+}
+
+/* ============================= DATA (server) ============================= */
+// Everything the signed-in person can see, loaded after sign-in and again
+// after any change. A school's worth of rows is small; no paging needed.
+let dataLoaded = false, dataLoading = false;
+async function loadData(){
+  if(!A.user) return;
+  const me = A.user.id;
+  const [classes, tcourses, reqs, events, tutors, posts] = await Promise.all([
+    sbFetch('/rest/v1/sl_student_classes?select=course&user_id=eq.'+me+'&order=created_at'),
+    sbFetch('/rest/v1/sl_tutor_courses?select=course,grade,year,availability&user_id=eq.'+me+'&order=created_at'),
+    sbFetch('/rest/v1/sl_requests?select=*&or=(student_id.eq.'+me+',tutor_id.eq.'+me+')&order=created_at.desc'),
+    sbFetch('/rest/v1/sl_events?select=*&user_id=eq.'+me+'&order=date'),
+    sbFetch('/rest/v1/sl_tutors?select=*'),
+    sbFetch('/rest/v1/sl_posts?select=*&order=created_at.desc&limit=500'),
+  ]);
+  S.myClasses = (classes||[]).map(r=>r.course);
+  S.tutorClasses = (tcourses||[]).map(r=>r.course);
+  S.me.tutorCourses = (tcourses||[]).map(r=>({ course:r.course, grade:r.grade||'', year:r.year||'' }));
+  S.me.avail = ((tcourses||[]).find(r=>r.availability)||{}).availability || '';
+  S.me.isTutor = !!(A.profile && A.profile.tutor_alias) && S.tutorClasses.length > 0;
+  S.myRequests = (reqs||[]).filter(r=>r.student_id===me);
+  S.incoming = (reqs||[]).filter(r=>r.tutor_id===me);
+  S.events = events||[];
+  S.posts = posts||[];
+  S.tutors = buildTutors(tutors||[], me);
+  S.helped = S.incoming.filter(r=>r.status==='done').length;
+  S.hours = Math.round(S.helped*0.75*100)/100;
+  if(S.mode==='tutor' && !(A.profile && A.profile.tutor_alias)) S.mode='tutee';
+  A.role = (S.mode==='tutor' && A.profile && A.profile.tutor_alias) ? 'tutor' : 'student';
+  S.me.name = currentAlias();
+  dataLoaded = true;
+}
+// One row per class per tutor comes back; fold them into one tutor each.
+function buildTutors(rows, me){
+  const by = {};
+  rows.forEach(function(r){
+    if(r.user_id===me) return;
+    const t = by[r.user_id] || (by[r.user_id] = { id:r.user_id, name:r.tutor_alias, grade:r.grade_level, bio:r.tutor_bio||'', format:r.tutor_format||'In person',
+      avail:'', sessions:Number(r.sessions_done)||0, courses:[], color:TUTOR_COLORS[hashStr(r.user_id)%TUTOR_COLORS.length] });
+    t.courses.push({ course:r.course, grade:r.grade||'', year:r.year||'' });
+    if(r.availability && !t.avail) t.avail = r.availability;
+  });
+  return Object.values(by);
+}
+// Pick up what other people did while this tab was in the background.
+document.addEventListener('visibilitychange', function(){ if(!document.hidden && A.profile && dataLoaded) loadData().then(function(){ if(!S.overlay) render(); }).catch(function(){}); });
+setInterval(function(){ if(!document.hidden && A.profile && dataLoaded) loadData().then(function(){ if(!S.overlay) render(); }).catch(function(){}); }, 60000);
 
 /* ============================= INIT ============================= */
 load();
