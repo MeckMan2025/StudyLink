@@ -448,7 +448,7 @@ function renderInner(){
 }
 
 let menuOpen = false;
-const TAB_TITLES = { settings:'Settings', help:'Help', home:'Home Screen', classes:'Classes', calendar:'Calendar', tutoring:'Tutoring', community:'Community', profile:'Profile', 'admin-grades':'Grade checks', 'admin-requests':'All requests', 'admin-team':'Members' };
+const TAB_TITLES = { settings:'Settings', help:'Help', home:'Home Screen', classes:'Classes', calendar:'Calendar', tutoring:'Tutoring', community:'Community', profile:'Profile', 'admin-grades':'Grade checks', 'admin-requests':'All requests', 'admin-team':'Members', admin:'Administration' };
 const isStaff = () => !!(A.profile && (A.profile.role==='admin' || A.profile.role==='board'));
 const roleBadge = r => r==='admin' ? '<span class="rolebadge admin">Administrator</span>' : r==='board' ? '<span class="rolebadge board">Board</span>' : '';
 function renderHead(){
@@ -507,11 +507,6 @@ function renderNav(){
       ${item('tutoring','🤝','Tutoring', inc ? `<span class="count">${inc}</span>` : '')}
       <hr>
       ${item('community','💬','Community')}
-      ${isStaff() ? `<hr>
-      <div class="section">${A.profile.role==='board' ? 'Board' : 'Administration'}</div>
-      ${item('admin-grades','✅','Grade checks', S.pendingGrades ? `<span class="count">${S.pendingGrades}</span>` : '')}
-      ${item('admin-requests','📋','All requests')}
-      ${item('admin-team','🛡️','Members')}` : ''}
     </nav>
 `;
 }
@@ -527,6 +522,7 @@ function renderBody(){
   if(S.tab==='calendar') return renderCalendar(c);
   if(S.tab==='settings') return renderSettings(c);
   if(S.tab==='help') return renderHelp(c);
+  if(S.tab==='admin') return renderAdminHub(c);
   if(S.tab==='admin-grades') return renderAdminGrades(c);
   if(S.tab==='admin-requests') return renderAdminRequests(c);
   if(S.tab==='admin-team') return renderAdminTeam(c);
@@ -585,8 +581,11 @@ function renderHome(c){
   const hour = new Date().getHours();
   const hi = hour<12 ? 'Good morning' : hour<17 ? 'Good afternoon' : 'Good evening';
   c.innerHTML = `
-    <h2 class="title">${hi}, ${esc(currentAlias())}</h2>
-    <div class="lead">${new Date().toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'})}</div>
+    <div class="row" style="align-items:flex-start">
+      <div style="flex:1;min-width:0"><h2 class="title">${hi}, ${esc(currentAlias())}</h2>
+      <div class="lead">${new Date().toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'})}</div></div>
+      ${adminButtonHtml()}
+    </div>
 
 
     <div class="sectlabel">This week</div>
@@ -1356,7 +1355,8 @@ function renderProfile(c){
     <div class="card">
       <div class="row"><div class="avatar" style="width:54px;height:54px;font-size:20px;background:linear-gradient(135deg,var(--blue),var(--purple))">${initials(me.name)}</div>
         <div style="flex:1"><div style="font-weight:800;font-size:17px">${esc(A.profile.student_alias)}</div>
-        <div class="tiny">${A.profile.tutor_alias ? 'Tutoring as '+esc(A.profile.tutor_alias)+' · ' : ''}${me.isTutor?'Tutor + Student':'Student'} · Grade ${me.grade} ${roleBadge(A.profile.role)}</div></div></div>
+        <div class="tiny">${A.profile.tutor_alias ? 'Tutoring as '+esc(A.profile.tutor_alias)+' · ' : ''}${me.isTutor?'Tutor + Student':'Student'} · Grade ${me.grade} ${roleBadge(A.profile.role)}</div></div>
+        ${adminButtonHtml()}</div>
     </div>
 
     ${me.isTutor ? `
@@ -1673,6 +1673,28 @@ async function finishTutor(){
 }
 
 /* -------- ADMINISTRATION (admin + board) -------- */
+// One place for the staff tools, reached from a button on the home screen and
+// the profile page rather than the sidebar.
+function renderAdminHub(c){
+  if(!isStaff()) return go('home');
+  const tile = (tab, em, title, sub, badge) => `<div class="card row" style="cursor:pointer" onclick="go('${tab}')">
+      <div class="avatar" style="background:var(--blue-d)">${em}</div>
+      <div style="min-width:0;flex:1"><div style="font-weight:800">${title}</div><div class="tiny">${sub}</div></div>
+      ${badge ? `<span class="count" style="background:var(--pink-d);color:#fff;font-size:11px;font-weight:800;border-radius:9px;padding:2px 8px">${badge}</span>` : ''}
+      <div style="color:var(--muted)">›</div>
+    </div>`;
+  c.innerHTML = `
+    <h2 class="title">${A.profile.role==='board' ? 'Board' : 'Administration'}</h2>
+    <div class="lead">Tools for ${A.profile.role==='board' ? 'the board and administrators' : 'administrators'}.</div>
+    ${tile('admin-grades','✅','Grade checks', S.pendingGrades ? S.pendingGrades+' waiting' : 'Nothing waiting', S.pendingGrades)}
+    ${tile('admin-requests','📋','All requests','Every tutoring request in the school')}
+    ${tile('admin-team','🛡️','Members','Approve people, join codes, levels')}`;
+}
+// A compact button to the hub, used on the home screen and profile.
+function adminButtonHtml(){
+  if(!isStaff()) return '';
+  return `<button class="btn ghost sm" onclick="go('admin')">🛡️ ${A.profile.role==='board' ? 'Board' : 'Admin'}${S.pendingGrades ? ' · '+S.pendingGrades+' to check' : ''}</button>`;
+}
 // Grade checks: every grade a tutor has claimed, waiting on someone with
 // access to school records. Real names show here and nowhere else.
 async function renderAdminGrades(c){
@@ -1690,6 +1712,7 @@ async function renderAdminGrades(c){
 
   if(!sel){
     c.innerHTML = `
+      <button class="back" onclick="go('admin')">‹ ${A.profile.role==='board' ? 'Board' : 'Administration'}</button>
       <h2 class="title">Grade checks</h2>
       <div class="lead">${totalPending ? totalPending+' grade'+(totalPending===1?'':'s')+' waiting. Tap a student to review theirs.' : 'Nothing waiting. New tutors show up here.'}</div>
       ${people.length ? people.map(pp=>`<div class="card row" style="cursor:pointer" onclick="S.gradeStudent='${pp.id}';render()">
@@ -1754,6 +1777,7 @@ async function renderAdminRequests(c){
   const style = { accepted:'background:#e4f6ec;color:#2e9b6a', done:'background:#eef0f6;color:#5b6077', declined:'background:#fdecef;color:#c23b5e', cancelled:'background:#fdecef;color:#c23b5e' };
   const counts = {}; rows.forEach(r=>{ counts[r.status]=(counts[r.status]||0)+1; });
   c.innerHTML = `
+    <button class="back" onclick="go('admin')">‹ ${A.profile.role==='board' ? 'Board' : 'Administration'}</button>
     <h2 class="title">All requests</h2>
     <div class="lead">${rows.length} request${rows.length===1?'':'s'} · ${counts.done||0} completed · ${(counts.done||0)*0.75} service hours logged</div>
     <div class="chips" style="margin-bottom:8px">${['all','pending','accepted','done','declined','cancelled'].map(k=>`<button class="chip ${f===k?'dept':''}" style="${f===k?'background:var(--blue)':''}" onclick="S.adminReqFilter='${k}';render()">${k==='all'?'All':label[k]}${k!=='all'&&counts[k]?' · '+counts[k]:''}</button>`).join('')}</div>
@@ -1820,6 +1844,7 @@ async function renderAdminTeam(c){
     <div class="sectlabel">${title} (${list.filter(s=>s.role===role).length})</div>
     ${list.filter(s=>s.role===role).map(row).join('') || '<div class="card tiny" style="text-align:center">Nobody yet.</div>'}`;
   c.innerHTML = `
+    <button class="back" onclick="go('admin')">‹ ${A.profile.role==='board' ? 'Board' : 'Administration'}</button>
     <h2 class="title">Members <span class="seen on" style="font-size:13px;vertical-align:middle">● ${online} online now</span></h2>
     <div class="lead">${list.length} member${list.length===1?'':'s'}</div>
     <div class="card">
