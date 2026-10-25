@@ -1185,7 +1185,8 @@ function renderBecomeTutor(c){
   S.overlay.step = S.overlay.step || 1;
   if(!S.overlay.draft){
     const courses={}; S.me.tutorCourses.forEach(tc=>{ courses[tc.course]={ grade:tc.grade||'A', year:tc.year||'' }; });
-    S.overlay.draft = { courses, avail:S.me.avail||'', bio:(A.profile&&A.profile.tutor_bio)||'', format:(A.profile&&A.profile.tutor_format)||'In person' };
+    const parsed = parseAvail(S.me.avail||'');
+    S.overlay.draft = { courses, days:parsed.days, times:parsed.times, bio:(A.profile&&A.profile.tutor_bio)||'', format:(A.profile&&A.profile.tutor_format)||'In person' };
   }
   const d=S.overlay.draft, step=S.overlay.step;
   const GRADES=['A','A-','B+','B','B-','C+','C'];
@@ -1223,8 +1224,11 @@ function renderBecomeTutor(c){
       <h2 class="title">Availability</h2>
       <div class="lead">Step 3 of 3 · When can you help?</div>
       <div class="card">
-        <div class="field"><label>Your availability</label>
-          <input id="av" value="${esc(d.avail)}" placeholder="e.g. Tue & Thu after school" oninput="S.overlay.draft.avail=this.value"></div>
+        <div class="field"><label>Which days</label>
+          <div class="chips">${AVAIL_DAYS.map(x=>`<button class="chip ${d.days.includes(x)?'dept':''}" style="${d.days.includes(x)?'background:var(--blue-d)':''}" onclick="togglePick('days','${x}')">${x}</button>`).join('')}</div></div>
+        <div class="field"><label>Which times</label>
+          <div class="chips">${AVAIL_TIMES.map(x=>`<button class="chip ${d.times.includes(x)?'dept':''}" style="${d.times.includes(x)?'background:var(--purple)':''}" onclick="togglePick('times','${x}')">${x}</button>`).join('')}</div>
+          <div class="tiny" style="margin-top:6px">${availText(d) || 'Pick at least one day and one time.'}</div></div>
         <div class="field"><label>Format</label>
           <div class="seg">${['In person','Virtual','In person + Virtual'].map(f=>`<button class="${d.format===f?'on':''}" onclick="S.overlay.draft.format='${f}';render()">${f}</button>`).join('')}</div></div>
         <div class="field" style="margin:0"><label>A line about you (optional)</label>
@@ -1239,12 +1243,30 @@ function renderBecomeTutor(c){
     `;
   }
 }
+// Availability is picked, not typed: days and times of day, stored as one
+// readable line such as "Mon, Wed · After school, Evenings".
+const AVAIL_DAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const AVAIL_TIMES=['Before school','Lunch','After school','Evenings'];
+function togglePick(k, v){ const a=S.overlay.draft[k]; const i=a.indexOf(v); if(i<0) a.push(v); else a.splice(i,1); render(); }
+function availText(d){
+  const days=AVAIL_DAYS.filter(x=>d.days.includes(x)), times=AVAIL_TIMES.filter(x=>d.times.includes(x));
+  if(!days.length || !times.length) return '';
+  const dayStr = days.length===5 && !days.includes('Sat') && !days.includes('Sun') ? 'Weekdays' : days.length===7 ? 'Every day' : days.join(', ');
+  return dayStr + ' · ' + times.join(', ');
+}
+function parseAvail(str){
+  const days=AVAIL_DAYS.filter(x=>new RegExp('\\b'+x+'\\b').test(str)), times=AVAIL_TIMES.filter(x=>str.includes(x));
+  if(/Weekdays/.test(str)) days.push('Mon','Tue','Wed','Thu','Fri');
+  if(/Every day/.test(str)) days.push.apply(days, AVAIL_DAYS);
+  return { days:Array.from(new Set(days)), times };
+}
 function toggleTutorCourse(course){ const d=S.overlay.draft; if(d.courses[course])delete d.courses[course]; else d.courses[course]={grade:'A',year:defaultTaken}; render(); }
 function d_grade(course,v){ S.overlay.draft.courses[course].grade=v; }
 function d_year(course,v){ S.overlay.draft.courses[course].year=v; }
 async function finishTutor(){
   const d=S.overlay.draft, me=A.user.id;
-  const avail=$('av')?$('av').value.trim():d.avail;
+  const avail=availText(d);
+  if(!avail){ toast('Pick at least one day and one time you can help.'); return; }
   const bio=$('bio')?$('bio').value.trim():d.bio;
   const btn=$('ft_btn'); if(btn){ btn.disabled=true; btn.textContent='Saving…'; }
   try{
