@@ -180,6 +180,15 @@
     .wday .more{display:none}
   }
 
+  .sections{display:flex; gap:6px; background:#eef0f6; padding:4px; border-radius:12px; margin:12px 0 4px}
+  .sections button{flex:1; border:0; background:transparent; padding:9px 0; border-radius:9px; font:inherit; font-size:13.5px; font-weight:800; color:#6b7088; cursor:pointer}
+  .sections button.on{background:#fff; color:var(--ink); box-shadow:0 1px 3px rgba(20,25,40,.14)}
+  .matrow{display:flex; align-items:flex-start; gap:10px; padding:10px 0; border-bottom:1px solid var(--line)}
+  .matrow:last-child{border-bottom:none}
+  .matrow .ic{width:34px; height:34px; border-radius:10px; background:#eef3fe; display:flex; align-items:center; justify-content:center; font-size:16px; flex:0 0 auto}
+  .matrow a{color:var(--blue-d); font-weight:800; text-decoration:none; word-break:break-word}
+  .matrow a:hover{text-decoration:underline}
+
   /* Bits */
   h2.title{font-size:22px; font-weight:800; margin:4px 2px 2px}
   .lead{color:var(--muted); font-size:13px; font-weight:600; margin:0 2px 14px}
@@ -307,6 +316,8 @@ let S = {
   incoming:[],              // requests sent to me (as tutor)
   hours:0, helped:0,        // service hours, from completed sessions
   posts:[],                 // every class-board post (replies have parent_id)
+  materials:[],             // shared links and notes, per class
+  roster:[],                // who is taking which class (aliases), minus me
   tutors:[],                // everyone offering tutoring, grouped per tutor
   mode:'tutee',             // which side of the sidebar is showing: 'tutee' or 'tutor'
   myClasses:[],             // classes I'm taking (Tutee side); they fill the sidebar
@@ -507,7 +518,8 @@ function renderHelp(c){
     <div class="lead">How StudyLink works.</div>
     ${q('Tutor or Tutee?', 'Use the switch at the top of the sidebar. Tutee is for classes you want help in; Tutor is for classes you can teach. Each side keeps its own list of classes.')}
     ${q('Adding classes', 'Press ＋ Add class under Classes in the sidebar and tap every class that applies.')}
-    ${q('Getting help', 'Open a class to see its tutors, then send a request. Once it is accepted, it shows up on your calendar.')}
+    ${q('Inside a class', 'Every class has three sections. On the Tutee side the first is Tutors: people who can help you. On the Tutor side it is Tutees: students taking the class, whom you can offer help to. Materials is for shared links and notes, and Community is the class board.')}
+    ${q('Getting help', 'Open a class to see its tutors, then send a request, or accept an offer a tutor sends you. Once it is confirmed, it shows up on your calendar and home screen.')}
     ${q('Privacy', 'Other students only see your alias. Coordination happens inside StudyLink — no phone numbers or personal emails are shared.')}
     ${q('Verified grades', 'When you become a tutor, the grades you claim go to a school administrator, who checks them against your records. Verified grades show a ✓ on your tutor card.')}
     ${q('Who runs this', 'Students use the app. Administrators verify grades and manage requests. The board maintains the app itself.')}
@@ -583,7 +595,7 @@ function weekStrip(){
 function sessionColumn(role){
   const me=A.user ? A.user.id : null, today=ymd(new Date());
   const rows=(role==='tutor' ? S.incoming : S.myRequests)
-    .filter(r=>r.status==='accepted' || (role==='student' && r.status==='pending'))
+    .filter(r=>r.status==='accepted' || (role==='student' && (r.status==='pending' || r.status==='offered')) || (role==='tutor' && r.status==='offered'))
     .sort((a,b)=>(a.date||'9999').localeCompare(b.date||'9999') || (a.time||'').localeCompare(b.time||''));
   if(!rows.length){
     return role==='tutor'
@@ -596,14 +608,15 @@ function sessionColumn(role){
   return rows.map(r=>{
     const other = role==='tutor' ? r.student_alias : r.tutor_alias;
     const dayLabel = r.date ? (r.date===today ? 'Today' : parseYmd(r.date).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})) : 'Day TBD';
-    const pending = r.status==='pending';
+    const pending = r.status==='pending' || r.status==='offered';
+    const tag = r.status==='offered' ? (role==='student' ? 'Offer · see Tutoring' : 'Offered') : 'Waiting';
     return `<div class="sessrow">
       <div class="avatar" style="width:38px;height:38px;font-size:15px;background:${courseColor(r.course)}">${courseEmoji(r.course)}</div>
       <div style="min-width:0;flex:1">
         <div class="who">${esc(other)} <span class="tiny">· ${esc(r.course)}</span></div>
         <div class="meta">${esc(r.topic||'')}${r.topic?' · ':''}${esc(r.time||'Time TBD')} · ${esc(r.format)}</div>
       </div>
-      ${pending ? `<span class="pill" style="background:#fbf1e2;color:#c98b34">Waiting</span>` : `<span class="when">${esc(dayLabel)}</span>`}
+      ${pending ? `<span class="pill" style="background:#fbf1e2;color:#c98b34;cursor:pointer" onclick="go('tutoring')">${tag}</span>` : `<span class="when">${esc(dayLabel)}</span>`}
       ${role==='tutor' && !pending && r.date && r.date<=today ? `<button class="btn sm green" onclick="completeSession('${r.id}')">Done</button>` : ''}
     </div>`;
   }).join('') + (role==='tutor' && done ? `<div class="tiny" style="text-align:center;margin-top:8px">${done} session${done===1?'':'s'} completed · ${S.hours} service hours</div>` : '');
@@ -795,30 +808,130 @@ function deleteEvent(id){
 
 /* -------- COURSE DETAIL (overlay) -------- */
 function renderCourseDetail(c, course){
-  let tutors = tutorsFor(course);
-  const f = S.overlay.filter || {};
-  if(f.grade) tutors = tutors.filter(t=>{ const g=t.courses.find(x=>x.course===course).grade; return f.grade==='A'?g.startsWith('A'):f.grade==='B'?(g.startsWith('A')||g.startsWith('B')):true; });
-  if(f.format) tutors = tutors.filter(t=>t.format.toLowerCase().includes(f.format));
+  const o=S.overlay; o.sec = o.sec || 'people';
+  const tutorSide = S.mode==='tutor';
+  const peopleLabel = tutorSide ? 'Tutees' : 'Tutors';
+  const nTutors = tutorsFor(course).length, nTutees = S.roster.filter(r=>r.course===course).length;
+  const nMat = S.materials.filter(m=>m.course===course).length, nPosts = postsFor(course).length;
+  const tab = (id, label, n) => `<button class="${o.sec===id?'on':''}" onclick="S.overlay.sec='${id}';render()">${label}${n?` <span class="tiny" style="font-weight:800">${n}</span>`:''}</button>`;
   c.innerHTML = `
     <button class="back" onclick="closeView()">‹ Back</button>
     ${S[classKey()].includes(course) ? '' : `<button class="btn sm green" style="float:right" onclick="toggleClass('${esc(course)}'); toast('Added to your classes')">＋ Add to my classes</button>`}
-    <div class="row" style="margin:2px 0 10px">
+    <div class="row" style="margin:2px 0 4px">
       <div class="avatar" style="background:${courseColor(course)};width:52px;height:52px;font-size:22px">${courseEmoji(course)}</div>
       <div><h2 class="title" style="margin:0">${esc(course)}</h2>
-      <div class="tiny">${tutorsFor(course).length} tutors · ${postsFor(course).length} in the community</div></div>
+      <div class="tiny">${nTutors} tutor${nTutors===1?'':'s'} · ${nTutees} student${nTutees===1?'':'s'} taking it · ${nPosts} post${nPosts===1?'':'s'}</div></div>
     </div>
+    <div class="sections">
+      ${tab('people', peopleLabel, tutorSide ? nTutees : nTutors)}
+      ${tab('materials', 'Materials', nMat)}
+      ${tab('community', 'Community', nPosts)}
+    </div>
+    ${o.sec==='materials' ? materialsHtml(course) : o.sec==='community' ? boardHtml(course) : tutorSide ? tuteesHtml(course) : tutorsHtml(course)}
+  `;
+}
 
-    <button class="btn ghost sm" style="width:100%" onclick="openView({type:'board',course:'${esc(course)}'})">💬 Open ${esc(course)} community</button>
-
+// Tutee side: the tutors for this class, with the grade and format filters.
+function tutorsHtml(course){
+  let tutors = tutorsFor(course);
+  const f = S.overlay.filter || {};
+  if(f.grade) tutors = tutors.filter(t=>{ const g=(t.courses.find(x=>x.course===course)||{}).grade||''; return f.grade==='A'?g.startsWith('A'):f.grade==='B'?(g.startsWith('A')||g.startsWith('B')):true; });
+  if(f.format) tutors = tutors.filter(t=>t.format.toLowerCase().includes(f.format));
+  return `
     <div class="sectlabel">Filter tutors</div>
     <div class="chips">
       ${[['','Any grade'],['B','B or higher'],['A','A only']].map(([v,l])=>`<button class="chip ${(!f.grade&&!v)||f.grade===v?'dept':''}" style="${(!f.grade&&!v)||f.grade===v?'background:'+courseColor(course):''}" onclick="setFilter('grade','${v}')">${l}</button>`).join('')}
       ${[['','Any format'],['virtual','Virtual'],['person','In person']].map(([v,l])=>`<button class="chip ${(!f.format&&!v)||f.format===v?'dept':''}" style="${(!f.format&&!v)||f.format===v?'background:'+courseColor(course):''}" onclick="setFilter('format','${v}')">${l}</button>`).join('')}
     </div>
-
     <div class="sectlabel">${tutors.length} peer tutor${tutors.length===1?'':'s'}</div>
-    ${tutors.length ? tutors.map(t=>tutorCard(t,course)).join('') : `<div class="empty"><div class="em">🔍</div>No tutors match — try loosening the filters.</div>`}
-  `;
+    ${tutors.length ? tutors.map(t=>tutorCard(t,course)).join('') : `<div class="empty"><div class="em">🔍</div>${tutorsFor(course).length ? 'No tutors match — try loosening the filters.' : 'No tutors for this class yet. Ask on the Community tab, or check back soon.'}</div>`}`;
+}
+
+// Tutor side: the students taking this class, and a way to offer them help.
+function tuteesHtml(course){
+  const me=A.user.id, canOffer = S.me.isTutor && S.tutorClasses.includes(course);
+  const students = S.roster.filter(r=>r.course===course).sort((a,b)=>a.student_alias.localeCompare(b.student_alias, undefined, {numeric:true}));
+  const stateFor = sid => S.incoming.find(r=>r.student_id===sid && r.course===course && ['offered','pending','accepted'].includes(r.status));
+  return `
+    ${canOffer ? '' : `<div class="card tiny" style="margin-top:10px">To offer help here, add ${esc(course)} to the classes you tutor first.${S.me.isTutor ? '' : ' <button class="btn ghost sm" style="margin-left:6px" onclick="openView({type:\'becomeTutor\'})">Become a tutor</button>'}</div>`}
+    <div class="sectlabel">${students.length} student${students.length===1?'':'s'} taking ${esc(course)}</div>
+    ${students.length ? students.map(st=>{ const r=stateFor(st.user_id); return `<div class="card row">
+      <div class="avatar" style="background:${courseColor(course)}">${initials(st.student_alias)}</div>
+      <div style="min-width:0;flex:1"><div style="font-weight:800">${esc(st.student_alias)}</div><div class="tiny">${st.grade_level?'Grade '+st.grade_level:''}${r ? (st.grade_level?' · ':'') + (r.status==='offered' ? 'You offered to help' : r.status==='pending' ? 'They asked you for help' : 'Session booked') : ''}</div></div>
+      ${r ? `<span class="pill" style="margin-left:auto;${r.status==='accepted'?'background:#e4f6ec;color:#2e9b6a':''}">${r.status==='offered'?'Offered':r.status==='pending'?'Requested':'Confirmed'}</span>`
+          : canOffer ? `<button class="btn sm" style="margin-left:auto" onclick="offerHelp('${st.user_id}','${esc(st.student_alias)}','${esc(course)}',this)">Offer help</button>` : ''}
+    </div>`; }).join('') : `<div class="empty"><div class="em">🎓</div>Nobody has added ${esc(course)} as a class yet.</div>`}`;
+}
+// A tutor's offer is a request that starts on the tutor's side; the student
+// accepts or declines it from Tutoring, like any request.
+function offerHelp(studentId, alias, course, btn){
+  if(btn){ btn.disabled=true; btn.textContent='Offering…'; }
+  sbFetch('/rest/v1/sl_requests', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({
+      student_id:studentId, tutor_id:A.user.id, student_alias:alias, tutor_alias:A.profile.tutor_alias, course, topic:'Offer to help', note:'', time:'TBD', format:A.profile.tutor_format||'In person', status:'offered' }) })
+    .then(loadData).then(function(){ toast('Offered to help '+alias); render(); })
+    .catch(function(e){ toast(e.message); render(); });
+}
+
+// Shared materials: links and notes anyone in the class can add.
+function materialsHtml(course){
+  const items = S.materials.filter(m=>m.course===course), me=A.user.id;
+  const host = u => { try { return new URL(u).hostname.replace(/^www\./,''); } catch(e){ return ''; } };
+  return `
+    <div class="card" style="margin-top:10px">
+      <div style="font-weight:800;margin-bottom:8px">Share something useful</div>
+      <div class="field"><label>Title</label><input id="mt_title" placeholder="e.g. Unit 3 review sheet" onkeydown="if(event.key==='Enter')addMaterial('${esc(course)}')"></div>
+      <div class="field"><label>Link (optional)</label><input id="mt_url" type="url" placeholder="https://…"></div>
+      <div class="field" style="margin-bottom:10px"><label>Note (optional)</label><textarea id="mt_note" rows="2" placeholder="What it covers, or a tip"></textarea></div>
+      <button class="btn sm" onclick="addMaterial('${esc(course)}')">Add to ${esc(course)}</button>
+    </div>
+    <div class="sectlabel">${items.length} item${items.length===1?'':'s'}</div>
+    <div class="card">${items.length ? items.map(m=>`
+      <div class="matrow">
+        <div class="ic">${m.url ? '🔗' : '📝'}</div>
+        <div style="min-width:0;flex:1">
+          <div>${m.url ? `<a href="${esc(m.url)}" target="_blank" rel="noopener">${esc(m.title)}</a>` : `<span style="font-weight:800">${esc(m.title)}</span>`}${m.url && host(m.url) ? ` <span class="tiny">${esc(host(m.url))}</span>` : ''}</div>
+          ${m.note ? `<div style="font-size:13px;margin-top:2px;line-height:1.4">${esc(m.note)}</div>` : ''}
+          <div class="tiny" style="margin-top:3px">${esc(m.author_alias)} · ${esc(new Date(m.created_at).toLocaleDateString())}</div>
+        </div>
+        ${m.author_id===me || isStaff() ? `<button class="del" title="Remove" style="border:none;background:none;color:var(--muted);cursor:pointer;font-size:16px" onclick="deleteMaterial('${m.id}')">✕</button>` : ''}
+      </div>`).join('') : `<div class="empty"><div class="em">📚</div>Nothing shared yet. Review sheets, videos and notes go here.</div>`}
+    </div>`;
+}
+function addMaterial(course){
+  const title=($('mt_title').value||'').trim(), url=($('mt_url').value||'').trim(), note=($('mt_note').value||'').trim();
+  if(!title){ $('mt_title').focus(); return; }
+  if(url && !/^https?:\/\//i.test(url)){ toast('Links need to start with http:// or https://'); $('mt_url').focus(); return; }
+  sbFetch('/rest/v1/sl_materials', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ course, title, url, note, author_id:A.user.id, author_alias:currentAlias() }) })
+    .then(loadData).then(function(){ toast('Added to '+course); render(); }).catch(function(e){ toast(e.message); });
+}
+function deleteMaterial(id){
+  S.materials = S.materials.filter(m=>m.id!==id); render();
+  sbFetch('/rest/v1/sl_materials?id=eq.'+id, { method:'DELETE', headers:{ Prefer:'return=minimal' } }).catch(function(e){ toast(e.message); loadData().then(render); });
+}
+
+// The class board, embedded in the Community section of the class page.
+function boardHtml(course){
+  const posts=postsFor(course);
+  return `
+    <div class="composer">
+      <input id="post_in" placeholder="Ask the class a question…" onkeydown="if(event.key==='Enter')addPost('${esc(course)}')">
+      <button class="btn sm" onclick="addPost('${esc(course)}')">Post</button>
+    </div>
+    <p class="tiny" style="margin:8px 2px">🛡️ Posting as ${esc(currentAlias())}. Class boards are moderated — be kind and keep it school-appropriate.</p>
+    <div class="card" style="margin-top:6px">
+      ${posts.length ? posts.map(p=>`
+        <div class="post">
+          <div class="row"><div class="avatar" style="width:30px;height:30px;font-size:12px;background:${courseColor(course)}">${initials(p.who)}</div>
+            <div class="who">${esc(p.who)}</div>
+            ${p.mine ? `<button class="del" title="Delete post" style="margin-left:auto;border:none;background:none;color:var(--muted);cursor:pointer" onclick="deletePost('${p.id}')">✕</button>` : ''}</div>
+          <div class="txt">${esc(p.txt)}</div>
+          ${(p.replies||[]).map(r=>`<div class="reply"><b>${esc(r.who)}</b> · ${esc(r.txt)}</div>`).join('')}
+          <div class="composer" style="margin-top:8px">
+            <input id="rp_${p.id}" placeholder="Reply as ${esc(currentAlias())}…" onkeydown="if(event.key==='Enter')addReply('${p.id}','${esc(course)}')">
+            <button class="btn ghost sm" onclick="addReply('${p.id}','${esc(course)}')">Reply</button>
+          </div>
+        </div>`).join('') : `<div class="empty"><div class="em">💬</div>No posts yet — be the first to ask!</div>`}
+    </div>`;
 }
 function tutorCard(t, course){
   const cc = t.courses.find(x=>x.course===course) || {};
@@ -917,9 +1030,10 @@ async function submitRequest(tid){
 /* -------- TUTORING -------- */
 function renderTutoring(c){
   const inc = S.incoming.filter(r=>r.status==='pending');
-  const mine = S.myRequests.filter(r=>r.status!=='cancelled');
+  const offers = S.myRequests.filter(r=>r.status==='offered');
+  const mine = S.myRequests.filter(r=>r.status!=='cancelled' && r.status!=='offered');
   const tutoring = sessionsList().filter(s=>s.role==='tutor');
-  const label = { pending:'Pending', accepted:'Confirmed', declined:'Declined', done:'Done' };
+  const label = { pending:'Pending', offered:'Offered', accepted:'Confirmed', declined:'Declined', done:'Done' };
   const style = { accepted:'background:#e4f6ec;color:#2e9b6a', done:'background:#eef0f6;color:#5b6077', declined:'background:#fdecef;color:#c23b5e' };
   c.innerHTML=`
     <h2 class="title">Tutoring</h2>
@@ -939,6 +1053,16 @@ function renderTutoring(c){
           </div>
         </div>`).join('') : `<div class="card tiny" style="text-align:center">No new requests right now.</div>`}
     ` : ''}
+
+    ${offers.length ? `<div class="sectlabel">Offers to help you (${offers.length})</div>
+      ${offers.map(r=>`<div class="card">
+        <div class="row"><div class="avatar" style="background:${courseColor(r.course)}">${initials(r.tutor_alias)}</div>
+          <div><div style="font-weight:800">${esc(r.tutor_alias)}</div><div class="tiny">offers to help with ${esc(r.course)} · ${esc(r.format)}</div></div></div>
+        <div class="row" style="gap:8px;margin-top:10px">
+          <button class="btn sm gray" style="flex:1" onclick="respondOffer('${r.id}',false)">No thanks</button>
+          <button class="btn sm green" style="flex:1" onclick="respondOffer('${r.id}',true)">Accept</button>
+        </div>
+      </div>`).join('')}` : ''}
 
     ${tutoring.length ? `<div class="sectlabel">Sessions you're tutoring</div>${tutoring.map(sessionCard).join('')}` : ''}
 
@@ -960,6 +1084,10 @@ function patchRequest(id, patch, okMsg){
     .catch(function(e){ toast(e.message); });
 }
 function cancelRequest(id){ patchRequest(id, { status:'cancelled' }, 'Request cancelled'); }
+function respondOffer(id, accept){
+  const r=S.myRequests.find(x=>x.id===id); if(!r) return;
+  patchRequest(id, { status: accept ? 'accepted' : 'declined' }, accept ? 'Session set with '+r.tutor_alias+' ✅' : 'Offer declined');
+}
 function respondRequest(id, accept){
   const r=S.incoming.find(x=>x.id===id); if(!r)return;
   patchRequest(id, { status: accept ? 'accepted' : 'declined' }, accept ? 'Session confirmed with '+r.student_alias+' ✅' : 'Request declined');
@@ -994,33 +1122,8 @@ function renderCommunity(c){
   `;
 }
 function renderBoard(c){
-  const course=S.overlay.course;
-  const posts=postsFor(course);
-  c.innerHTML=`
-    <button class="back" onclick="closeView()">‹ Back</button>
-    <div class="row" style="margin-bottom:8px"><div class="avatar" style="background:${courseColor(course)}">${courseEmoji(course)}</div>
-      <div><h2 class="title" style="margin:0">${esc(course)}</h2><div class="tiny">Class community</div></div></div>
-    <div class="composer">
-      <input id="post_in" placeholder="Ask the class a question…" onkeydown="if(event.key==='Enter')addPost('${esc(course)}')">
-      <button class="btn sm" onclick="addPost('${esc(course)}')">Post</button>
-    </div>
-    <p class="tiny" style="margin:8px 2px">🛡️ Class boards are moderated. Be kind and keep it school-appropriate.</p>
-    <div class="card" style="margin-top:6px">
-      ${posts.length ? posts.map(p=>`
-        <div class="post">
-          <div class="row"><div class="avatar" style="width:30px;height:30px;font-size:12px;background:${courseColor(course)}">${initials(p.who)}</div>
-            <div class="who">${esc(p.who)}</div>
-            ${p.mine ? `<button class="del" title="Delete post" style="margin-left:auto;border:none;background:none;color:var(--muted);cursor:pointer" onclick="deletePost('${p.id}')">✕</button>` : ''}</div>
-          <div class="txt">${esc(p.txt)}</div>
-          ${(p.replies||[]).map(r=>`<div class="reply"><b>${esc(r.who)}</b> · ${esc(r.txt)}</div>`).join('')}
-          <div class="composer" style="margin-top:8px">
-            <input id="rp_${p.id}" placeholder="Reply as ${esc(currentAlias())}…" onkeydown="if(event.key==='Enter')addReply('${p.id}','${esc(course)}')">
-            <button class="btn ghost sm" onclick="addReply('${p.id}','${esc(course)}')">Reply</button>
-          </div>
-          <button class="btn ghost sm" style="margin-top:8px" onclick="openView({type:'course',course:'${esc(course)}'})">Find a tutor for this</button>
-        </div>`).join('') : `<div class="empty"><div class="em">💬</div>No posts yet — be the first to ask!</div>`}
-    </div>
-  `;
+  S.overlay = { type:'course', course:S.overlay.course, sec:'community' };
+  return renderCourseDetail(c, S.overlay.course);
 }
 function addPost(course){
   const inp=$('post_in'); const txt=(inp.value||'').trim(); if(!txt)return;
@@ -1779,7 +1882,7 @@ let dataLoaded = false, dataLoading = false, dataError = null;
 async function loadData(){
   if(!A.user) return;
   const me = A.user.id;
-  const [classes, tcourses, reqs, events, tutors, posts, myGrades, pendingGrades] = await Promise.all([
+  const [classes, tcourses, reqs, events, tutors, posts, myGrades, pendingGrades, materials, roster] = await Promise.all([
     sbFetch('/rest/v1/sl_student_classes?select=course&user_id=eq.'+me+'&order=created_at'),
     sbFetch('/rest/v1/sl_tutor_courses?select=course,grade,year,availability&user_id=eq.'+me+'&order=created_at'),
     sbFetch('/rest/v1/sl_requests?select=*&or=(student_id.eq.'+me+',tutor_id.eq.'+me+')&order=created_at.desc'),
@@ -1788,6 +1891,8 @@ async function loadData(){
     sbFetch('/rest/v1/sl_posts?select=*&order=created_at.desc&limit=500'),
     sbFetch('/rest/v1/sl_grades?select=course,grade,status&user_id=eq.'+me),
     isStaff() ? sbFetch('/rest/v1/sl_grades?select=id&status=eq.pending') : Promise.resolve([]),
+    sbFetch('/rest/v1/sl_materials?select=*&order=created_at.desc&limit=500'),
+    sbFetch('/rest/v1/sl_class_students?select=*'),
   ]);
   S.myClasses = (classes||[]).map(r=>r.course);
   S.tutorClasses = (tcourses||[]).map(r=>r.course);
@@ -1799,6 +1904,8 @@ async function loadData(){
   S.incoming = (reqs||[]).filter(r=>r.tutor_id===me);
   S.events = events||[];
   S.posts = posts||[];
+  S.materials = materials||[];
+  S.roster = (roster||[]).filter(r => r.user_id !== me);
   S.tutors = buildTutors(tutors||[], me);
   S.helped = S.incoming.filter(r=>r.status==='done').length;
   S.hours = Math.round(S.helped*0.75*100)/100;
