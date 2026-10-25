@@ -1019,9 +1019,10 @@ function renderRequest(c){
         <select id="rq_course">${coursesTutored.map(x=>`<option ${x===course?'selected':''}>${esc(x)}</option>`).join('')}</select></div>
       <div class="field"><label>Topic</label><input id="rq_topic" placeholder="e.g. Migration models"></div>
       <div class="field"><label>What do you need help with?</label><textarea id="rq_desc" rows="2" placeholder="A sentence or two…"></textarea></div>
+      ${t.avail ? `<div class="tiny" style="margin:-4px 0 10px">🗓️ ${esc(t.name)} is usually free: ${esc(t.avail)}</div>` : ''}
       <div class="row" style="gap:10px">
         <div class="field" style="flex:1;margin:0"><label>Day</label><input id="rq_day" type="date" value="${ymd(addDays(new Date(),1))}" min="${ymd(new Date())}"></div>
-        <div class="field" style="flex:1;margin:0"><label>Time</label><input id="rq_time" placeholder="3:30 PM"></div>
+        <div class="field" style="flex:1;margin:0"><label>Time</label><select id="rq_time">${TIME_SLOTS.map(x=>`<option ${x===suggestTime(t)?'selected':''}>${x}</option>`).join('')}</select></div>
       </div>
       <div class="field" style="margin-top:12px"><label>Format</label>
         <div class="seg" id="rq_fmt">
@@ -1037,6 +1038,17 @@ function renderRequest(c){
   `;
   c.querySelectorAll('#rq_fmt button').forEach(b=>b.onclick=()=>{ c.querySelectorAll('#rq_fmt button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); fillLocations(); });
   fillLocations();
+}
+// Times are picked from half-hour slots across the school day and evening.
+// The default leans on the tutor's availability: mornings if they said
+// before school, evenings if they said evenings, otherwise after school.
+const TIME_SLOTS=(function(){ const out=[]; for(let m=7*60; m<=20*60; m+=30){ const h=Math.floor(m/60), mm=m%60; const h12=((h+11)%12)+1; out.push(h12+':'+(mm?'30':'00')+' '+(h<12?'AM':'PM')); } return out; })();
+function suggestTime(t){
+  const a=(t && t.avail)||'';
+  if(/After school/.test(a)) return '3:30 PM';
+  if(/Before school/.test(a)) return '7:30 AM';
+  if(/Evenings/.test(a)) return '6:00 PM';
+  return '3:30 PM';
 }
 // Where to meet, depending on the format. Classroom and Other take a detail.
 const PLACES = { 'In person':['Library','Learning commons','Cafeteria','Classroom','Front office / counseling','Other'], 'Virtual':['Google Meet','Zoom','FaceTime','Phone call','Other'] };
@@ -1057,7 +1069,7 @@ async function submitRequest(tid){
   const topic=$('rq_topic').value.trim()||'General help';
   const note=($('rq_desc').value||'').trim();
   const date=$('rq_day').value||null;
-  const time=$('rq_time').value.trim()||'TBD';
+  const time=$('rq_time').value||'TBD';
   const fmt=document.querySelector('#rq_fmt button.on')?.dataset.v||'In person';
   const locBase=$('rq_loc')?.value||'', locD=($('rq_locd')?.value||'').trim();
   const location = locBase + (locD && (locBase==='Classroom'||locBase==='Other') ? ' · '+locD : '');
