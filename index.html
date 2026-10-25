@@ -83,6 +83,9 @@
   .addcard{display:flex; align-items:center; justify-content:center; gap:8px; min-height:96px; cursor:pointer; border:2px dashed #d6dcf0; background:transparent; box-shadow:none; color:var(--blue-d); font-weight:800}
   .cols{display:grid; grid-template-columns:1fr; gap:16px}
   @media (min-width:760px){ .cols{grid-template-columns:3fr 2fr} .cols.even{grid-template-columns:1fr 1fr} }
+  /* Side-by-side cards end on the same line, whichever list is longer */
+  .cols.even > div{display:flex; flex-direction:column}
+  .cols.even > div > .card:last-child{flex:1}
 
   /* Calendar */
   .calhead{display:flex; align-items:center; gap:8px; margin-bottom:10px}
@@ -640,15 +643,16 @@ function studentDashboard(){
     <div class="search" onclick="openView({type:'search'})" style="cursor:pointer"><span class="mag">🔍</span><input placeholder="Search your classes…" readonly style="cursor:pointer"></div>
     ${helpNowHtml()}
 
-    <div class="cols even" style="margin-top:6px">
-      <div>
-        <div class="sectlabel">Your classes</div>
-        <div class="card">${mine.length ? mine.map(cs=>{ const n=newPostCount(cs); return classRow(cs, n ? n+' new post'+(n===1?'':'s') : tutorsFor(cs).length+' tutor'+(tutorsFor(cs).length===1?'':'s')); }).join('') : `<div class="tiny" style="text-align:center;padding:8px">No classes yet — add them under Classes.</div>`}</div>
-      </div>
-      <div>
-        <div class="sectlabel">Your requests</div>
-        <div class="card">${reqs.length ? reqs.map(r=>`<div class="listrow" onclick="go('tutoring')"><span class="dot" style="background:${courseColor(r.course)}"></span><span class="t">${esc(r.course)}</span><span class="r" style="${r.status==='accepted'?'color:#2e9b6a':r.status==='pending'||r.status==='offered'?'color:#c98b34':''}">${STATUS_WORD[r.status]||r.status}</span></div>`).join('') : `<div class="tiny" style="text-align:center;padding:8px">No requests yet.</div>`}</div>
-      </div>
+    <div class="sectlabel">Your classes</div>
+    <div class="card">
+      ${mine.length ? mine.map(cs=>{
+        const r = S.myRequests.filter(x=>x.course===cs && ['pending','offered','accepted'].includes(x.status)).sort((a,b)=>(a.date||'9999').localeCompare(b.date||'9999'))[0];
+        const n = newPostCount(cs);
+        const right = r
+          ? `<span style="${r.status==='accepted'?'color:#2e9b6a':'color:#c98b34'}">${r.status==='accepted' ? 'Session '+esc(dayWord(r.date))+' ✓' : STATUS_WORD[r.status]}</span>`
+          : (n ? n+' new post'+(n===1?'':'s') : tutorsFor(cs).length+' tutor'+(tutorsFor(cs).length===1?'':'s'));
+        return classRow(cs, right);
+      }).join('') : `<div class="tiny" style="text-align:center;padding:8px">No classes yet — add them under Classes.</div>`}
     </div>
 
     <div class="sectlabel">Community</div>
