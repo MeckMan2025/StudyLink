@@ -460,11 +460,6 @@ function renderHome(c){
         <div class="search" onclick="open({type:'search'})" style="cursor:pointer">
           <span class="mag">🔍</span><input placeholder="Search any class…" readonly style="cursor:pointer">
         </div>
-        ${!S.me.isTutor && S.mode!=='tutor' ? `<div class="card row" onclick="open({type:'becomeTutor'})" style="cursor:pointer;margin-top:10px">
-          <div class="avatar" style="background:#63c39a">✋</div>
-          <div><div style="font-weight:800">Become a tutor</div><div class="tiny">Help classmates · earn service hours</div></div>
-          <div style="margin-left:auto;color:var(--muted)">›</div>
-        </div>` : ''}
       </div>
     </div>
 
