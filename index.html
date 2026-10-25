@@ -1820,11 +1820,10 @@ async function renderAdminTeam(c){
   const students = list.filter(s => s.role==='student' && (!q || (s.real_name+' '+s.email).toLowerCase().includes(q)) && (!S.onlineOnly || isOnline(s.seen)));
   const group = (role, title, blurb) => `
     <div class="sectlabel">${title} (${list.filter(s=>s.role===role).length})</div>
-    <div class="tiny" style="margin:-4px 2px 8px">${blurb}</div>
     ${list.filter(s=>s.role===role).map(row).join('') || '<div class="card tiny" style="text-align:center">Nobody yet.</div>'}`;
   c.innerHTML = `
     <h2 class="title">Members <span class="seen on" style="font-size:13px;vertical-align:middle">● ${online} online now</span></h2>
-    <div class="lead">Add someone here, then hand them their one-time join code in person. With the code, their email and a password of their own they press Create an account. Students use the app; administrators verify grades and manage requests; the board maintains the app. Administrators and the board can add anyone.</div>
+    <div class="lead">${list.length} member${list.length===1?'':'s'}</div>
     <div class="card">
       <div class="row" style="gap:8px;flex-wrap:wrap">
         <input id="mb_name" placeholder="Full name" style="flex:1;min-width:160px;padding:10px 12px;border:1.5px solid #e5e2f0;border-radius:11px;font:inherit;font-size:14px">
@@ -1833,7 +1832,7 @@ async function renderAdminTeam(c){
         <select id="mb_role" style="flex:0 0 150px;padding:10px 12px;border:1.5px solid #e5e2f0;border-radius:11px;font:inherit;font-size:14px;background:#fff"><option value="student">Student</option><option value="admin">Administrator</option><option value="board">Board</option></select>
         <button class="btn sm" id="mb_add" onclick="addMember()">Add</button>
       </div>
-      <div class="tiny" style="margin-top:8px">The name is used only to check grades against school records; other members never see it. A join code works once and is shown on the row until it is used.</div>
+
     </div>
     ${group('board', 'Board', 'Maintain the app: fix errors and build new features. Everything an administrator can do, too.')}
     ${group('admin', 'Administrators', 'Verify tutors\' grades against school records and keep an eye on tutoring requests.')}
