@@ -1022,7 +1022,7 @@ function renderRequest(c){
   c.innerHTML=`
     <button class="back" onclick="closeView()">‹ Back</button>
     <h2 class="title">Request tutoring</h2>
-    <div class="lead">with ${esc(t.name)}</div>
+    <div class="lead">with ${esc(t.name)} ${seenHtml(t.seen)}</div>
     <div class="card">
       <div class="field"><label>Course</label>
         <select id="rq_course">${coursesTutored.map(x=>`<option ${x===course?'selected':''}>${esc(x)}</option>`).join('')}</select></div>
@@ -1493,13 +1493,13 @@ async function renderAdminGrades(c){
   if(!isStaff()) return go('home');
   c.innerHTML = '<h2 class="title">Grade checks</h2><div class="lead">Loading…</div>';
   let rows;
-  try { rows = await sbFetch('/rest/v1/sl_grades?select=*,who:sl_profiles!sl_grades_user_id_fkey(real_name,grade_level,student_alias,tutor_alias)&order=status.desc,created_at'); }
+  try { rows = await sbFetch('/rest/v1/sl_grades?select=*,who:sl_profiles!sl_grades_user_id_fkey(real_name,grade_level,student_alias,tutor_alias,last_seen_at)&order=status.desc,created_at'); }
   catch(e){ c.innerHTML = '<h2 class="title">Grade checks</h2><div class="auth-msg err">' + esc(e.message) + '</div>'; return; }
   if(S.tab!=='admin-grades') return;
   const pending = rows.filter(r=>r.status==='pending'), rest = rows.filter(r=>r.status!=='pending');
   const line = r => `<div class="card">
       <div class="row"><div class="avatar" style="background:${courseColor(r.course)}">${courseEmoji(r.course)}</div>
-        <div style="min-width:0"><div style="font-weight:800">${esc(r.who ? r.who.real_name : 'Unknown')} <span class="tiny">· ${esc(r.who ? r.who.tutor_alias || r.who.student_alias : '')}${r.who && r.who.grade_level ? ' · Grade '+r.who.grade_level : ''}</span></div>
+        <div style="min-width:0"><div style="font-weight:800">${esc(r.who ? r.who.real_name : 'Unknown')} <span class="tiny">· ${esc(r.who ? r.who.tutor_alias || r.who.student_alias : '')}${r.who && r.who.grade_level ? ' · Grade '+r.who.grade_level : ''}</span> ${r.who ? seenHtml(r.who.last_seen_at) : ''}</div>
           <div class="tiny">${esc(r.course)} · claims <b>${esc(r.grade)}</b>${r.year ? ' · taken '+(/^Grade/.test(r.year)?'in ':'')+esc(r.year) : ''} · submitted ${esc(new Date(r.created_at).toLocaleDateString())}</div></div>
         ${r.status==='pending' ? '' : `<span class="pill" style="margin-left:auto;${r.status==='verified'?'background:#e4f6ec;color:#2e9b6a':'background:#fdecef;color:#c23b5e'}">${r.status==='verified'?'Verified':'Rejected'}</span>`}
       </div>
@@ -1563,7 +1563,7 @@ async function renderAdminTeam(c){
   try {
     [list, people] = await Promise.all([
       sbFetch('/rest/v1/sl_staff?select=*&order=role,added_at.desc'),
-      sbFetch('/rest/v1/sl_profiles?select=id,real_name,student_alias,role,created_at'),
+      sbFetch('/rest/v1/sl_profiles?select=id,real_name,student_alias,role,created_at,last_seen_at'),
     ]);
   } catch(e){ c.innerHTML = '<h2 class="title">Members</h2><div class="auth-msg err">' + esc(e.message) + '</div>'; return; }
   if(S.tab!=='admin-team') return;
@@ -1575,9 +1575,9 @@ async function renderAdminTeam(c){
     const me = s.email.toLowerCase()===myEmail;
     const editing = S.editMember === s.email;
     return `<div class="card mrow" data-email="${esc(s.email)}">
-      <div class="avatar" style="background:${s.role==='board'?'var(--purple)':s.role==='admin'?'var(--blue-d)':courseColor('')}">${initials(s.real_name || s.email)}</div>
+      ${s.joined ? avatarDot(initials(s.real_name || s.email), s.seen, 'background:'+(s.role==='board'?'var(--purple)':s.role==='admin'?'var(--blue-d)':courseColor(''))) : `<div class="avatar" style="background:${s.role==='board'?'var(--purple)':s.role==='admin'?'var(--blue-d)':courseColor('')}">${initials(s.real_name || s.email)}</div>`}
       <div class="info">
-        <div style="font-weight:800">${esc(s.real_name || s.email)}${me?' <span class="tiny">(you)</span>':''} ${roleBadge(s.role)}</div>
+        <div style="font-weight:800">${esc(s.real_name || s.email)}${me?' <span class="tiny">(you)</span>':''} ${roleBadge(s.role)} ${s.joined ? seenHtml(s.seen) : ''}</div>
         <div class="tiny">${esc(s.email)}${s.grade_level?' · Grade '+s.grade_level:''} · ${s.joined ? 'signed up ' + esc(new Date(s.joined).toLocaleDateString()) : 'approved, not signed up yet'}${s.added_by_alias?' · added by '+esc(s.added_by_alias):''}</div>
       </div>
       <div class="ctl">
@@ -1596,14 +1596,15 @@ async function renderAdminTeam(c){
     </div>`;
   };
   // Each approval points at the profile it became, once that person has signed up.
-  list.forEach(s => { const p = s.user_id ? signedUp[s.user_id] : null; s.joined = p ? p.created_at : null; });
+  list.forEach(s => { const p = s.user_id ? signedUp[s.user_id] : null; s.joined = p ? p.created_at : null; s.seen = p ? p.last_seen_at : null; });
+  const online = list.filter(s => isOnline(s.seen)).length;
   const students = list.filter(s => s.role==='student' && (!q || (s.real_name+' '+s.email).toLowerCase().includes(q)));
   const group = (role, title, blurb) => `
     <div class="sectlabel">${title} (${list.filter(s=>s.role===role).length})</div>
     <div class="tiny" style="margin:-4px 2px 8px">${blurb}</div>
     ${list.filter(s=>s.role===role).map(row).join('') || '<div class="card tiny" style="text-align:center">Nobody yet.</div>'}`;
   c.innerHTML = `
-    <h2 class="title">Members</h2>
+    <h2 class="title">Members <span class="seen on" style="font-size:13px;vertical-align:middle">● ${online} online now</span></h2>
     <div class="lead">Add someone here, then hand them their one-time join code in person. With the code, their email and a password of their own they press Create an account. Students use the app; administrators verify grades and manage requests; the board maintains the app. Administrators and the board can add anyone.</div>
     <div class="card">
       <div class="row" style="gap:8px;flex-wrap:wrap">
