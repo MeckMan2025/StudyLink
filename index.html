@@ -381,7 +381,7 @@ function sessionsList(){
   const me = A.user ? A.user.id : null;
   return [...S.myRequests, ...S.incoming].filter(r => r.status==='accepted').map(r => ({
     id:r.id, course:r.course, date:r.date, day:fmtDate(r.date), time:r.time||'TBD', format:r.format,
-    with: r.tutor_id===me ? r.student_alias : r.tutor_alias, role: r.tutor_id===me ? 'tutor' : 'student', status:'upcoming',
+    with: r.tutor_id===me ? r.student_alias : r.tutor_alias, role: r.tutor_id===me ? 'tutor' : 'student', status:'upcoming', location:r.location||'',
   }));
 }
 
@@ -634,7 +634,7 @@ function sessionColumn(role){
       <div class="avatar" style="width:38px;height:38px;font-size:15px;background:${courseColor(r.course)}">${courseEmoji(r.course)}</div>
       <div style="min-width:0;flex:1">
         <div class="who">${esc(other)} <span class="tiny">· ${esc(r.course)}</span></div>
-        <div class="meta">${esc(r.topic||'')}${r.topic?' · ':''}${esc(r.time||'Time TBD')} · ${esc(r.format)}</div>
+        <div class="meta">${esc(r.topic||'')}${r.topic?' · ':''}${esc(r.time||'Time TBD')} · ${esc(r.format)}${r.location?' · 📍 '+esc(r.location):''}</div>
       </div>
       ${pending ? `<span class="pill" style="background:#fbf1e2;color:#c98b34;cursor:pointer" onclick="go('tutoring')">${tag}</span>` : `<span class="when">${esc(dayLabel)}</span>`}
       ${role==='tutor' && !pending && r.date && r.date<=today ? `<button class="btn sm green" onclick="completeSession('${r.id}')">Done</button>` : ''}
@@ -664,7 +664,7 @@ function sessionCard(s){
     <div class="avatar" style="background:${courseColor(s.course)}">${courseEmoji(s.course)}</div>
     <div style="min-width:0">
       <div style="font-weight:800">${esc(s.course)}</div>
-      <div class="tiny">${esc(s.day)} · ${esc(s.time)} · with ${esc(s.with)} · ${esc(s.format)}</div>
+      <div class="tiny">${esc(s.day)} · ${esc(s.time)} · with ${esc(s.with)} · ${esc(s.format)}${s.location?' · 📍 '+esc(s.location):''}</div>
     </div>
     ${s.role==='tutor' ? `<button class="btn sm green" style="margin-left:auto" onclick="completeSession('${s.id}')">Complete</button>` : `<span class="pill" style="margin-left:auto">Confirmed</span>`}
   </div>`;
@@ -1028,11 +1028,28 @@ function renderRequest(c){
           <button class="on" data-v="In person">In person</button>
           <button data-v="Virtual">Virtual</button>
         </div></div>
+      <div class="field" style="margin-bottom:0"><label>Where</label>
+        <select id="rq_loc" onchange="locDetail()"></select>
+        <input id="rq_locd" placeholder="Room number, or where exactly" style="margin-top:8px;display:none"></div>
     </div>
     <div style="margin-top:14px"><button class="btn" id="rq_send" onclick="submitRequest('${t.id}')">Send request to ${esc(t.name)}</button></div>
     <p class="tiny" style="text-align:center;margin-top:10px">🔒 Coordination stays inside StudyLink — no phone numbers or personal emails shared.</p>
   `;
-  c.querySelectorAll('#rq_fmt button').forEach(b=>b.onclick=()=>{ c.querySelectorAll('#rq_fmt button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); });
+  c.querySelectorAll('#rq_fmt button').forEach(b=>b.onclick=()=>{ c.querySelectorAll('#rq_fmt button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); fillLocations(); });
+  fillLocations();
+}
+// Where to meet, depending on the format. Classroom and Other take a detail.
+const PLACES = { 'In person':['Library','Learning commons','Cafeteria','Classroom','Front office / counseling','Other'], 'Virtual':['Google Meet','Zoom','FaceTime','Phone call','Other'] };
+function fillLocations(){
+  const fmt=document.querySelector('#rq_fmt button.on')?.dataset.v||'In person', sel=$('rq_loc'); if(!sel) return;
+  sel.innerHTML = PLACES[fmt].map(x=>`<option>${x}</option>`).join('');
+  locDetail();
+}
+function locDetail(){
+  const v=$('rq_loc')?.value||'', d=$('rq_locd'); if(!d) return;
+  const need = v==='Classroom' || v==='Other';
+  d.style.display = need ? 'block' : 'none';
+  d.placeholder = v==='Classroom' ? 'Room number and teacher' : 'Say where';
 }
 async function submitRequest(tid){
   const t=findTutor(tid); if(!t) return;
@@ -1042,11 +1059,13 @@ async function submitRequest(tid){
   const date=$('rq_day').value||null;
   const time=$('rq_time').value.trim()||'TBD';
   const fmt=document.querySelector('#rq_fmt button.on')?.dataset.v||'In person';
+  const locBase=$('rq_loc')?.value||'', locD=($('rq_locd')?.value||'').trim();
+  const location = locBase + (locD && (locBase==='Classroom'||locBase==='Other') ? ' · '+locD : '');
   const btn=$('rq_send'); if(btn){ btn.disabled=true; btn.textContent='Sending…'; }
   try{
     await sbFetch('/rest/v1/sl_requests', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({
       student_id:A.user.id, tutor_id:tid, student_alias:A.profile.student_alias, tutor_alias:t.name,
-      course, topic, note, date, time, format:fmt }) });
+      course, topic, note, date, time, format:fmt, location }) });
     await loadData();
     closeView(); go('tutoring');
     toast('Request sent to '+t.name+' 🎉');
@@ -1074,7 +1093,7 @@ function renderTutoring(c){
           <div class="row"><div class="avatar" style="background:${courseColor(r.course)}">${initials(r.student_alias)}</div>
             <div><div style="font-weight:800">${esc(r.student_alias)}</div><div class="tiny">${esc(r.course)} · ${esc(r.topic)}</div></div></div>
           ${r.note ? `<div style="font-size:13px;margin:8px 0 0;color:#555">${esc(r.note)}</div>` : ''}
-          <div class="tiny" style="margin:8px 0 10px">🗓️ ${esc(fmtDate(r.date))} · ${esc(r.time||'TBD')} · ${esc(r.format)}</div>
+          <div class="tiny" style="margin:8px 0 10px">🗓️ ${esc(fmtDate(r.date))} · ${esc(r.time||'TBD')} · ${esc(r.format)}${r.location?' · 📍 '+esc(r.location):''}</div>
           <div class="row" style="gap:8px">
             <button class="btn sm gray" style="flex:1" onclick="respondRequest('${r.id}',false)">Decline</button>
             <button class="btn sm green" style="flex:1" onclick="respondRequest('${r.id}',true)">Accept</button>
@@ -1099,7 +1118,7 @@ function renderTutoring(c){
       <div class="card row">
         <div class="avatar" style="background:${courseColor(r.course)}">${courseEmoji(r.course)}</div>
         <div style="min-width:0"><div style="font-weight:800">${esc(r.course)}</div>
-          <div class="tiny">${esc(r.topic)} · with ${esc(r.tutor_alias)} · ${esc(fmtDate(r.date))} ${esc(r.time||'')}</div></div>
+          <div class="tiny">${esc(r.topic)} · with ${esc(r.tutor_alias)} · ${esc(fmtDate(r.date))} ${esc(r.time||'')}${r.location?' · 📍 '+esc(r.location):''}</div></div>
         <span class="pill" style="margin-left:auto;${style[r.status]||''}">${label[r.status]||r.status}</span>
         ${r.status==='pending' ? `<button class="del" title="Cancel request" style="border:none;background:none;color:var(--muted);cursor:pointer;font-size:16px" onclick="cancelRequest('${r.id}')">✕</button>` : ''}
       </div>`).join('') : `<div class="card tiny" style="text-align:center">You haven't requested tutoring yet. Open a class to find a tutor.</div>`}
@@ -1502,7 +1521,7 @@ async function renderAdminRequests(c){
       <div class="card row">
         <div class="avatar" style="background:${courseColor(r.course)}">${courseEmoji(r.course)}</div>
         <div style="min-width:0"><div style="font-weight:800">${esc(r.course)} <span class="tiny">· ${esc(r.topic)}</span></div>
-          <div class="tiny">${esc(r.student_alias)} → ${esc(r.tutor_alias)} · ${esc(fmtDate(r.date))} ${esc(r.time||'')} · ${esc(r.format)} · sent ${esc(new Date(r.created_at).toLocaleDateString())}</div></div>
+          <div class="tiny">${esc(r.student_alias)} → ${esc(r.tutor_alias)} · ${esc(fmtDate(r.date))} ${esc(r.time||'')} · ${esc(r.format)}${r.location?' · 📍 '+esc(r.location):''} · sent ${esc(new Date(r.created_at).toLocaleDateString())}</div></div>
         <span class="pill" style="margin-left:auto;${style[r.status]||''}">${label[r.status]||r.status}</span>
         ${r.status==='pending' || r.status==='accepted' ? `<button class="del" title="Cancel this request" style="border:none;background:none;color:var(--muted);cursor:pointer;font-size:16px" onclick="adminCancel('${r.id}')">✕</button>` : ''}
       </div>`).join('') : '<div class="card tiny" style="text-align:center">No requests here.</div>'}`;
