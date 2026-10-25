@@ -595,7 +595,7 @@ function renderHome(c){
         </div>
       </div>
       <div>
-        <div class="sectlabel">Online now</div>
+        <div class="sectlabel">Who's online</div>
         <div class="card">${onlineNowHtml()}</div>
       </div>
     </div>
@@ -608,17 +608,23 @@ function renderHome(c){
 // Who is online right now: tutors for my classes and classmates in them, by
 // alias. Tapping a person opens the class they share with you.
 function onlineNowHtml(){
+  // Everyone with an account who is online right now, by alias. Tutors for
+  // one of your classes get a tap-through to that class.
   const mine = new Set([...S.myClasses, ...S.tutorClasses]);
-  const seen = {};
-  (S.tutors||[]).forEach(t => { if(!isOnline(t.seen)) return; const shared = t.courses.map(c=>c.course).filter(c=>mine.has(c)); if(shared.length || !mine.size) seen[t.id] = { name:t.name, kind:'Tutor', course:shared[0]||t.courses[0].course, color:t.color }; });
-  (S.roster||[]).forEach(r => { if(!isOnline(r.last_seen_at) || !mine.has(r.course)) return; if(!seen[r.user_id]) seen[r.user_id] = { name:r.student_alias, kind:'Classmate', course:r.course, color:courseColor(r.course) }; });
-  const list = Object.values(seen).sort((a,b)=>a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name, undefined, {numeric:true}));
-  if(!list.length) return `<div class="tiny" style="text-align:center;padding:10px">Nobody from your classes is online right now.${mine.size ? '' : ' Add a class to see who is around.'}</div>`;
-  return list.slice(0,8).map(x=>`<div class="sessrow" style="cursor:pointer;padding:8px 0" onclick="openClass('${esc(x.course)}')">
+  const tutorById = {}; (S.tutors||[]).forEach(t => { tutorById[t.id] = t; });
+  const list = (S.people||[]).filter(x => isOnline(x.last_seen_at)).map(x => {
+    const t = tutorById[x.user_id];
+    const shared = t ? t.courses.map(c=>c.course).find(c=>mine.has(c)) : null;
+    const kind = x.role==='board' ? 'Board' : x.role==='admin' ? 'Administrator' : x.is_tutor ? 'Tutor' : 'Student';
+    return { name: (t && shared) ? t.name : x.student_alias, kind, grade:x.grade_level, course:shared, color: t ? t.color : TUTOR_COLORS[hashStr(x.user_id)%TUTOR_COLORS.length] };
+  }).sort((a,b)=>a.name.localeCompare(b.name, undefined, {numeric:true}));
+  const total = (S.people||[]).length;
+  if(!list.length) return `<div class="tiny" style="text-align:center;padding:10px">Nobody else is online right now · ${total} member${total===1?'':'s'} in all</div>`;
+  return `<div class="tiny" style="margin-bottom:4px">${list.length} of ${total} member${total===1?'':'s'} online</div>` + list.slice(0,10).map(x=>`<div class="sessrow" style="${x.course?'cursor:pointer;':''}padding:8px 0" ${x.course?`onclick="openClass('${esc(x.course)}')"`:''}>
       ${avatarDot(initials(x.name), new Date().toISOString(), 'width:34px;height:34px;font-size:13px;background:'+x.color)}
-      <div style="min-width:0;flex:1"><div class="who" style="font-size:13.5px">${esc(x.name)} <span class="tiny">· ${x.kind}</span></div><div class="meta">${esc(x.course)}</div></div>
+      <div style="min-width:0;flex:1"><div class="who" style="font-size:13.5px">${esc(x.name)} <span class="tiny">· ${x.kind}${x.grade?' · Grade '+x.grade:''}</span></div>${x.course ? `<div class="meta">Tutors ${esc(x.course)} — tap to open</div>` : ''}</div>
       <span class="seen on">● Online</span>
-    </div>`).join('') + (list.length>8 ? `<div class="tiny" style="text-align:center;margin-top:6px">+${list.length-8} more</div>` : '');
+    </div>`).join('') + (list.length>10 ? `<div class="tiny" style="text-align:center;margin-top:6px">+${list.length-10} more</div>` : '');
 }
 
 // Sunday to Saturday of the current week, with sessions, requests and events on
@@ -2168,7 +2174,7 @@ let dataLoaded = false, dataLoading = false, dataError = null;
 async function loadData(){
   if(!A.user) return;
   const me = A.user.id;
-  const [classes, tcourses, reqs, events, tutors, posts, myGrades, pendingGrades, materials, roster, presence] = await Promise.all([
+  const [classes, tcourses, reqs, events, tutors, posts, myGrades, pendingGrades, materials, roster, presence, people] = await Promise.all([
     sbFetch('/rest/v1/sl_student_classes?select=course&user_id=eq.'+me+'&order=created_at'),
     sbFetch('/rest/v1/sl_tutor_courses?select=course,grade,year,availability&user_id=eq.'+me+'&order=created_at'),
     sbFetch('/rest/v1/sl_requests?select=*&or=(student_id.eq.'+me+',tutor_id.eq.'+me+')&order=created_at.desc'),
@@ -2180,6 +2186,7 @@ async function loadData(){
     sbFetch('/rest/v1/sl_materials?select=*&order=created_at.desc&limit=500'),
     sbFetch('/rest/v1/sl_class_students?select=*'),
     sbFetch('/rest/v1/sl_request_presence?select=*'),
+    sbFetch('/rest/v1/sl_people?select=*'),
   ]);
   S.myClasses = (classes||[]).map(r=>r.course);
   S.tutorClasses = (tcourses||[]).map(r=>r.course);
@@ -2195,6 +2202,7 @@ async function loadData(){
   S.materials = materials||[];
   S.roster = (roster||[]).filter(r => r.user_id !== me);
   S.presence = {}; (presence||[]).forEach(function(x){ S.presence[x.request_id] = x.other_seen_at; });
+  S.people = (people||[]).filter(x => x.user_id !== me);
   S.tutors = buildTutors(tutors||[], me);
   S.helped = S.incoming.filter(r=>r.status==='done').length;
   S.hours = Math.round(S.helped*0.75*100)/100;
