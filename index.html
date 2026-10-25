@@ -971,21 +971,27 @@ function completeSession(id){
 
 /* -------- COMMUNITY -------- */
 function renderCommunity(c){
-  // Your classes on both sides, plus any class that already has a conversation.
+  // Your community is your classes: everything you added on either side of
+  // the sidebar gets a board here the moment it is added.
+  const mine = ALL_COURSES.filter(x => S.myClasses.includes(x) || S.tutorClasses.includes(x));
   const withPosts = (S.posts||[]).map(p=>p.course);
-  const active = ALL_COURSES.filter(x => S.myClasses.includes(x) || S.tutorClasses.includes(x) || withPosts.includes(x));
+  const others = ALL_COURSES.filter(x => !mine.includes(x) && withPosts.includes(x));
+  const row = course => {
+    const posts=postsFor(course), n=tutorsFor(course).length;
+    const latest = (S.posts||[]).filter(p=>p.course===course).sort((a,b)=>b.created_at.localeCompare(a.created_at))[0];
+    return `<div class="card row" style="cursor:pointer" onclick="openView({type:'board',course:'${esc(course)}'})">
+      <div class="avatar" style="background:${courseColor(course)}">${courseEmoji(course)}</div>
+      <div style="min-width:0"><div style="font-weight:800">${esc(course)}</div>
+        <div class="tiny" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${posts.length} post${posts.length===1?'':'s'} · ${n} tutor${n===1?'':'s'}${latest ? ' · latest: ' + esc(latest.author_alias) + ': ' + esc(latest.body.slice(0,60)) : ''}</div></div>
+      <div style="margin-left:auto;color:var(--muted)">›</div>
+    </div>`;
+  };
   c.innerHTML=`
     <h2 class="title">Community</h2>
-    <div class="lead">Ask a question — someone in your class can help.</div>
-    ${active.length ? active.map(course=>{
-      const posts=postsFor(course);
-      return `<div class="card row" style="cursor:pointer" onclick="openView({type:'board',course:'${esc(course)}'})">
-        <div class="avatar" style="background:${courseColor(course)}">${courseEmoji(course)}</div>
-        <div style="min-width:0"><div style="font-weight:800">${esc(course)}</div>
-          <div class="tiny">${posts.length} post${posts.length===1?'':'s'} · ${tutorsFor(course).length} tutor${tutorsFor(course).length===1?'':'s'} here</div></div>
-        <div style="margin-left:auto;color:var(--muted)">›</div>
-      </div>`;
-    }).join('') : `<div class="empty"><div class="em">💬</div>Add a class and its community shows up here.</div>`}
+    <div class="lead">Every class you add has a board here. Ask a question — someone in your class can help.</div>
+    ${mine.length ? mine.map(row).join('') : `<div class="empty"><div class="em">💬</div>No classes yet. Add the classes you are taking and their boards show up here.<div style="margin-top:12px"><button class="btn sm" onclick="S.tab='classes'; openView({type:'addClasses'})">＋ Add classes</button></div></div>`}
+    ${mine.length ? `<button class="card addcard" style="width:100%;min-height:56px;margin-top:10px" onclick="S.tab='classes'; openView({type:'addClasses'})">＋ Add a class to join its board</button>` : ''}
+    ${others.length ? `<div class="sectlabel">Other classes with conversations</div>${others.map(row).join('')}` : ''}
   `;
 }
 function renderBoard(c){
