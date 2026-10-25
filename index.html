@@ -82,7 +82,7 @@
   .classcard .rm{position:absolute; top:8px; right:8px; border:none; background:#f3f1f9; color:var(--muted); width:26px; height:26px; border-radius:50%; cursor:pointer; font-size:14px}
   .addcard{display:flex; align-items:center; justify-content:center; gap:8px; min-height:96px; cursor:pointer; border:2px dashed #d6dcf0; background:transparent; box-shadow:none; color:var(--blue-d); font-weight:800}
   .cols{display:grid; grid-template-columns:1fr; gap:16px}
-  @media (min-width:760px){ .cols{grid-template-columns:3fr 2fr} }
+  @media (min-width:760px){ .cols{grid-template-columns:3fr 2fr} .cols.even{grid-template-columns:1fr 1fr} }
 
   /* Calendar */
   .calhead{display:flex; align-items:center; gap:8px; margin-bottom:10px}
@@ -155,6 +155,29 @@
   .mrow .info{min-width:0; flex:1 1 220px}
   @media (max-width:640px){
     .mrow .ctl{flex-basis:100%; margin-left:0; padding-left:56px}
+  }
+
+  /* Home: this week at a glance, and the two session columns */
+  .week{display:grid; grid-template-columns:repeat(7,1fr); gap:6px}
+  .wday{background:#fff; border:1px solid var(--line); border-radius:12px; padding:8px 6px 7px; min-height:86px; cursor:pointer; text-align:center; font:inherit; color:var(--ink); display:flex; flex-direction:column; gap:4px; min-width:0}
+  .wday:hover{border-color:#cdd7f3}
+  .wday .dn{font-size:10px; font-weight:800; letter-spacing:.5px; text-transform:uppercase; color:var(--muted)}
+  .wday .dd{font-size:16px; font-weight:800; width:28px; height:28px; line-height:28px; border-radius:50%; margin:0 auto}
+  .wday.today .dd{background:var(--blue-d); color:#fff}
+  .wday.past{opacity:.6}
+  .wday .wi{font-size:10px; font-weight:700; padding:2px 5px; border-radius:6px; background:#f2f0fb; border-left:3px solid var(--c); text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .wday .wi.sess{background:#e4f6ec}
+  .wday .wi.pend{background:#fbf1e2}
+  .wday .more{font-size:9.5px; color:var(--muted); font-weight:700}
+  .sessrow{display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--line)}
+  .sessrow:last-child{border-bottom:none}
+  .sessrow .when{font-size:11px; font-weight:800; color:var(--blue-d); background:#eef3fe; border-radius:8px; padding:3px 7px; white-space:nowrap}
+  .sessrow .who{font-weight:800; font-size:14px}
+  .sessrow .meta{font-size:12px; color:var(--muted); font-weight:600}
+  @media (max-width:600px){
+    .wday{min-height:60px; padding:6px 3px}
+    .wday .wi{font-size:0; height:6px; padding:0; border-left:none; background:var(--c)}
+    .wday .more{display:none}
   }
 
   /* Bits */
@@ -253,7 +276,7 @@ const MONTHS = ['January','February','March','April','May','June','July','August
 
 /* ============================= DATA ============================= */
 const DEPTS = [
-  { name:'Math', emoji:'📐', color:'#7aa7f0', courses:['Algebra I','Geometry','Algebra II','Precalculus','AP Calculus'] },
+  { name:'Math', emoji:'📐', color:'#7aa7f0', courses:['Algebra I','Geometry','Algebra II','Precalculus','AP Precalculus','AP Calculus'] },
   { name:'Science', emoji:'🔬', color:'#63c39a', courses:['Biology','Chemistry','Physics','AP Biology'] },
   { name:'Social Studies', emoji:'🌍', color:'#f0a868', courses:['AP Human Geography','World History','US History','AP US History'] },
   { name:'English', emoji:'📖', color:'#f28fb4', courses:['English 9','English 10','English 11','AP English Lang'] },
@@ -509,25 +532,80 @@ function renderHome(c){
       <div class="stat" style="cursor:pointer" onclick="go('tutoring')"><div class="n" style="color:var(--pink-d)">${pending + inc}</div><div class="l">${inc ? 'requests to you' : 'pending requests'}</div></div>
     </div>
 
-    <div class="cols" style="margin-top:6px">
+    <div class="sectlabel">This week</div>
+    ${weekStrip()}
+
+    <div class="cols even" style="margin-top:6px">
       <div>
-        <div class="sectlabel">Coming up this week</div>
-        <div class="card">
-          ${soon.length ? soon.map(eventRow).join('') : `<div class="tiny" style="text-align:center;padding:10px">Nothing on your calendar this week.</div>`}
-          <button class="btn ghost sm" style="width:100%;margin-top:10px" onclick="go('calendar')">Open calendar</button>
-        </div>
+        <div class="sectlabel">Tutoring you</div>
+        <div class="card">${sessionColumn('student')}</div>
       </div>
       <div>
-        <div class="sectlabel">Find help</div>
-        <div class="search" onclick="openView({type:'search'})" style="cursor:pointer">
-          <span class="mag">🔍</span><input placeholder="Search any class…" readonly style="cursor:pointer">
-        </div>
+        <div class="sectlabel">You're tutoring</div>
+        <div class="card">${sessionColumn('tutor')}</div>
       </div>
+    </div>
+
+    <div class="sectlabel">Find help</div>
+    <div class="search" onclick="openView({type:'search'})" style="cursor:pointer">
+      <span class="mag">🔍</span><input placeholder="Search any class…" readonly style="cursor:pointer">
     </div>
 
     <div class="sectlabel">${S.mode==='tutor' ? 'Classes I tutor' : 'My classes'}</div>
     ${classGrid(false)}
   `;
+}
+
+// Sunday to Saturday of the current week, with sessions, requests and events on
+// each day. Tapping a day opens the calendar there.
+function weekStrip(){
+  const now=new Date(), today=ymd(now);
+  const start=addDays(now, -now.getDay());
+  const items=calItems();
+  let cells='';
+  for(let i=0;i<7;i++){
+    const d=addDays(start,i), k=ymd(d);
+    const evs=items.filter(e=>e.date===k).sort(byWhen);
+    cells += `<button class="wday ${k===today?'today':''} ${k<today?'past':''}" onclick="S.cal={y:${d.getFullYear()},m:${d.getMonth()},sel:'${k}'}; go('calendar')" title="${esc(fmtDate(k))}">
+      <span class="dn">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][i]}</span>
+      <span class="dd">${d.getDate()}</span>
+      ${evs.slice(0,3).map(e=>`<span class="wi ${e.kind==='session'?'sess':e.kind==='pending'?'pend':''}" style="--c:${courseColor(e.course)}">${esc(e.time ? e.time.replace(/:00 /,' ')+' ' : '')}${esc(e.kind==='session' ? e.title.replace(/^(Tutoring|Session with) /,'') : e.title)}</span>`).join('')}
+      ${evs.length>3?`<span class="more">+${evs.length-3} more</span>`:''}
+    </button>`;
+  }
+  return `<div class="week">${cells}</div>`;
+}
+
+// One column of the home screen: the sessions where I'm the student, or the
+// ones where I'm the tutor. Upcoming first; the tutor side can mark a session
+// done once its day has come.
+function sessionColumn(role){
+  const me=A.user ? A.user.id : null, today=ymd(new Date());
+  const rows=(role==='tutor' ? S.incoming : S.myRequests)
+    .filter(r=>r.status==='accepted' || (role==='student' && r.status==='pending'))
+    .sort((a,b)=>(a.date||'9999').localeCompare(b.date||'9999') || (a.time||'').localeCompare(b.time||''));
+  if(!rows.length){
+    return role==='tutor'
+      ? `<div class="tiny" style="text-align:center;padding:10px">${S.me.isTutor ? 'Nobody booked yet. Requests to you land in Tutoring.' : 'You aren\'t tutoring yet.'}</div>
+         ${S.me.isTutor ? '' : `<button class="btn ghost sm" style="width:100%;margin-top:6px" onclick="openView({type:'becomeTutor'})">✋ Become a tutor</button>`}`
+      : `<div class="tiny" style="text-align:center;padding:10px">No sessions booked. Open a class to find a tutor.</div>
+         <button class="btn ghost sm" style="width:100%;margin-top:6px" onclick="go('classes')">Find a tutor</button>`;
+  }
+  const done = S.incoming.filter(r=>r.status==='done').length;
+  return rows.map(r=>{
+    const other = role==='tutor' ? r.student_alias : r.tutor_alias;
+    const dayLabel = r.date ? (r.date===today ? 'Today' : parseYmd(r.date).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})) : 'Day TBD';
+    const pending = r.status==='pending';
+    return `<div class="sessrow">
+      <div class="avatar" style="width:38px;height:38px;font-size:15px;background:${courseColor(r.course)}">${courseEmoji(r.course)}</div>
+      <div style="min-width:0;flex:1">
+        <div class="who">${esc(other)} <span class="tiny">· ${esc(r.course)}</span></div>
+        <div class="meta">${esc(r.topic||'')}${r.topic?' · ':''}${esc(r.time||'Time TBD')} · ${esc(r.format)}</div>
+      </div>
+      ${pending ? `<span class="pill" style="background:#fbf1e2;color:#c98b34">Waiting</span>` : `<span class="when">${esc(dayLabel)}</span>`}
+      ${role==='tutor' && !pending && r.date && r.date<=today ? `<button class="btn sm green" onclick="completeSession('${r.id}')">Done</button>` : ''}
+    </div>`;
+  }).join('') + (role==='tutor' && done ? `<div class="tiny" style="text-align:center;margin-top:8px">${done} session${done===1?'':'s'} completed · ${S.hours} service hours</div>` : '');
 }
 
 // Cards for my classes, plus one to add more. removable shows the × on each.
