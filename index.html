@@ -2042,6 +2042,7 @@ async function consumeAuthLink(){
   if(h.indexOf('access_token=') < 0) return false;
   const q = new URLSearchParams(h.replace(/^#/, ''));
   const token = q.get('access_token'), type = q.get('type') || '';
+  A.refresh = q.get('refresh_token') || null;
   history.replaceState(null, '', location.pathname + location.search);
   if(!token) return false;
   try {
@@ -2171,11 +2172,19 @@ function sbHeaders(auth){
   h.Authorization = 'Bearer ' + (auth && A.token ? A.token : SKEY);
   return h;
 }
-async function sbFetch(path, opts){
+async function sbFetch(path, opts, retried){
+  if(A.token && A.refresh && !path.startsWith('/auth/v1/token')) await ensureFreshToken();
   const r = await fetch(SB + path, { ...(opts||{}), headers:{ ...sbHeaders(true), ...((opts||{}).headers||{}) } });
   const text = await r.text();
   let body = null; try { body = text ? JSON.parse(text) : null; } catch(e){}
-  if(!r.ok) throw new Error((body && (body.message || body.error_description || body.msg || (typeof body.error === 'string' ? body.error : null))) || r.statusText);
+  if(!r.ok){
+    const msg = (body && (body.message || body.error_description || body.msg || (typeof body.error === 'string' ? body.error : null))) || r.statusText;
+    if(!retried && A.token && (r.status === 401 || /jwt expired|invalid jwt|token is expired/i.test(msg))){
+      try { await refreshSession(); return sbFetch(path, opts, true); }
+      catch(e){ signOut(); toast('Your session expired. Please sign in again.'); throw e; }
+    }
+    throw new Error(msg);
+  }
   return body;
 }
 
@@ -2192,8 +2201,28 @@ function randomAlias(){
 }
 function aliasChoices(){ const out=[]; while(out.length<5){ const a=randomAlias(); if(!out.includes(a)) out.push(a); } return out; }
 
-function saveSession(){ try{ localStorage.setItem(AUTH_LS, JSON.stringify({ token:A.token, user:A.user })); }catch(e){} }
-function clearSession(){ try{ localStorage.removeItem(AUTH_LS); }catch(e){} A.token=null; A.user=null; A.profile=null; }
+function saveSession(){ try{ localStorage.setItem(AUTH_LS, JSON.stringify({ token:A.token, refresh:A.refresh, user:A.user })); }catch(e){} }
+// Access tokens last an hour. The refresh token swaps them for new ones; any
+// request that comes back with an expired token is retried once after that.
+function tokenExp(){ try { return JSON.parse(atob(A.token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))).exp * 1000; } catch(e){ return 0; } }
+let refreshing = null;
+async function refreshSession(){
+  if(!A.refresh) throw new Error('Session expired. Please sign in again.');
+  if(refreshing) return refreshing;
+  refreshing = (async () => {
+    const r = await fetch(SB + '/auth/v1/token?grant_type=refresh_token', { method:'POST', headers:{ apikey:SKEY, 'Content-Type':'application/json' }, body: JSON.stringify({ refresh_token: A.refresh }) });
+    const d = await r.json().catch(() => null);
+    if(!r.ok || !d || !d.access_token) throw new Error('Session expired. Please sign in again.');
+    A.token = d.access_token; A.refresh = d.refresh_token || A.refresh; if(d.user) A.user = d.user; saveSession();
+    return true;
+  })();
+  try { return await refreshing; } finally { refreshing = null; }
+}
+async function ensureFreshToken(){
+  if(!A.token || !A.refresh) return;
+  if(tokenExp() - Date.now() < 5*60*1000) { try { await refreshSession(); } catch(e) {} }
+}
+function clearSession(){ try{ localStorage.removeItem(AUTH_LS); }catch(e){} A.token=null; A.refresh=null; A.user=null; A.profile=null; }
 
 async function loadProfile(){
   const rows = await sbFetch('/rest/v1/sl_profiles?select=*&id=eq.' + A.user.id);
@@ -2222,7 +2251,7 @@ async function signIn(idOrEmail, password){
     method:'POST', headers:{ Authorization:'Bearer ' + SKEY },
     body: JSON.stringify({ email, password })
   });
-  A.token = d.access_token; A.user = d.user; saveSession(); dataLoaded = false;
+  A.token = d.access_token; A.refresh = d.refresh_token; A.user = d.user; saveSession(); dataLoaded = false;
   return await ensureProfile();   // issues the alias if this is their first sign-in
 }
 
@@ -2238,6 +2267,7 @@ async function signUp({ email, password, realName, gradeLevel }){
     })
   });
   A.token = d.access_token || (d.session && d.session.access_token);
+  A.refresh = d.refresh_token || (d.session && d.session.refresh_token);
   A.user  = d.user || (d.session && d.session.user);
   // No session means email confirmation is on. The account exists, but nothing
   // can be written as them until they confirm and sign in, so the alias is
@@ -2296,7 +2326,8 @@ async function restoreSession(){
   try{
     const raw = localStorage.getItem(AUTH_LS); if(!raw) return false;
     const s = JSON.parse(raw); if(!s || !s.token) return false;
-    A.token = s.token; A.user = s.user; dataLoaded = false;
+    A.token = s.token; A.refresh = s.refresh || null; A.user = s.user; dataLoaded = false;
+    if(tokenExp() < Date.now()){ await refreshSession(); }   // came back after an hour or more
     await loadProfile();
     return !!A.profile;
   }catch(e){ clearSession(); return false; }
