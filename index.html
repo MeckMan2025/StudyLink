@@ -608,8 +608,6 @@ function renderHome(c){
       <span class="mag">🔍</span><input placeholder="Search any class…" readonly style="cursor:pointer">
     </div>
 
-    <div class="sectlabel">${S.mode==='tutor' ? 'Classes I tutor' : 'My classes'}</div>
-    ${S[classKey()].length ? classGrid(false, false) : `<div class="card tiny" style="text-align:center">No classes yet — add them under Classes in the sidebar.</div>`}
   `;
 }
 
