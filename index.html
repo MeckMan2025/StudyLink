@@ -525,7 +525,7 @@ function renderSettings(c){
     <div class="lead">Saved to your account.</div>
     <div class="card">
       <div class="field"><label>Grade</label>
-        <select onchange="setGrade(+this.value)">${[7,8,9,10,11,12].map(g=>`<option ${S.me.grade===g?'selected':''}>${g}</option>`).join('')}</select></div>
+        <select onchange="setGrade(+this.value)">${[6,7,8,9,10,11,12].map(g=>`<option ${S.me.grade===g?'selected':''}>${g}</option>`).join('')}</select></div>
       <div class="field" style="margin-bottom:0"><label>Open the sidebar on</label>
         <div class="seg">
           <button class="${S.mode==='tutor'?'on':''}" onclick="setMode('tutor')">🎓 Tutor</button>
@@ -1282,7 +1282,7 @@ function renderSetup(c){
   if(step===1){
     body = `<h2>Welcome, ${esc(A.profile.student_alias)}</h2>
       <div class="lead">A couple of minutes of setup and StudyLink is ready for you. What grade are you in?</div>
-      <div class="chips" style="justify-content:center">${[7,8,9,10,11,12].map(g=>`<button class="chip ${st.grade===g?'dept':''}" style="${st.grade===g?'background:var(--blue-d)':''};padding:12px 18px;font-size:15px" onclick="S.setup.grade=${g};render()">Grade ${g}</button>`).join('')}</div>
+      <div class="chips" style="justify-content:center">${[6,7,8,9,10,11,12].map(g=>`<button class="chip ${st.grade===g?'dept':''}" style="${st.grade===g?'background:var(--blue-d)':''};padding:12px 18px;font-size:15px" onclick="S.setup.grade=${g};render()">Grade ${g}</button>`).join('')}</div>
       ${nav(0, 'Next', 'S.setup.step=2;render()', !st.grade)}`;
   } else if(step===2){
     body = `<h2>What are you taking this year?</h2>
@@ -1433,8 +1433,8 @@ function renderBecomeTutor(c){
   }
 }
 // Letter grades and the grade a class was taken in, for the tutor steps.
-const TAKEN_GRADES=['Grade 7','Grade 8','Grade 9','Grade 10','Grade 11','Grade 12'];
-const defaultTaken = () => 'Grade ' + Math.max(7, Math.min(12, (S.me.grade||10) - 1));
+const TAKEN_GRADES=['Grade 6','Grade 7','Grade 8','Grade 9','Grade 10','Grade 11','Grade 12'];
+const defaultTaken = () => 'Grade ' + Math.max(6, Math.min(12, (S.me.grade||10) - 1));
 // Availability is picked, not typed: days and times of day, stored as one
 // readable line such as "Mon, Wed · After school, Evenings".
 const AVAIL_DAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
@@ -1590,7 +1590,7 @@ async function renderAdminTeam(c){
       </div>
       ${editing ? `<div class="medit">
         <input id="me_name" value="${esc(s.real_name)}" placeholder="Full name" style="flex:2;min-width:160px">
-        <select id="me_grade" style="flex:0 0 120px"><option value="">No grade</option>${[7,8,9,10,11,12].map(g=>`<option value="${g}" ${s.grade_level===g?'selected':''}>Grade ${g}</option>`).join('')}</select>
+        <select id="me_grade" style="flex:0 0 120px"><option value="">No grade</option>${[6,7,8,9,10,11,12].map(g=>`<option value="${g}" ${s.grade_level===g?'selected':''}>Grade ${g}</option>`).join('')}</select>
         <button class="btn sm" onclick="saveMember('${esc(s.email)}')">Save</button>
       </div>` : ''}
     </div>`;
@@ -1609,7 +1609,7 @@ async function renderAdminTeam(c){
       <div class="row" style="gap:8px;flex-wrap:wrap">
         <input id="mb_name" placeholder="Full name" style="flex:1;min-width:160px;padding:10px 12px;border:1.5px solid #e5e2f0;border-radius:11px;font:inherit;font-size:14px">
         <input id="mb_email" type="email" placeholder="Email they will sign in with" style="flex:2;min-width:220px;padding:10px 12px;border:1.5px solid #e5e2f0;border-radius:11px;font:inherit;font-size:14px" onkeydown="if(event.key==='Enter')addMember()">
-        <select id="mb_grade" style="flex:0 0 110px;padding:10px 12px;border:1.5px solid #e5e2f0;border-radius:11px;font:inherit;font-size:14px;background:#fff"><option value="">Grade</option>${[7,8,9,10,11,12].map(g=>`<option value="${g}">Grade ${g}</option>`).join('')}</select>
+        <select id="mb_grade" style="flex:0 0 110px;padding:10px 12px;border:1.5px solid #e5e2f0;border-radius:11px;font:inherit;font-size:14px;background:#fff"><option value="">Grade</option>${[6,7,8,9,10,11,12].map(g=>`<option value="${g}">Grade ${g}</option>`).join('')}</select>
         <select id="mb_role" style="flex:0 0 150px;padding:10px 12px;border:1.5px solid #e5e2f0;border-radius:11px;font:inherit;font-size:14px;background:#fff"><option value="student">Student</option><option value="admin">Administrator</option><option value="board">Board</option></select>
         <button class="btn sm" id="mb_add" onclick="addMember()">Add</button>
       </div>
