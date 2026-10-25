@@ -1273,7 +1273,7 @@ function renderProfile(c){
 // Four short steps the first time someone signs in: grade, classes now,
 // classes taken (with the grade earned), and whether they want to tutor.
 // Classes taken are the only ones a person may tutor.
-const LETTERS=['A','A-','B+','B','B-','C+','C'];
+const LETTERS=['A+','A','A-','B+','B','B-','C+','C','C-','D+','D','D-'];
 function setupState(){
   if(S.setup) return S.setup;
   const taken={}; (S.taken||[]).forEach(g=>{ taken[g.course]={ grade:g.grade||'A', year:g.year||defaultTaken() }; });
@@ -1395,7 +1395,7 @@ function renderBecomeTutor(c){
     S.overlay.draft = { courses, days:parsed.days, times:parsed.times, bio:(A.profile&&A.profile.tutor_bio)||'', format:(A.profile&&A.profile.tutor_format)||'In person' };
   }
   const d=S.overlay.draft, step=S.overlay.step;
-  const GRADES=['A','A-','B+','B','B-','C+','C'];
+  const GRADES=LETTERS;
   if(step===1){
     c.innerHTML=`
       <button class="back" onclick="closeView()">‹ Cancel</button>
