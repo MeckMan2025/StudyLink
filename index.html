@@ -1323,8 +1323,10 @@ function renderSetup(c){
       ` : ''}
       ${nav(3, 'Finish', 'finishSetup(this)', false)}`;
   }
+  const y = window.scrollY;
   c.innerHTML = `<div class="auth-wrap"><div class="auth-card setup-card"><div class="auth-logo">S</div>${bar}${body}${A.setupMsg ? '<div class="auth-msg err">'+esc(A.setupMsg)+'</div>' : ''}</div></div>`;
-  window.scrollTo(0,0);
+  // Only a change of step jumps to the top; tapping a chip keeps your place.
+  if(st.step !== S.setupShownStep){ S.setupShownStep = st.step; window.scrollTo(0,0); } else window.scrollTo(0,y);
 }
 function setupToggleTaking(course){ const a=S.setup.taking, i=a.indexOf(course); if(i<0) a.push(course); else a.splice(i,1); render(); }
 function setupToggleTaken(course){ const t=S.setup.taken; if(t[course]){ delete t[course]; S.setup.tutorPick=S.setup.tutorPick.filter(x=>x!==course); } else t[course]={ grade:'A', year:defaultTaken() }; render(); }
