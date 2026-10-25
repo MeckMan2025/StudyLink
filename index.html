@@ -210,6 +210,20 @@
   .seen{font-size:11px; font-weight:700; color:var(--muted)}
   .seen.on{color:#2e9b6a}
 
+  .avrow{display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--line)}
+  .avrow:last-child{border-bottom:none}
+  .avrow .tag{font-size:11px; font-weight:800; border-radius:8px; padding:3px 8px; white-space:nowrap}
+  .avrow .tag.ok{background:#e4f6ec; color:#2e9b6a}
+  .avrow .tag.no{background:#fdecef; color:#c23b5e}
+  .cal .day.busy{background:#fdf3f5}
+  .cal .day.free{background:#f3fbf6}
+  .cal .avmark{font-size:9.5px; font-weight:800; border-radius:5px; padding:1px 4px; margin-top:3px; align-self:flex-start}
+  .cal .avmark.no{background:#fdecef; color:#c23b5e}
+  .cal .avmark.ok{background:#e4f6ec; color:#2e9b6a}
+  .daychips{display:flex; gap:4px; flex-wrap:wrap}
+  .daychips button{border:1.5px solid #e5e2f0; background:#fff; border-radius:9px; padding:7px 9px; font:inherit; font-size:12.5px; font-weight:800; color:var(--muted); cursor:pointer}
+  .daychips button.on{border-color:var(--blue); background:#eef3fe; color:var(--blue-d)}
+
   /* Bits */
   h2.title{font-size:22px; font-weight:800; margin:4px 2px 2px}
   .lead{color:var(--muted); font-size:13px; font-weight:600; margin:0 2px 14px}
@@ -554,6 +568,7 @@ function renderHelp(c){
     ${q('Inside a class', 'Every class has three sections. On the Tutee side the first is Tutors: people who can help you. On the Tutor side it is Tutees: students taking the class, whom you can offer help to. Materials is for shared links and notes, and Community is the class board.')}
     ${q('Getting help', 'Open a class to see its tutors, then send a request, or accept an offer a tutor sends you. Once it is confirmed, it shows up on your calendar and home screen.')}
     ${q('Privacy', 'Other students only see your alias. Coordination happens inside StudyLink — no phone numbers or personal emails are shared.')}
+    ${q('Availability', 'On the Calendar, mark yourself available or unavailable for one day or every week, all day or between two times, and remove any entry whenever you like. Unavailable always wins: students cannot request a tutor for a time they have blocked, and the tutor filter can show only who is free at a given day and time.')}
     ${q('Verified grades', 'When you become a tutor, the grades you claim go to a school administrator, who checks them against your records. Verified grades show a ✓ on your tutor card.')}
     ${q('Who runs this', 'Students use the app. Administrators verify grades and manage requests. The board maintains the app itself.')}
     ${q('Joining', 'An administrator approves you and hands you a one-time join code. Create an account with your email, that code and a password of your choosing. The code works once, so nobody else can set up your account.')}`;
@@ -587,17 +602,9 @@ function renderHome(c){
       </div>
     </div>
 
-    <div class="cols even" style="margin-top:6px">
-      <div>
-        <div class="sectlabel">Find help</div>
-        <div class="search" onclick="openView({type:'search'})" style="cursor:pointer">
-          <span class="mag">🔍</span><input placeholder="Search any class…" readonly style="cursor:pointer">
-        </div>
-      </div>
-      <div>
-        <div class="sectlabel">Who's online</div>
-        <div class="card">${onlineNowHtml()}</div>
-      </div>
+    <div class="sectlabel">Find help</div>
+    <div class="search" onclick="openView({type:'search'})" style="cursor:pointer">
+      <span class="mag">🔍</span><input placeholder="Search any class…" readonly style="cursor:pointer">
     </div>
 
     <div class="sectlabel">${S.mode==='tutor' ? 'Classes I tutor' : 'My classes'}</div>
@@ -607,25 +614,6 @@ function renderHome(c){
 
 // Who is online right now: tutors for my classes and classmates in them, by
 // alias. Tapping a person opens the class they share with you.
-function onlineNowHtml(){
-  // Everyone with an account who is online right now, by alias. Tutors for
-  // one of your classes get a tap-through to that class.
-  const mine = new Set([...S.myClasses, ...S.tutorClasses]);
-  const tutorById = {}; (S.tutors||[]).forEach(t => { tutorById[t.id] = t; });
-  const list = (S.people||[]).filter(x => isOnline(x.last_seen_at)).map(x => {
-    const t = tutorById[x.user_id];
-    const shared = t ? t.courses.map(c=>c.course).find(c=>mine.has(c)) : null;
-    const kind = x.role==='board' ? 'Board' : x.role==='admin' ? 'Administrator' : x.is_tutor ? 'Tutor' : 'Student';
-    return { name: (t && shared) ? t.name : x.student_alias, kind, grade:x.grade_level, course:shared, color: t ? t.color : TUTOR_COLORS[hashStr(x.user_id)%TUTOR_COLORS.length] };
-  }).sort((a,b)=>a.name.localeCompare(b.name, undefined, {numeric:true}));
-  const total = (S.people||[]).length;
-  if(!list.length) return `<div class="tiny" style="text-align:center;padding:10px">Nobody else is online right now · ${total} member${total===1?'':'s'} in all</div>`;
-  return `<div class="tiny" style="margin-bottom:4px">${list.length} of ${total} member${total===1?'':'s'} online</div>` + list.slice(0,10).map(x=>`<div class="sessrow" style="${x.course?'cursor:pointer;':''}padding:8px 0" ${x.course?`onclick="openClass('${esc(x.course)}')"`:''}>
-      ${avatarDot(initials(x.name), new Date().toISOString(), 'width:34px;height:34px;font-size:13px;background:'+x.color)}
-      <div style="min-width:0;flex:1"><div class="who" style="font-size:13.5px">${esc(x.name)} <span class="tiny">· ${x.kind}${x.grade?' · Grade '+x.grade:''}</span></div>${x.course ? `<div class="meta">Tutors ${esc(x.course)} — tap to open</div>` : ''}</div>
-      <span class="seen on">● Online</span>
-    </div>`).join('') + (list.length>10 ? `<div class="tiny" style="text-align:center;margin-top:6px">+${list.length-10} more</div>` : '');
-}
 
 // Sunday to Saturday of the current week, with sessions, requests and events on
 // each day. Tapping a day opens the calendar there.
@@ -799,8 +787,12 @@ function renderCalendar(c){
     const d=addDays(start,i), k=ymd(d);
     if(i>=35 && d.getMonth()!==m) break;   // drop a sixth row that is all next month
     const evs=items.filter(e=>e.date===k).sort(byWhen);
-    cells += `<button class="day ${d.getMonth()!==m?'out':''} ${k===today?'today':''} ${k===sel?'sel':''}" onclick="S.cal.sel='${k}'; render()">
+    const myBlocks=blocksOn(A.user.id, k);
+    const allBusy=myBlocks.some(b=>b.kind==='unavailable' && b.start_min===0 && b.end_min===1440);
+    const anyBusy=myBlocks.some(b=>b.kind==='unavailable'), anyFree=myBlocks.some(b=>b.kind==='available');
+    cells += `<button class="day ${d.getMonth()!==m?'out':''} ${k===today?'today':''} ${k===sel?'sel':''} ${allBusy?'busy':anyFree&&!anyBusy?'free':''}" onclick="S.cal.sel='${k}'; render()">
       <span class="n">${d.getDate()}</span>
+      ${allBusy ? '<span class="avmark no">Unavailable</span>' : anyBusy ? '<span class="avmark no">Partly busy</span>' : anyFree ? '<span class="avmark ok">Available</span>' : ''}
       ${evs.slice(0,2).map(e=>`<div class="ev" style="--c:${courseColor(e.course)}">${esc(e.title)}</div>`).join('')}
       ${evs.length>2?`<div class="more">+${evs.length-2} more</div>`:''}
     </button>`;
@@ -839,7 +831,62 @@ function renderCalendar(c){
         </div>
       </div>
     </div>
+
+    <div class="cols" style="margin-top:16px">
+      <div>
+        <div class="sectlabel">My availability</div>
+        <div class="card">${availListHtml()}</div>
+      </div>
+      <div>
+        <div class="sectlabel">Add availability</div>
+        <div class="card">${availFormHtml(sel)}</div>
+      </div>
+    </div>
   `;
+}
+// The blocks I have set, recurring first, each removable.
+function availListHtml(){
+  const mine=(S.availability||[]).filter(b=>b.user_id===A.user.id);
+  if(!mine.length) return `<div class="tiny" style="text-align:center;padding:8px">Nothing set. With nothing here you count as free any time${S.me.isTutor ? ', and students can request you whenever' : ''}.</div>`;
+  return mine.map(b=>`<div class="avrow">
+      <span class="tag ${b.kind==='available'?'ok':'no'}">${b.kind==='available'?'Available':'Unavailable'}</span>
+      <div style="min-width:0;flex:1"><div style="font-weight:800;font-size:13.5px">${esc(availLabel(b))}</div>${b.note?`<div class="tiny">${esc(b.note)}</div>`:''}${b.recurring?'<div class="tiny">Repeats weekly</div>':''}</div>
+      <button class="del" title="Remove" style="border:none;background:none;color:var(--muted);cursor:pointer;font-size:16px" onclick="deleteAvail('${b.id}')">✕</button>
+    </div>`).join('') + `<div class="tiny" style="margin-top:8px">Unavailable always wins. ${S.me.isTutor ? 'Students cannot request you for a time you have marked unavailable.' : ''}</div>`;
+}
+function availFormHtml(sel){
+  const f = S.availForm = S.availForm || { kind:'unavailable', recurring:false, weekdays:[parseYmd(sel).getDay()], allDay:true, start:'3:00 PM', end:'5:00 PM', note:'' };
+  const slots = TIME_SLOTS;
+  return `
+    <div class="field"><label>I am</label>
+      <div class="seg"><button class="${f.kind==='available'?'on':''}" onclick="S.availForm.kind='available';render()">Available</button><button class="${f.kind==='unavailable'?'on':''}" onclick="S.availForm.kind='unavailable';render()">Unavailable</button></div></div>
+    <div class="field"><label>How often</label>
+      <div class="seg"><button class="${!f.recurring?'on':''}" onclick="S.availForm.recurring=false;render()">Just ${esc(fmtDate(sel))}</button><button class="${f.recurring?'on':''}" onclick="S.availForm.recurring=true;render()">Every week</button></div></div>
+    ${f.recurring ? `<div class="field"><label>On</label><div class="daychips">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((d,i)=>`<button class="${f.weekdays.includes(i)?'on':''}" onclick="toggleAvailDay(${i})">${d}</button>`).join('')}</div></div>` : ''}
+    <div class="field"><label>When</label>
+      <div class="seg"><button class="${f.allDay?'on':''}" onclick="S.availForm.allDay=true;render()">All day</button><button class="${!f.allDay?'on':''}" onclick="S.availForm.allDay=false;render()">Between</button></div></div>
+    ${!f.allDay ? `<div class="row" style="gap:10px">
+      <div class="field" style="flex:1"><label>From</label><select onchange="S.availForm.start=this.value">${slots.map(x=>`<option ${f.start===x?'selected':''}>${x}</option>`).join('')}</select></div>
+      <div class="field" style="flex:1"><label>To</label><select onchange="S.availForm.end=this.value">${slots.map(x=>`<option ${f.end===x?'selected':''}>${x}</option>`).join('')}</select></div>
+    </div>` : ''}
+    <div class="field"><label>Note (optional)</label><input value="${esc(f.note)}" placeholder="e.g. Robotics practice" oninput="S.availForm.note=this.value"></div>
+    <button class="btn" onclick="addAvail('${sel}')">Save</button>`;
+}
+function toggleAvailDay(i){ const a=S.availForm.weekdays, k=a.indexOf(i); if(k<0) a.push(i); else a.splice(k,1); render(); }
+function addAvail(sel){
+  const f=S.availForm, me=A.user.id;
+  const start = f.allDay ? 0 : slotMin(f.start), end = f.allDay ? 1440 : slotMin(f.end);
+  if(!f.allDay && (start===null || end===null || end<=start)){ toast('The end time needs to be after the start.'); return; }
+  if(f.recurring && !f.weekdays.length){ toast('Pick at least one day of the week.'); return; }
+  const rows = f.recurring
+    ? f.weekdays.map(wd=>({ user_id:me, kind:f.kind, recurring:true, weekday:wd, start_min:start, end_min:end, note:f.note.trim() }))
+    : [{ user_id:me, kind:f.kind, recurring:false, date:sel, start_min:start, end_min:end, note:f.note.trim() }];
+  sbFetch('/rest/v1/sl_availability', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify(rows) })
+    .then(loadData).then(function(){ S.availForm.note=''; toast('Saved'); render(); }).catch(function(e){ toast(e.message); });
+}
+function deleteAvail(id){
+  S.availability = S.availability.filter(b=>b.id!==id); render();
+  sbFetch('/rest/v1/sl_availability?id=eq.'+id, { method:'DELETE', headers:{ Prefer:'return=minimal' } }).catch(function(e){ toast(e.message); loadData().then(render); });
 }
 function calMove(n){
   let { y, m } = S.cal; m+=n;
@@ -896,7 +943,8 @@ function tutorsHtml(course){
   const f = S.overlay.filter || {};
   if(f.grade) tutors = tutors.filter(t=>{ const g=(t.courses.find(x=>x.course===course)||{}).grade||''; return f.grade==='A'?g.startsWith('A'):f.grade==='B'?(g.startsWith('A')||g.startsWith('B')):true; });
   if(f.format) tutors = tutors.filter(t=>t.format.toLowerCase().includes(f.format));
-  const active = (f.grade?1:0) + (f.format?1:0);
+  if(f.day && f.time) tutors = tutors.filter(t=>freeAt(t.id, f.day, f.time).free);
+  const active = (f.grade?1:0) + (f.format?1:0) + (f.day&&f.time?1:0);
   const openF = !!S.overlay.showFilters;
   return `
     <div class="row" style="margin-top:12px">
@@ -908,6 +956,11 @@ function tutorsHtml(course){
       <div class="chips">${[['','Any'],['B','B or higher'],['A','A only']].map(([v,l])=>`<button class="chip ${(!f.grade&&!v)||f.grade===v?'dept':''}" style="${(!f.grade&&!v)||f.grade===v?'background:'+courseColor(course):''}" onclick="setFilter('grade','${v}')">${l}</button>`).join('')}</div>
       <div class="tiny" style="margin:10px 0 6px">Format</div>
       <div class="chips">${[['','Any'],['virtual','Virtual'],['person','In person']].map(([v,l])=>`<button class="chip ${(!f.format&&!v)||f.format===v?'dept':''}" style="${(!f.format&&!v)||f.format===v?'background:'+courseColor(course):''}" onclick="setFilter('format','${v}')">${l}</button>`).join('')}</div>
+      <div class="tiny" style="margin:10px 0 6px">Free at a certain time</div>
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <input type="date" value="${esc(f.day||'')}" min="${ymd(new Date())}" onchange="setFilter('day',this.value)" style="padding:8px 10px;border:1.5px solid #e5e2f0;border-radius:10px;font:inherit;font-size:13px">
+        <select onchange="setFilter('time',this.value)" style="padding:8px 10px;border:1.5px solid #e5e2f0;border-radius:10px;font:inherit;font-size:13px;background:#fff"><option value="">Any time</option>${TIME_SLOTS.map(x=>`<option ${f.time===x?'selected':''}>${x}</option>`).join('')}</select>
+      </div>
       ${active ? `<button class="btn ghost sm" style="margin-top:10px" onclick="S.overlay.filter={};render()">Clear filters</button>` : ''}
     </div>` : ''}
     <div style="height:8px"></div>
@@ -1060,9 +1113,10 @@ function renderRequest(c){
       <div class="field"><label>What do you need help with?</label><textarea id="rq_desc" rows="2" placeholder="A sentence or two…"></textarea></div>
       ${t.avail ? `<div class="tiny" style="margin:-4px 0 10px">🗓️ ${esc(t.name)} is usually free: ${esc(t.avail)}</div>` : ''}
       <div class="row" style="gap:10px">
-        <div class="field" style="flex:1;margin:0"><label>Day</label><input id="rq_day" type="date" value="${ymd(addDays(new Date(),1))}" min="${ymd(new Date())}"></div>
-        <div class="field" style="flex:1;margin:0"><label>Time</label><select id="rq_time">${TIME_SLOTS.map(x=>`<option ${x===suggestTime(t)?'selected':''}>${x}</option>`).join('')}</select></div>
+        <div class="field" style="flex:1;margin:0"><label>Day</label><input id="rq_day" type="date" value="${ymd(addDays(new Date(),1))}" min="${ymd(new Date())}" onchange="checkFree('${t.id}')"></div>
+        <div class="field" style="flex:1;margin:0"><label>Time</label><select id="rq_time" onchange="checkFree('${t.id}')">${TIME_SLOTS.map(x=>`<option ${x===suggestTime(t)?'selected':''}>${x}</option>`).join('')}</select></div>
       </div>
+      <div id="rq_free" class="tiny" style="margin-top:8px"></div>
       <div class="field" style="margin-top:12px"><label>Format</label>
         <div class="seg" id="rq_fmt">
           <button class="on" data-v="In person">In person</button>
@@ -1076,8 +1130,44 @@ function renderRequest(c){
     <p class="tiny" style="text-align:center;margin-top:10px">🔒 Coordination stays inside StudyLink — no phone numbers or personal emails shared.</p>
   `;
   c.querySelectorAll('#rq_fmt button').forEach(b=>b.onclick=()=>{ c.querySelectorAll('#rq_fmt button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); fillLocations(); });
-  fillLocations();
+  fillLocations(); checkFree(t.id);
 }
+// Is the tutor free at the day and time picked? Blocks Send when not.
+function checkFree(tid){
+  const day=$('rq_day')?.value, time=$('rq_time')?.value, box=$('rq_free'), btn=$('rq_send'); if(!box) return;
+  const r=freeAt(tid, day, time);
+  box.innerHTML = r.free ? '<span class="seen on">✓ Free then</span>' : '<span style="color:#c23b5e;font-weight:800">✕ Not available: '+esc(r.why)+'. Pick another time.</span>';
+  if(btn){ btn.disabled=!r.free; }
+}
+// ---- Availability ----
+// Minutes since midnight for a slot label like "3:30 PM".
+function slotMin(label){ const m=/^(\d+):(\d\d) (AM|PM)$/.exec(label||''); if(!m) return null; let h=+m[1]%12; if(m[3]==='PM') h+=12; return h*60 + +m[2]; }
+function minLabel(min){ if(min>=1440) return '12:00 AM'; const h=Math.floor(min/60), mm=min%60, h12=((h+11)%12)+1; return h12+':'+(mm<10?'0':'')+mm+' '+(h<12?'AM':'PM'); }
+const DAY_NAMES=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+// The blocks that apply to one date, for one person.
+function blocksOn(userId, dateKey){
+  const wd=parseYmd(dateKey).getDay();
+  return (S.availability||[]).filter(b => b.user_id===userId && (b.recurring ? b.weekday===wd : b.date===dateKey));
+}
+// Free at a date and time? Unavailable blocks win. If the person has set any
+// available blocks for that day, the time must fall inside one; with none
+// set, the day is open.
+function freeAt(userId, dateKey, timeLabel){
+  const min=slotMin(timeLabel); if(min===null || !dateKey) return { free:true };
+  const blocks=blocksOn(userId, dateKey);
+  const hit = b => min>=b.start_min && min<b.end_min;
+  const busy=blocks.find(b=>b.kind==='unavailable' && hit(b));
+  if(busy) return { free:false, why: busy.start_min===0&&busy.end_min===1440 ? 'unavailable that day' : 'unavailable '+minLabel(busy.start_min)+'–'+minLabel(busy.end_min) };
+  const windows=blocks.filter(b=>b.kind==='available');
+  if(windows.length && !windows.some(hit)) return { free:false, why:'only free '+windows.map(b=>b.start_min===0&&b.end_min===1440?'all day':minLabel(b.start_min)+'–'+minLabel(b.end_min)).join(', ')+' that day' };
+  return { free:true };
+}
+function availLabel(b){
+  const when = b.recurring ? 'Every '+DAY_NAMES[b.weekday] : fmtDate(b.date);
+  const span = b.start_min===0 && b.end_min===1440 ? 'All day' : minLabel(b.start_min)+' – '+minLabel(b.end_min);
+  return when+' · '+span;
+}
+
 // Times are picked from half-hour slots across the school day and evening.
 // The default leans on the tutor's availability: mornings if they said
 // before school, evenings if they said evenings, otherwise after school.
@@ -1110,6 +1200,7 @@ async function submitRequest(tid){
   const date=$('rq_day').value||null;
   const time=$('rq_time').value||'TBD';
   const fmt=document.querySelector('#rq_fmt button.on')?.dataset.v||'In person';
+  if(!freeAt(tid, date, time).free){ toast('That tutor is not available then.'); return; }
   const locBase=$('rq_loc')?.value||'', locD=($('rq_locd')?.value||'').trim();
   const location = locBase + (locD && (locBase==='Classroom'||locBase==='Other') ? ' · '+locD : '');
   const btn=$('rq_send'); if(btn){ btn.disabled=true; btn.textContent='Sending…'; }
@@ -2174,7 +2265,7 @@ let dataLoaded = false, dataLoading = false, dataError = null;
 async function loadData(){
   if(!A.user) return;
   const me = A.user.id;
-  const [classes, tcourses, reqs, events, tutors, posts, myGrades, pendingGrades, materials, roster, presence, people] = await Promise.all([
+  const [classes, tcourses, reqs, events, tutors, posts, myGrades, pendingGrades, materials, roster, presence, people, avail] = await Promise.all([
     sbFetch('/rest/v1/sl_student_classes?select=course&user_id=eq.'+me+'&order=created_at'),
     sbFetch('/rest/v1/sl_tutor_courses?select=course,grade,year,availability&user_id=eq.'+me+'&order=created_at'),
     sbFetch('/rest/v1/sl_requests?select=*&or=(student_id.eq.'+me+',tutor_id.eq.'+me+')&order=created_at.desc'),
@@ -2187,6 +2278,7 @@ async function loadData(){
     sbFetch('/rest/v1/sl_class_students?select=*'),
     sbFetch('/rest/v1/sl_request_presence?select=*'),
     sbFetch('/rest/v1/sl_people?select=*'),
+    sbFetch('/rest/v1/sl_availability?select=*&order=recurring.desc,weekday,date,start_min'),
   ]);
   S.myClasses = (classes||[]).map(r=>r.course);
   S.tutorClasses = (tcourses||[]).map(r=>r.course);
@@ -2203,6 +2295,7 @@ async function loadData(){
   S.roster = (roster||[]).filter(r => r.user_id !== me);
   S.presence = {}; (presence||[]).forEach(function(x){ S.presence[x.request_id] = x.other_seen_at; });
   S.people = (people||[]).filter(x => x.user_id !== me);
+  S.availability = avail||[];
   S.tutors = buildTutors(tutors||[], me);
   S.helped = S.incoming.filter(r=>r.status==='done').length;
   S.hours = Math.round(S.helped*0.75*100)/100;
