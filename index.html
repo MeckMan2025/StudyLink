@@ -587,14 +587,38 @@ function renderHome(c){
       </div>
     </div>
 
-    <div class="sectlabel">Find help</div>
-    <div class="search" onclick="openView({type:'search'})" style="cursor:pointer">
-      <span class="mag">🔍</span><input placeholder="Search any class…" readonly style="cursor:pointer">
+    <div class="cols even" style="margin-top:6px">
+      <div>
+        <div class="sectlabel">Find help</div>
+        <div class="search" onclick="openView({type:'search'})" style="cursor:pointer">
+          <span class="mag">🔍</span><input placeholder="Search any class…" readonly style="cursor:pointer">
+        </div>
+      </div>
+      <div>
+        <div class="sectlabel">Online now</div>
+        <div class="card">${onlineNowHtml()}</div>
+      </div>
     </div>
 
     <div class="sectlabel">${S.mode==='tutor' ? 'Classes I tutor' : 'My classes'}</div>
     ${classGrid(false)}
   `;
+}
+
+// Who is online right now: tutors for my classes and classmates in them, by
+// alias. Tapping a person opens the class they share with you.
+function onlineNowHtml(){
+  const mine = new Set([...S.myClasses, ...S.tutorClasses]);
+  const seen = {};
+  (S.tutors||[]).forEach(t => { if(!isOnline(t.seen)) return; const shared = t.courses.map(c=>c.course).filter(c=>mine.has(c)); if(shared.length || !mine.size) seen[t.id] = { name:t.name, kind:'Tutor', course:shared[0]||t.courses[0].course, color:t.color }; });
+  (S.roster||[]).forEach(r => { if(!isOnline(r.last_seen_at) || !mine.has(r.course)) return; if(!seen[r.user_id]) seen[r.user_id] = { name:r.student_alias, kind:'Classmate', course:r.course, color:courseColor(r.course) }; });
+  const list = Object.values(seen).sort((a,b)=>a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name, undefined, {numeric:true}));
+  if(!list.length) return `<div class="tiny" style="text-align:center;padding:10px">Nobody from your classes is online right now.${mine.size ? '' : ' Add a class to see who is around.'}</div>`;
+  return list.slice(0,8).map(x=>`<div class="sessrow" style="cursor:pointer;padding:8px 0" onclick="openClass('${esc(x.course)}')">
+      ${avatarDot(initials(x.name), new Date().toISOString(), 'width:34px;height:34px;font-size:13px;background:'+x.color)}
+      <div style="min-width:0;flex:1"><div class="who" style="font-size:13.5px">${esc(x.name)} <span class="tiny">· ${x.kind}</span></div><div class="meta">${esc(x.course)}</div></div>
+      <span class="seen on">● Online</span>
+    </div>`).join('') + (list.length>8 ? `<div class="tiny" style="text-align:center;margin-top:6px">+${list.length-8} more</div>` : '');
 }
 
 // Sunday to Saturday of the current week, with sessions, requests and events on
@@ -1645,7 +1669,7 @@ async function renderAdminTeam(c){
   // Each approval points at the profile it became, once that person has signed up.
   list.forEach(s => { const p = s.user_id ? signedUp[s.user_id] : null; s.joined = p ? p.created_at : null; s.seen = p ? p.last_seen_at : null; });
   const online = list.filter(s => isOnline(s.seen)).length;
-  const students = list.filter(s => s.role==='student' && (!q || (s.real_name+' '+s.email).toLowerCase().includes(q)));
+  const students = list.filter(s => s.role==='student' && (!q || (s.real_name+' '+s.email).toLowerCase().includes(q)) && (!S.onlineOnly || isOnline(s.seen)));
   const group = (role, title, blurb) => `
     <div class="sectlabel">${title} (${list.filter(s=>s.role===role).length})</div>
     <div class="tiny" style="margin:-4px 2px 8px">${blurb}</div>
@@ -1666,7 +1690,8 @@ async function renderAdminTeam(c){
     ${group('board', 'Board', 'Maintain the app: fix errors and build new features. Everything an administrator can do, too.')}
     ${group('admin', 'Administrators', 'Verify tutors\' grades against school records and keep an eye on tutoring requests.')}
     <div class="sectlabel">Students (${list.filter(s=>s.role==='student').length})</div>
-    <div class="search" style="margin-bottom:10px"><span class="mag">🔍</span><input placeholder="Search students…" value="${esc(S.memberQuery||'')}" oninput="S.memberQuery=this.value; filterMembers()"></div>
+    <div class="row" style="gap:8px;margin-bottom:10px"><div class="search" style="flex:1;margin:0"><span class="mag">🔍</span><input placeholder="Search students…" value="${esc(S.memberQuery||'')}" oninput="S.memberQuery=this.value; filterMembers()"></div>
+      <button class="btn ghost sm ${S.onlineOnly?'':''}" style="${S.onlineOnly?'background:#e4f6ec;border-color:#bfe8d0;color:#2e9b6a':''}" onclick="S.onlineOnly=!S.onlineOnly;render()">● Online only</button></div>
     <div id="memberlist">${students.map(row).join('') || '<div class="card tiny" style="text-align:center">No students yet. Invite the first one above.</div>'}</div>`;
   A.memberRows = list;
 }
