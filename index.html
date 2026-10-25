@@ -315,8 +315,10 @@ function toggleMenu(v){ menuOpen = v===undefined ? !menuOpen : v; renderNav(); }
 function menuGo(tab){ menuOpen=false; go(tab); }
 function logOut(){ menuOpen=false; signOut(); }
 function toggleSide(v){ $('app').classList.toggle('open', v); }
-function open(ov){ S.overlay=ov; render(); }
-function close(){ S.overlay=null; render(); }
+// Not 'open' or 'close': inside an inline onclick those names resolve to
+// document.open and document.close, and document.open blanks the page.
+function openView(ov){ S.overlay=ov; render(); }
+function closeView(){ S.overlay=null; render(); }
 // Top-level posts for a class, each with its replies, oldest reply first.
 function postsFor(course){
   const all = S.posts || [], me = A.user ? A.user.id : null;
@@ -419,7 +421,7 @@ function renderNav(){
           <button class="nitem ${ov?.type==='course' && ov.course===course ? 'on' : ''}" onclick="openClass('${esc(course)}')">
             <span class="dot" style="background:${courseColor(course)}"></span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(course)}</span>
           </button>`).join('')}
-        <button class="nitem add" onclick="S.tab='classes'; open({type:'addClasses'}); toggleSide(false)"><span class="ic">＋</span>Add class</button>
+        <button class="nitem add" onclick="S.tab='classes'; openView({type:'addClasses'}); toggleSide(false)"><span class="ic">＋</span>Add class</button>
       </div>` : ''}
       <hr>
       ${item('calendar','📅','Calendar')}
@@ -517,7 +519,7 @@ function renderHome(c){
       </div>
       <div>
         <div class="sectlabel">Find help</div>
-        <div class="search" onclick="open({type:'search'})" style="cursor:pointer">
+        <div class="search" onclick="openView({type:'search'})" style="cursor:pointer">
           <span class="mag">🔍</span><input placeholder="Search any class…" readonly style="cursor:pointer">
         </div>
       </div>
@@ -542,7 +544,7 @@ function classGrid(removable){
         <div class="tiny" style="margin-top:6px;color:${next?'var(--ink)':'var(--muted)'}">${next ? '📅 '+esc(fmtDate(next.date))+' · '+esc(next.title) : 'Nothing scheduled'}</div>
       </div>`;
     }).join('')}
-    <button class="card addcard" onclick="S.tab='classes'; open({type:'addClasses'})">＋ Add class</button>
+    <button class="card addcard" onclick="S.tab='classes'; openView({type:'addClasses'})">＋ Add class</button>
   </div>`;
 }
 
@@ -567,7 +569,7 @@ function renderClasses(c){
 }
 function renderAddClasses(c){
   c.innerHTML = `
-    <button class="back" onclick="close()">‹ Back</button>
+    <button class="back" onclick="closeView()">‹ Back</button>
     <h2 class="title">Add classes</h2>
     <div class="lead">${S.mode==='tutor' ? 'Tap the classes you can tutor.' : 'Tap the classes you are taking.'} They show up in your sidebar.</div>
     <div class="search"><span class="mag">🔍</span><input id="acq" placeholder="Search classes…" oninput="filterAdd(this.value)"></div>
@@ -579,7 +581,7 @@ function renderAddClasses(c){
       }).join('')}
     </div></div>`).join('')}
     </div>
-    <div style="margin-top:20px"><button class="btn" onclick="close()">Done · ${S[classKey()].length} class${S[classKey()].length===1?'':'es'}</button></div>
+    <div style="margin-top:20px"><button class="btn" onclick="closeView()">Done · ${S[classKey()].length} class${S[classKey()].length===1?'':'es'}</button></div>
   `;
 }
 function filterAdd(q){
@@ -720,7 +722,7 @@ function renderCourseDetail(c, course){
   if(f.grade) tutors = tutors.filter(t=>{ const g=t.courses.find(x=>x.course===course).grade; return f.grade==='A'?g.startsWith('A'):f.grade==='B'?(g.startsWith('A')||g.startsWith('B')):true; });
   if(f.format) tutors = tutors.filter(t=>t.format.toLowerCase().includes(f.format));
   c.innerHTML = `
-    <button class="back" onclick="close()">‹ Back</button>
+    <button class="back" onclick="closeView()">‹ Back</button>
     ${S[classKey()].includes(course) ? '' : `<button class="btn sm green" style="float:right" onclick="toggleClass('${esc(course)}'); toast('Added to your classes')">＋ Add to my classes</button>`}
     <div class="row" style="margin:2px 0 10px">
       <div class="avatar" style="background:${courseColor(course)};width:52px;height:52px;font-size:22px">${courseEmoji(course)}</div>
@@ -728,7 +730,7 @@ function renderCourseDetail(c, course){
       <div class="tiny">${tutorsFor(course).length} tutors · ${postsFor(course).length} in the community</div></div>
     </div>
 
-    <button class="btn ghost sm" style="width:100%" onclick="open({type:'board',course:'${esc(course)}'})">💬 Open ${esc(course)} community</button>
+    <button class="btn ghost sm" style="width:100%" onclick="openView({type:'board',course:'${esc(course)}'})">💬 Open ${esc(course)} community</button>
 
     <div class="sectlabel">Filter tutors</div>
     <div class="chips">
@@ -758,8 +760,8 @@ function tutorCard(t, course){
       </div>
     </div>
     <div style="margin-top:10px" class="row">
-      <button class="btn ghost sm" onclick="open({type:'tutor',id:'${t.id}',course:'${esc(course)}'})">View profile</button>
-      <button class="btn sm" style="margin-left:auto" onclick="open({type:'request',id:'${t.id}',course:'${esc(course)}'})">Request tutoring</button>
+      <button class="btn ghost sm" onclick="openView({type:'tutor',id:'${t.id}',course:'${esc(course)}'})">View profile</button>
+      <button class="btn sm" style="margin-left:auto" onclick="openView({type:'request',id:'${t.id}',course:'${esc(course)}'})">Request tutoring</button>
     </div>
   </div>`;
 }
@@ -767,9 +769,9 @@ function setFilter(k,v){ S.overlay.filter={...(S.overlay.filter||{})}; if(v) S.o
 
 /* -------- TUTOR PROFILE (overlay) -------- */
 function renderTutorProfile(c){
-  const t=findTutor(S.overlay.id); if(!t){close();return;}
+  const t=findTutor(S.overlay.id); if(!t){closeView();return;}
   c.innerHTML=`
-    <button class="back" onclick="close()">‹ Back</button>
+    <button class="back" onclick="closeView()">‹ Back</button>
     <div class="card">
       <div class="row"><div class="avatar" style="background:${t.color};width:56px;height:56px;font-size:22px">${initials(t.name)}</div>
         <div><h2 class="title" style="margin:0">${esc(t.name)}</h2>
@@ -780,17 +782,17 @@ function renderTutorProfile(c){
       ${t.courses.map(cc=>`<div class="row" style="margin-bottom:6px">${cc.grade?`<span class="grade ${gradeClass(cc.grade)}">${esc(cc.grade)}</span>`:''}
         <span style="font-weight:700;font-size:14px">${esc(cc.course)}</span>${cc.verified ? '<span class="verified">✓ Verified</span>' : ''}<span class="tiny" style="margin-left:auto">${esc(cc.year||'')}</span></div>`).join('')}
     </div>
-    <div style="margin-top:12px"><button class="btn" onclick="open({type:'request',id:'${t.id}',course:'${esc(S.overlay.course||t.courses[0].course)}'})">Request tutoring</button></div>
+    <div style="margin-top:12px"><button class="btn" onclick="openView({type:'request',id:'${t.id}',course:'${esc(S.overlay.course||t.courses[0].course)}'})">Request tutoring</button></div>
   `;
 }
 
 /* -------- REQUEST TUTORING (overlay) -------- */
 function renderRequest(c){
-  const t=findTutor(S.overlay.id); if(!t){close();return;}
+  const t=findTutor(S.overlay.id); if(!t){closeView();return;}
   const course=S.overlay.course;
   const coursesTutored=t.courses.map(x=>x.course);
   c.innerHTML=`
-    <button class="back" onclick="close()">‹ Back</button>
+    <button class="back" onclick="closeView()">‹ Back</button>
     <h2 class="title">Request tutoring</h2>
     <div class="lead">with ${esc(t.name)}</div>
     <div class="card">
@@ -827,7 +829,7 @@ async function submitRequest(tid){
       student_id:A.user.id, tutor_id:tid, student_alias:A.profile.student_alias, tutor_alias:t.name,
       course, topic, note, date, time, format:fmt }) });
     await loadData();
-    close(); go('tutoring');
+    closeView(); go('tutoring');
     toast('Request sent to '+t.name+' 🎉');
   }catch(e){
     toast(e.message); if(btn){ btn.disabled=false; btn.textContent='Send request to '+t.name; }
@@ -898,7 +900,7 @@ function renderCommunity(c){
     <div class="lead">Ask a question — someone in your class can help.</div>
     ${active.length ? active.map(course=>{
       const posts=postsFor(course);
-      return `<div class="card row" style="cursor:pointer" onclick="open({type:'board',course:'${esc(course)}'})">
+      return `<div class="card row" style="cursor:pointer" onclick="openView({type:'board',course:'${esc(course)}'})">
         <div class="avatar" style="background:${courseColor(course)}">${courseEmoji(course)}</div>
         <div style="min-width:0"><div style="font-weight:800">${esc(course)}</div>
           <div class="tiny">${posts.length} post${posts.length===1?'':'s'} · ${tutorsFor(course).length} tutor${tutorsFor(course).length===1?'':'s'} here</div></div>
@@ -911,7 +913,7 @@ function renderBoard(c){
   const course=S.overlay.course;
   const posts=postsFor(course);
   c.innerHTML=`
-    <button class="back" onclick="close()">‹ Back</button>
+    <button class="back" onclick="closeView()">‹ Back</button>
     <div class="row" style="margin-bottom:8px"><div class="avatar" style="background:${courseColor(course)}">${courseEmoji(course)}</div>
       <div><h2 class="title" style="margin:0">${esc(course)}</h2><div class="tiny">Class community</div></div></div>
     <div class="composer">
@@ -931,7 +933,7 @@ function renderBoard(c){
             <input id="rp_${p.id}" placeholder="Reply as ${esc(currentAlias())}…" onkeydown="if(event.key==='Enter')addReply('${p.id}','${esc(course)}')">
             <button class="btn ghost sm" onclick="addReply('${p.id}','${esc(course)}')">Reply</button>
           </div>
-          <button class="btn ghost sm" style="margin-top:8px" onclick="open({type:'course',course:'${esc(course)}'})">Find a tutor for this</button>
+          <button class="btn ghost sm" style="margin-top:8px" onclick="openView({type:'course',course:'${esc(course)}'})">Find a tutor for this</button>
         </div>`).join('') : `<div class="empty"><div class="em">💬</div>No posts yet — be the first to ask!</div>`}
     </div>
   `;
@@ -978,7 +980,7 @@ function renderProfile(c){
         ${me.tutorCourses.length ? me.tutorCourses.map(tc=>`<div class="row" style="margin-bottom:6px">${tc.grade?`<span class="grade ${gradeClass(tc.grade)}">${esc(tc.grade)}</span>`:''}
           <span style="font-weight:700;font-size:14px">${esc(tc.course)}</span>${tc.verify==='verified' ? '<span class="verified">✓ Verified</span>' : tc.verify==='pending' ? '<span class="unverified">Awaiting check</span>' : tc.verify==='rejected' ? '<span class="unverified">Not verified</span>' : ''}<span class="tiny" style="margin-left:auto">${esc(tc.year||'')}</span></div>`).join('') : `<div class="tiny">No classes added yet.</div>`}
         <div class="tiny" style="margin-top:8px">An administrator checks each grade against school records before it shows as verified.</div>
-        <button class="btn ghost sm" style="width:100%;margin-top:10px" onclick="open({type:'becomeTutor'})">Edit tutoring classes</button>
+        <button class="btn ghost sm" style="width:100%;margin-top:10px" onclick="openView({type:'becomeTutor'})">Edit tutoring classes</button>
       </div>
       <div class="tiny" style="margin:12px 2px">🗓️ Available: ${esc(me.avail||'not set')}</div>
     ` : `
@@ -986,7 +988,7 @@ function renderProfile(c){
         <div style="font-size:36px">✋</div>
         <div style="font-weight:800;margin:6px 0 2px">Become a tutor</div>
         <div class="tiny" style="margin-bottom:12px">Help classmates in classes you've taken — and earn verified service hours.</div>
-        <button class="btn green" onclick="open({type:'becomeTutor'})">Get started</button>
+        <button class="btn green" onclick="openView({type:'becomeTutor'})">Get started</button>
       </div>
     `}
 
@@ -1007,7 +1009,7 @@ function renderBecomeTutor(c){
   const GRADES=['A','A-','B+','B','B-','C+','C'];
   if(step===1){
     c.innerHTML=`
-      <button class="back" onclick="close()">‹ Cancel</button>
+      <button class="back" onclick="closeView()">‹ Cancel</button>
       <h2 class="title">Become a tutor</h2>
       <div class="lead">Step 1 of 3 · Which classes have you taken?</div>
       ${DEPTS.map(dep=>`<div class="sectlabel">${dep.emoji} ${dep.name}</div><div class="chips">
@@ -1077,7 +1079,7 @@ async function finishTutor(){
     if(submit.length) await sbFetch('/rest/v1/sl_grades', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify(submit) });
     await loadData();
     S.mode='tutor'; A.role='tutor'; S.me.name=currentAlias();
-    close(); go('tutoring');
+    closeView(); go('tutoring');
     toast('You\'re now tutoring as '+A.profile.tutor_alias+' 🎓');
   }catch(e){
     toast(e.message); if(btn){ btn.disabled=false; btn.textContent='Finish — start tutoring'; }
@@ -1273,7 +1275,7 @@ function removeMember(email){
 /* -------- SEARCH (overlay) -------- */
 function renderSearch(c){
   c.innerHTML=`
-    <button class="back" onclick="close()">‹ Back</button>
+    <button class="back" onclick="closeView()">‹ Back</button>
     <div class="search"><span class="mag">🔍</span><input id="sq" placeholder="Search classes…" oninput="renderSearchResults(this.value)"></div>
     <div id="sresults" style="margin-top:12px"></div>`;
   setTimeout(()=>{ $('sq')&&$('sq').focus(); renderSearchResults(''); },0);
@@ -1282,7 +1284,7 @@ function renderSearchResults(q){
   q=(q||'').toLowerCase();
   const matches=ALL_COURSES.filter(c=>c.toLowerCase().includes(q));
   $('sresults').innerHTML = matches.length ? matches.map(course=>`
-    <div class="card row" style="cursor:pointer" onclick="open({type:'course',course:'${esc(course)}'})">
+    <div class="card row" style="cursor:pointer" onclick="openView({type:'course',course:'${esc(course)}'})">
       <div class="avatar" style="background:${courseColor(course)}">${courseEmoji(course)}</div>
       <div><div style="font-weight:800">${esc(course)}</div><div class="tiny">${tutorsFor(course).length} tutors</div></div>
       <div style="margin-left:auto;color:var(--muted)">›</div>
