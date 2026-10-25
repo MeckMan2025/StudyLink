@@ -142,6 +142,21 @@
   .unverified{display:inline-block; font-size:11px; font-weight:700; color:#c98b34; background:#fbf1e2; border-radius:8px; padding:2px 7px; margin-left:6px}
   .side .section{font-size:10.5px; font-weight:800; letter-spacing:.6px; text-transform:uppercase; color:var(--muted); padding:6px 12px 2px}
 
+  .mrow{display:flex; align-items:center; gap:12px; flex-wrap:wrap}
+  .mrow .ctl{margin-left:auto; display:flex; align-items:center; gap:6px; flex-wrap:wrap}
+  .mrow select.lvl{padding:7px 10px; border:1.5px solid #e5e2f0; border-radius:10px; font:inherit; font-size:12.5px; font-weight:700; color:var(--ink); background:#fff}
+  .mrow select.lvl:disabled{opacity:.6}
+  .mrow .mini{border:1px solid #dbe3f7; background:#fff; color:var(--blue-d); border-radius:10px; padding:7px 10px; font:inherit; font-size:12.5px; font-weight:800; cursor:pointer}
+  .mrow .mini.danger{color:#c23b5e; border-color:#f5d3dc}
+  .mrow .mini:hover{background:#eef3fe}
+  .mrow .mini.danger:hover{background:#fdecef}
+  .medit{display:flex; gap:8px; flex-wrap:wrap; width:100%; margin-top:8px}
+  .medit input,.medit select{padding:9px 11px; border:1.5px solid #e5e2f0; border-radius:10px; font:inherit; font-size:13.5px; background:#fff}
+  .mrow .info{min-width:0; flex:1 1 220px}
+  @media (max-width:640px){
+    .mrow .ctl{flex-basis:100%; margin-left:0; padding-left:56px}
+  }
+
   /* Bits */
   h2.title{font-size:22px; font-weight:800; margin:4px 2px 2px}
   .lead{color:var(--muted); font-size:13px; font-weight:600; margin:0 2px 14px}
@@ -457,7 +472,7 @@ function renderHelp(c){
     ${q('Getting help', 'Open a class to see its tutors, then send a request. Once it is accepted, it shows up on your calendar.')}
     ${q('Privacy', 'Other students only see your alias. Coordination happens inside StudyLink — no phone numbers or personal emails are shared.')}
     ${q('Verified grades', 'When you become a tutor, the grades you claim go to a school administrator, who checks them against your records. Verified grades show a ✓ on your tutor card.')}
-    ${q('Who runs this', 'Students use the app. Administrators verify grades and manage requests. The board maintains the app itself. Accounts are invitation-only: an administrator adds you by email and you set your password from the link you receive.')}`;
+    ${q('Who runs this', 'Students use the app. Administrators verify grades and manage requests. The board maintains the app itself. Accounts are invitation-only: an administrator adds you by email and you set your password from the link you receive. Administrators and the board change levels, names and grades on the Members page.')}`;
 }
 
 /* -------- HOME -------- */
@@ -1140,13 +1155,31 @@ async function renderAdminTeam(c){
   const myEmail = ((A.user && A.user.email) || '').toLowerCase();
   const signedUp = {}; people.forEach(p => { signedUp[p.id] = p; });
   const q = (S.memberQuery || '').toLowerCase();
-  const row = s => `<div class="card row">
+  const LEVELS = [['student','Student'],['admin','Administrator'],['board','Board']];
+  const row = s => {
+    const me = s.email.toLowerCase()===myEmail;
+    const editing = S.editMember === s.email;
+    return `<div class="card mrow" data-email="${esc(s.email)}">
       <div class="avatar" style="background:${s.role==='board'?'var(--purple)':s.role==='admin'?'var(--blue-d)':courseColor('')}">${initials(s.real_name || s.email)}</div>
-      <div style="min-width:0"><div style="font-weight:800">${esc(s.real_name || s.email)}${s.email.toLowerCase()===myEmail?' <span class="tiny">(you)</span>':''} ${roleBadge(s.role)}</div>
-        <div class="tiny">${esc(s.email)}${s.grade_level?' · Grade '+s.grade_level:''} · ${s.joined ? 'signed up ' + esc(new Date(s.joined).toLocaleDateString()) : s.invited_at ? 'invited ' + esc(new Date(s.invited_at).toLocaleDateString()) + ', not signed up yet' : 'approved, invite email not sent yet'}${s.added_by_alias?' · added by '+esc(s.added_by_alias):''}</div></div>
-      ${s.joined ? '' : `<button class="btn ghost sm" style="margin-left:auto" onclick="inviteMember('${esc(s.email)}','${esc(s.real_name)}','${s.grade_level||''}','${s.role}',this)">Resend invite</button>`}
-      ${s.email.toLowerCase()===myEmail ? '' : `<button class="del" title="Remove" style="${s.joined?'margin-left:auto;':''}border:none;background:none;color:var(--muted);cursor:pointer;font-size:16px" onclick="removeMember('${esc(s.email)}')">✕</button>`}
+      <div class="info">
+        <div style="font-weight:800">${esc(s.real_name || s.email)}${me?' <span class="tiny">(you)</span>':''} ${roleBadge(s.role)}</div>
+        <div class="tiny">${esc(s.email)}${s.grade_level?' · Grade '+s.grade_level:''} · ${s.joined ? 'signed up ' + esc(new Date(s.joined).toLocaleDateString()) : s.invited_at ? 'invited ' + esc(new Date(s.invited_at).toLocaleDateString()) + ', not signed up yet' : 'approved, invite email not sent yet'}${s.added_by_alias?' · added by '+esc(s.added_by_alias):''}</div>
+      </div>
+      <div class="ctl">
+        <select class="lvl" title="${me ? 'Another administrator or board member changes your level' : 'Account level'}" ${me?'disabled':''} onchange="setMemberLevel('${esc(s.email)}', this.value, this)">
+          ${LEVELS.map(([v,l])=>`<option value="${v}" ${s.role===v?'selected':''}>${l}</option>`).join('')}
+        </select>
+        <button class="mini" onclick="S.editMember = ${editing ? 'null' : `'${esc(s.email)}'`}; render()">${editing ? 'Cancel' : 'Edit'}</button>
+        ${s.joined ? '' : `<button class="mini" onclick="inviteMember('${esc(s.email)}','${esc(s.real_name)}','${s.grade_level||''}','${s.role}',this)">${s.invited_at ? 'Resend invite' : 'Send invite'}</button>`}
+        ${me ? '' : `<button class="mini danger" onclick="removeMember('${esc(s.email)}')">Remove</button>`}
+      </div>
+      ${editing ? `<div class="medit">
+        <input id="me_name" value="${esc(s.real_name)}" placeholder="Full name" style="flex:2;min-width:160px">
+        <select id="me_grade" style="flex:0 0 120px"><option value="">No grade</option>${[9,10,11,12].map(g=>`<option value="${g}" ${s.grade_level===g?'selected':''}>Grade ${g}</option>`).join('')}</select>
+        <button class="btn sm" onclick="saveMember('${esc(s.email)}')">Save</button>
+      </div>` : ''}
     </div>`;
+  };
   // Each approval points at the profile it became, once that person has signed up.
   list.forEach(s => { const p = s.user_id ? signedUp[s.user_id] : null; s.joined = p ? p.created_at : null; });
   const students = list.filter(s => s.role==='student' && (!q || (s.real_name+' '+s.email).toLowerCase().includes(q)));
@@ -1176,7 +1209,7 @@ async function renderAdminTeam(c){
 }
 function filterMembers(){
   const q=(S.memberQuery||'').toLowerCase();
-  document.querySelectorAll('#memberlist .card').forEach(function(el){ el.hidden = q && !el.textContent.toLowerCase().includes(q); });
+  document.querySelectorAll('#memberlist .mrow').forEach(function(el){ el.hidden = !!q && !el.textContent.toLowerCase().includes(q); });
 }
 function addMember(){
   const name=($('mb_name').value||'').trim(), email=($('mb_email').value||'').trim().toLowerCase(), grade=$('mb_grade').value, role=$('mb_role').value;
@@ -1195,7 +1228,22 @@ function inviteMember(email, name, grade, role, btn){
       else toast('Invite sent to '+email);
       render();
     })
-    .catch(function(e){ toast(e.message); if(btn){ btn.disabled=false; btn.textContent='Invite'; } });
+    .catch(function(e){ toast(e.message); if(btn){ btn.disabled=false; btn.textContent='Invite'; } render(); });
+}
+// Level, name and grade are edited on the approval row; a trigger carries the
+// change through to the person's profile if they have signed up.
+function setMemberLevel(email, role, sel){
+  const label = { student:'a student', admin:'an administrator', board:'on the board' }[role];
+  sbFetch('/rest/v1/sl_staff?email=eq.'+encodeURIComponent(email), { method:'PATCH', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ role }) })
+    .then(function(){ toast(email+' is now '+label); render(); })
+    .catch(function(e){ toast(e.message); render(); });
+}
+function saveMember(email){
+  const real_name = ($('me_name').value||'').trim(), g = $('me_grade').value;
+  if(!real_name){ $('me_name').focus(); return; }
+  sbFetch('/rest/v1/sl_staff?email=eq.'+encodeURIComponent(email), { method:'PATCH', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ real_name, grade_level: g ? Number(g) : null }) })
+    .then(function(){ S.editMember = null; toast('Saved'); render(); })
+    .catch(function(e){ toast(e.message); });
 }
 function removeMember(email){
   if(!confirm('Remove '+email+' from StudyLink? Their account and everything in it will be deleted.')) return;
