@@ -1134,6 +1134,14 @@ function renderTutoring(c){
 
     ${tutoring.length ? `<div class="sectlabel">Sessions you're tutoring</div>${tutoring.map(sessionCard).join('')}` : ''}
 
+    ${S.incoming.filter(r=>r.status==='done').length ? `<div class="sectlabel">Completed sessions · ${S.hours} service hours</div>
+      ${S.incoming.filter(r=>r.status==='done').sort((a,b)=>(b.done_at||'').localeCompare(a.done_at||'')).map(r=>`<div class="card row">
+        <div class="avatar" style="background:${courseColor(r.course)}">${courseEmoji(r.course)}</div>
+        <div style="min-width:0;flex:1"><div style="font-weight:800">${esc(r.course)} <span class="tiny">· with ${esc(r.student_alias)}</span></div>
+          <div class="tiny">${esc(r.topic)} · ${esc(fmtDate(r.date))} ${esc(r.time||'')} · 0.75 h${r.done_at?' · logged '+esc(new Date(r.done_at).toLocaleDateString()):''}</div></div>
+        <button class="mini danger" style="border:1px solid #f5d3dc;background:#fff;color:#c23b5e;border-radius:10px;padding:7px 10px;font:inherit;font-size:12.5px;font-weight:800;cursor:pointer" onclick="removeDone('${r.id}')">Remove</button>
+      </div>`).join('')}` : ''}
+
     <div class="sectlabel">Your tutoring (as student)</div>
     ${mine.length ? mine.map(r=>`
       <div class="card row">
@@ -1152,6 +1160,14 @@ function patchRequest(id, patch, okMsg){
     .catch(function(e){ toast(e.message); });
 }
 function cancelRequest(id){ patchRequest(id, { status:'cancelled' }, 'Request cancelled'); }
+// Take a completed session off the books. The hours come off with it.
+function removeDone(id){
+  const r=S.incoming.find(x=>x.id===id); if(!r) return;
+  if(!confirm('Remove this '+r.course+' session with '+r.student_alias+'? Its 0.75 service hours come off your total.')) return;
+  sbFetch('/rest/v1/sl_requests?id=eq.'+id, { method:'DELETE', headers:{ Prefer:'return=minimal' } })
+    .then(loadData).then(function(){ toast('Session removed'); render(); })
+    .catch(function(e){ toast(e.message); });
+}
 function respondOffer(id, accept){
   const r=S.myRequests.find(x=>x.id===id); if(!r) return;
   patchRequest(id, { status: accept ? 'accepted' : 'declined' }, accept ? 'Session set with '+r.tutor_alias+' ✅' : 'Offer declined');
@@ -1224,7 +1240,7 @@ function renderProfile(c){
     </div>
 
     ${me.isTutor ? `
-      <div class="sectlabel">Community service</div>
+      <div class="sectlabel">Community service <button class="btn ghost sm" style="margin-left:8px;padding:4px 10px" onclick="go('tutoring')">Manage sessions</button></div>
       <div class="statgrid">
         <div class="stat"><div class="n" style="color:var(--green)">${S.hours}</div><div class="l">hours</div></div>
         <div class="stat"><div class="n" style="color:var(--blue-d)">${S.helped}</div><div class="l">students helped</div></div>
