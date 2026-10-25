@@ -496,7 +496,7 @@ function renderSettings(c){
     <div class="lead">Saved to your account.</div>
     <div class="card">
       <div class="field"><label>Grade</label>
-        <select onchange="setGrade(+this.value)">${[9,10,11,12].map(g=>`<option ${S.me.grade===g?'selected':''}>${g}</option>`).join('')}</select></div>
+        <select onchange="setGrade(+this.value)">${[7,8,9,10,11,12].map(g=>`<option ${S.me.grade===g?'selected':''}>${g}</option>`).join('')}</select></div>
       <div class="field" style="margin-bottom:0"><label>Open the sidebar on</label>
         <div class="seg">
           <button class="${S.mode==='tutor'?'on':''}" onclick="setMode('tutor')">🎓 Tutor</button>
@@ -939,7 +939,7 @@ function tutorCard(t, course){
         <div style="margin-top:4px">
           ${cc.grade ? `<span class="grade ${gradeClass(cc.grade)}">${esc(course)}: ${esc(cc.grade)}</span>` : `<span class="tiny">${esc(course)}</span>`}
           ${cc.verified ? '<span class="verified">✓ Verified</span>' : ''}
-          ${cc.year ? `<span class="tiny" style="margin-left:6px">Taken ${esc(cc.year)}</span>` : ''}
+          ${cc.year ? `<span class="tiny" style="margin-left:6px">Taken ${/^Grade/.test(cc.year)?'in ':''}${esc(cc.year)}</span>` : ''}
         </div>
         <div class="tiny" style="margin-top:5px">🗓️ ${esc(t.avail||'Availability not set')} · ${esc(t.format)}</div>
         ${t.bio ? `<div class="tiny" style="margin-top:2px">${esc(t.bio)}</div>` : ''}
@@ -1184,11 +1184,13 @@ function renderProfile(c){
 function renderBecomeTutor(c){
   S.overlay.step = S.overlay.step || 1;
   if(!S.overlay.draft){
-    const courses={}; S.me.tutorCourses.forEach(tc=>{ courses[tc.course]={ grade:tc.grade||'A', year:tc.year||'2024–25' }; });
+    const courses={}; S.me.tutorCourses.forEach(tc=>{ courses[tc.course]={ grade:tc.grade||'A', year:tc.year||'' }; });
     S.overlay.draft = { courses, avail:S.me.avail||'', bio:(A.profile&&A.profile.tutor_bio)||'', format:(A.profile&&A.profile.tutor_format)||'In person' };
   }
   const d=S.overlay.draft, step=S.overlay.step;
   const GRADES=['A','A-','B+','B','B-','C+','C'];
+  const TAKEN_GRADES=['Grade 7','Grade 8','Grade 9','Grade 10','Grade 11','Grade 12'];
+  const defaultTaken = 'Grade ' + Math.max(7, Math.min(12, (S.me.grade||10) - 1));
   if(step===1){
     c.innerHTML=`
       <button class="back" onclick="closeView()">‹ Cancel</button>
@@ -1204,14 +1206,14 @@ function renderBecomeTutor(c){
     c.innerHTML=`
       <button class="back" onclick="S.overlay.step=1;render()">‹ Back</button>
       <h2 class="title">Your grades</h2>
-      <div class="lead">Step 2 of 3 · What did you earn, and when?</div>
+      <div class="lead">Step 2 of 3 · What did you earn, and what grade were you in?</div>
       ${chosen.map(course=>`<div class="card">
         <div style="font-weight:800;margin-bottom:8px">${courseEmoji(course)} ${esc(course)}</div>
         <div class="row" style="gap:10px">
           <div class="field" style="flex:1;margin:0"><label>Grade</label>
             <select onchange="d_grade('${esc(course)}',this.value)">${GRADES.map(g=>`<option ${d.courses[course].grade===g?'selected':''}>${g}</option>`).join('')}</select></div>
-          <div class="field" style="flex:1;margin:0"><label>Year taken</label>
-            <select onchange="d_year('${esc(course)}',this.value)">${['2024–25','2023–24','2022–23'].map(y=>`<option ${d.courses[course].year===y?'selected':''}>${y}</option>`).join('')}</select></div>
+          <div class="field" style="flex:1;margin:0"><label>Grade you took it in</label>
+            <select onchange="d_year('${esc(course)}',this.value)">${TAKEN_GRADES.map(y=>`<option ${d.courses[course].year===y?'selected':''}>${y}</option>`).join('')}</select></div>
         </div></div>`).join('')}
       <div style="margin-top:16px"><button class="btn" onclick="S.overlay.step=3;render()">Next</button></div>
     `;
@@ -1237,7 +1239,7 @@ function renderBecomeTutor(c){
     `;
   }
 }
-function toggleTutorCourse(course){ const d=S.overlay.draft; if(d.courses[course])delete d.courses[course]; else d.courses[course]={grade:'A',year:'2024–25'}; render(); }
+function toggleTutorCourse(course){ const d=S.overlay.draft; if(d.courses[course])delete d.courses[course]; else d.courses[course]={grade:'A',year:defaultTaken}; render(); }
 function d_grade(course,v){ S.overlay.draft.courses[course].grade=v; }
 function d_year(course,v){ S.overlay.draft.courses[course].year=v; }
 async function finishTutor(){
@@ -1282,7 +1284,7 @@ async function renderAdminGrades(c){
   const line = r => `<div class="card">
       <div class="row"><div class="avatar" style="background:${courseColor(r.course)}">${courseEmoji(r.course)}</div>
         <div style="min-width:0"><div style="font-weight:800">${esc(r.who ? r.who.real_name : 'Unknown')} <span class="tiny">· ${esc(r.who ? r.who.tutor_alias || r.who.student_alias : '')}${r.who && r.who.grade_level ? ' · Grade '+r.who.grade_level : ''}</span></div>
-          <div class="tiny">${esc(r.course)} · claims <b>${esc(r.grade)}</b>${r.year ? ' · taken '+esc(r.year) : ''} · submitted ${esc(new Date(r.created_at).toLocaleDateString())}</div></div>
+          <div class="tiny">${esc(r.course)} · claims <b>${esc(r.grade)}</b>${r.year ? ' · taken '+(/^Grade/.test(r.year)?'in ':'')+esc(r.year) : ''} · submitted ${esc(new Date(r.created_at).toLocaleDateString())}</div></div>
         ${r.status==='pending' ? '' : `<span class="pill" style="margin-left:auto;${r.status==='verified'?'background:#e4f6ec;color:#2e9b6a':'background:#fdecef;color:#c23b5e'}">${r.status==='verified'?'Verified':'Rejected'}</span>`}
       </div>
       ${r.status==='pending' ? `<div class="row" style="gap:8px;margin-top:10px">
@@ -1372,7 +1374,7 @@ async function renderAdminTeam(c){
       </div>
       ${editing ? `<div class="medit">
         <input id="me_name" value="${esc(s.real_name)}" placeholder="Full name" style="flex:2;min-width:160px">
-        <select id="me_grade" style="flex:0 0 120px"><option value="">No grade</option>${[9,10,11,12].map(g=>`<option value="${g}" ${s.grade_level===g?'selected':''}>Grade ${g}</option>`).join('')}</select>
+        <select id="me_grade" style="flex:0 0 120px"><option value="">No grade</option>${[7,8,9,10,11,12].map(g=>`<option value="${g}" ${s.grade_level===g?'selected':''}>Grade ${g}</option>`).join('')}</select>
         <button class="btn sm" onclick="saveMember('${esc(s.email)}')">Save</button>
       </div>` : ''}
     </div>`;
@@ -1391,7 +1393,7 @@ async function renderAdminTeam(c){
       <div class="row" style="gap:8px;flex-wrap:wrap">
         <input id="mb_name" placeholder="Full name" style="flex:1;min-width:160px;padding:10px 12px;border:1.5px solid #e5e2f0;border-radius:11px;font:inherit;font-size:14px">
         <input id="mb_email" type="email" placeholder="Email they will sign in with" style="flex:2;min-width:220px;padding:10px 12px;border:1.5px solid #e5e2f0;border-radius:11px;font:inherit;font-size:14px" onkeydown="if(event.key==='Enter')addMember()">
-        <select id="mb_grade" style="flex:0 0 110px;padding:10px 12px;border:1.5px solid #e5e2f0;border-radius:11px;font:inherit;font-size:14px;background:#fff"><option value="">Grade</option>${[9,10,11,12].map(g=>`<option value="${g}">Grade ${g}</option>`).join('')}</select>
+        <select id="mb_grade" style="flex:0 0 110px;padding:10px 12px;border:1.5px solid #e5e2f0;border-radius:11px;font:inherit;font-size:14px;background:#fff"><option value="">Grade</option>${[7,8,9,10,11,12].map(g=>`<option value="${g}">Grade ${g}</option>`).join('')}</select>
         <select id="mb_role" style="flex:0 0 150px;padding:10px 12px;border:1.5px solid #e5e2f0;border-radius:11px;font:inherit;font-size:14px;background:#fff"><option value="student">Student</option><option value="admin">Administrator</option><option value="board">Board</option></select>
         <button class="btn sm" id="mb_add" onclick="addMember()">Add</button>
       </div>
