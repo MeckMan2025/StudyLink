@@ -1451,9 +1451,10 @@ function completeSession(id){
 
 /* -------- COMMUNITY -------- */
 function renderCommunity(c){
-  // Your community is your classes: everything you added on either side of
-  // the sidebar gets a board here the moment it is added.
-  const mine = ALL_COURSES.filter(x => S.myClasses.includes(x) || S.tutorClasses.includes(x));
+  // The boards follow the side you are on: classes you take on the Tutee
+  // side, classes you tutor on the Tutor side.
+  const tutorSide = S.mode==='tutor';
+  const mine = ALL_COURSES.filter(x => S[classKey()].includes(x));
   const withPosts = (S.posts||[]).map(p=>p.course);
   const others = ALL_COURSES.filter(x => !mine.includes(x) && withPosts.includes(x));
   const row = course => {
@@ -1468,10 +1469,10 @@ function renderCommunity(c){
   };
   c.innerHTML=`
     <h2 class="title">Community</h2>
-    <div class="lead">Every class you add has a board here. Ask a question — someone in your class can help.</div>
-    ${mine.length ? mine.map(row).join('') : `<div class="empty"><div class="em">💬</div>No classes yet. Add the classes you are taking and their boards show up here.<div style="margin-top:12px"><button class="btn sm" onclick="S.tab='classes'; openView({type:'addClasses'})">＋ Add classes</button></div></div>`}
+    <div class="lead">${tutorSide ? 'The boards for the classes you tutor. Answer questions, spot who needs help.' : 'The boards for the classes you take. Ask a question — someone in your class can help.'}</div>
+    ${mine.length ? mine.map(row).join('') : `<div class="empty"><div class="em">💬</div>${tutorSide ? 'No tutoring classes yet. Add the classes you tutor and their boards show up here.' : 'No classes yet. Add the classes you are taking and their boards show up here.'}<div style="margin-top:12px"><button class="btn sm" onclick="S.tab='classes'; openView({type:'addClasses'})">＋ Add classes</button></div></div>`}
     ${mine.length ? `<button class="card addcard" style="width:100%;min-height:56px;margin-top:10px" onclick="S.tab='classes'; openView({type:'addClasses'})">＋ Add a class to join its board</button>` : ''}
-    ${others.length ? `<div class="sectlabel">Other classes with conversations</div>${others.map(row).join('')}` : ''}
+    ${others.length ? `<div class="sectlabel">${tutorSide ? 'Other classes with conversations' : 'Other classes with conversations'}</div>${others.map(row).join('')}` : ''}
   `;
 }
 function renderBoard(c){
