@@ -813,6 +813,7 @@ function sessionColumn(role){
       </div>
       ${pending ? `<span class="pill" style="background:#fbf1e2;color:#c98b34;cursor:pointer" onclick="go('tutoring')">${tag}</span>` : `<span class="when">${esc(dayLabel)}</span>`}
       ${role==='tutor' && !pending && r.date && r.date<=today ? `<button class="btn sm green" onclick="completeSession('${r.id}')">Done</button>` : ''}
+      ${r.status==='accepted' ? cancelBtn(r.id,'session').replace('margin-left:auto;','') : role==='tutor' && r.status==='offered' ? cancelBtn(r.id,'offer').replace('margin-left:auto;','') : ''}
     </div>`;
   }).join('') + (role==='tutor' && done ? `<div class="tiny" style="text-align:center;margin-top:8px">${done} session${done===1?'':'s'} completed · ${S.hours} service hours</div>` : '');
 }
@@ -842,6 +843,7 @@ function sessionCard(s){
       <div class="tiny">${esc(s.day)} · ${esc(s.time)} · with ${esc(s.with)} · ${esc(s.format)}${s.location?' · 📍 '+esc(s.location):''}</div>
     </div>
     ${s.role==='tutor' ? `<button class="btn sm green" style="margin-left:auto" onclick="completeSession('${s.id}')">Complete</button>` : `<span class="pill" style="margin-left:auto">Confirmed</span>`}
+    ${cancelBtn(s.id, 'session').replace('margin-left:auto;','')}
   </div>`;
 }
 
@@ -902,13 +904,15 @@ function removeClass(course){
 }
 
 /* -------- CALENDAR -------- */
-const EVENT_KINDS = { test:'📝 Test', homework:'📚 Homework', study:'📖 Study', other:'📌 Other', session:'🤝 Tutoring', pending:'⏳ Requested' };
+const EVENT_KINDS = { test:'📝 Test', homework:'📚 Homework', study:'📖 Study', other:'📌 Other', session:'🤝 Tutoring', pending:'⏳ Waiting for an answer', offer:'📨 Offer · answer in Tutoring' };
 // Everything with a date: my own events, booked sessions, and requests still waiting.
 function calItems(){
   return [
     ...S.events,
-    ...sessionsList().filter(x=>x.date).map(x=>({ id:x.id, date:x.date, time:x.time, course:x.course, kind:'session', title:(x.role==='tutor'?'Tutoring ':'Session with ')+x.with, fixed:true })),
-    ...S.myRequests.filter(r=>r.date && r.status==='pending').map(r=>({ id:r.id, date:r.date, time:r.time, course:r.course, kind:'pending', title:'Waiting on '+r.tutor_alias, fixed:true })),
+    ...sessionsList().filter(x=>x.date).map(x=>({ id:x.id, date:x.date, time:x.time, course:x.course, kind:'session', title:(x.role==='tutor'?'Tutoring ':'Session with ')+x.with, cancel:'session' })),
+    ...S.myRequests.filter(r=>r.date && r.status==='pending').map(r=>({ id:r.id, date:r.date, time:r.time, course:r.course, kind:'pending', title:'Waiting on '+r.tutor_alias, cancel:'request' })),
+    ...S.incoming.filter(r=>r.date && r.status==='offered').map(r=>({ id:r.id, date:r.date, time:r.time, course:r.course, kind:'pending', title:'Offered to '+r.student_alias, cancel:'offer' })),
+    ...S.myRequests.filter(r=>r.date && r.status==='offered').map(r=>({ id:r.id, date:r.date, time:r.time, course:r.course, kind:'offer', title:r.tutor_alias+' wants to meet', fixed:true })),
   ];
 }
 const byWhen = (a,b) => a.date.localeCompare(b.date) || (a.time||'').localeCompare(b.time||'');
@@ -919,7 +923,7 @@ function eventRow(e){
       <div style="font-weight:800;font-size:14px">${esc(e.title)}</div>
       <div class="tiny">${esc(fmtDate(e.date))}${e.time?' · '+esc(e.time):''} · ${EVENT_KINDS[e.kind]||''}${e.course?' · '+esc(e.course):''}</div>
     </div>
-    ${e.fixed ? '' : `<button class="del" title="Delete" onclick="deleteEvent('${e.id}')">✕</button>`}
+    ${e.cancel ? cancelBtn(e.id, e.cancel) : e.fixed ? '' : `<button class="del" title="Delete" onclick="deleteEvent('${e.id}')">✕</button>`}
   </div>`;
 }
 function renderCalendar(c){
@@ -962,6 +966,7 @@ function renderCalendar(c){
       <div>
         <div class="sectlabel">${esc(parseYmd(sel).toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'}))}</div>
         <div class="card">${dayEvs.length ? dayEvs.map(eventRow).join('') : `<div class="tiny" style="text-align:center;padding:8px">Nothing on this day.</div>`}</div>
+        ${S.me.isTutor && S.mode==='tutor' && sel>=ymd(new Date()) ? `<button class="btn ghost sm" style="width:100%;margin-top:10px" onclick="openView({type:'schedule', date:'${sel}'})">📅 Schedule tutoring on this day</button>` : ''}
       </div>
       <div>
         <div class="sectlabel">Add to this day</div>
@@ -1127,7 +1132,7 @@ function tuteesHtml(course){
       ${avatarDot(initials(st.student_alias), st.last_seen_at, 'background:'+courseColor(course))}
       <div style="min-width:0;flex:1"><div style="font-weight:800">${esc(st.student_alias)} ${seenHtml(st.last_seen_at)}</div><div class="tiny">${st.grade_level?'Grade '+st.grade_level:''}${r ? (st.grade_level?' · ':'') + (r.status==='offered' ? 'You offered to help' : r.status==='pending' ? 'They asked you for help' : 'Session booked') : ''}</div></div>
       ${r ? `<span class="pill" style="margin-left:auto;${r.status==='accepted'?'background:#e4f6ec;color:#2e9b6a':''}">${r.status==='offered'?'Offered':r.status==='pending'?'Requested':'Confirmed'}</span>`
-          : canOffer ? `<button class="btn sm" style="margin-left:auto" onclick="offerHelp('${st.user_id}','${esc(st.student_alias)}','${esc(course)}',this)">Offer help</button>` : ''}
+          : canOffer ? `<span class="row" style="gap:6px;margin-left:auto;flex:0 0 auto"><button class="btn sm ghost" onclick="openView({type:'schedule', course:'${esc(course)}', student:'${st.user_id}'})">📅 Schedule</button><button class="btn sm" onclick="offerHelp('${st.user_id}','${esc(st.student_alias)}','${esc(course)}',this)">Offer help</button></span>` : ''}
     </div>`; }).join('') : `<div class="empty"><div class="em">🎓</div>Nobody has added ${esc(course)} as a class yet.</div>`}`;
 }
 // A tutor's offer is a request that starts on the tutor's side; the student
@@ -1257,11 +1262,24 @@ function renderRequest(c){
     <div class="card">
       <div class="field"><label>Course</label>
         <select id="rq_course">${coursesTutored.map(x=>`<option ${x===course?'selected':''}>${esc(x)}</option>`).join('')}</select></div>
-      <div class="field"><label>Topic</label><input id="rq_topic" placeholder="e.g. Migration models"></div>
+      <div class="field"><label>How many sessions?</label>
+        <div class="seg" id="rq_count">
+          <button class="on" data-v="one">One session</button>
+          <button data-v="many">Many sessions</button>
+        </div></div>
+      <div class="field" id="rq_topicWrap"><label>Topic</label><input id="rq_topic" placeholder="e.g. Migration models"></div>
+      <div id="rq_many" style="display:none">
+        <div class="field"><label>Which days each week?</label>
+          <div class="chips" id="rq_wd">${['Mon','Tue','Wed','Thu','Fri'].map((d,i)=>`<button class="chip" data-d="${i+1}">${d}</button>`).join('')}</div></div>
+        <div class="row" style="gap:10px">
+          <div class="field" style="flex:1"><label>Starting</label><input id="rq_start" type="date" value="${ymd(addDays(new Date(),1))}" min="${ymd(new Date())}" onchange="checkFree('${t.id}')"></div>
+          <div class="field" style="flex:1"><label>For how long</label><select id="rq_weeks" onchange="checkFree('${t.id}')">${[2,3,4,6,8,10,12].map(w=>`<option value="${w}" ${w===4?'selected':''}>${w} weeks</option>`).join('')}</select></div>
+        </div>
+      </div>
       <div class="field"><label>What do you need help with?</label><textarea id="rq_desc" rows="2" placeholder="A sentence or two…"></textarea></div>
       ${t.avail ? `<div class="tiny" style="margin:-4px 0 10px">🗓️ ${esc(t.name)} is usually free: ${esc(t.avail)}</div>` : ''}
       <div class="row" style="gap:10px">
-        <div class="field" style="flex:1;margin:0"><label>Day</label><input id="rq_day" type="date" value="${ymd(addDays(new Date(),1))}" min="${ymd(new Date())}" onchange="checkFree('${t.id}')"></div>
+        <div class="field" id="rq_dayWrap" style="flex:1;margin:0"><label>Day</label><input id="rq_day" type="date" value="${ymd(addDays(new Date(),1))}" min="${ymd(new Date())}" onchange="checkFree('${t.id}')"></div>
         <div class="field" style="flex:1;margin:0"><label>Time</label><select id="rq_time" onchange="checkFree('${t.id}')">${TIME_SLOTS.map(x=>`<option ${x===suggestTime(t)?'selected':''}>${x}</option>`).join('')}</select></div>
       </div>
       <div id="rq_free" class="tiny" style="margin-top:8px"></div>
@@ -1278,11 +1296,39 @@ function renderRequest(c){
     <p class="tiny" style="text-align:center;margin-top:10px">🔒 Coordination stays inside StudyLink — no phone numbers or personal emails shared.</p>
   `;
   c.querySelectorAll('#rq_fmt button').forEach(b=>b.onclick=()=>{ c.querySelectorAll('#rq_fmt button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); fillLocations(); });
+  c.querySelectorAll('#rq_count button').forEach(b=>b.onclick=()=>{
+    c.querySelectorAll('#rq_count button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
+    const many=b.dataset.v==='many';
+    $('rq_topicWrap').style.display = many ? 'none' : '';
+    $('rq_dayWrap').style.display = many ? 'none' : '';
+    $('rq_many').style.display = many ? '' : 'none';
+    checkFree(t.id);
+  });
+  c.querySelectorAll('#rq_wd button').forEach(b=>b.onclick=()=>{ b.classList.toggle('dept'); b.style.background = b.classList.contains('dept') ? 'var(--blue)' : ''; checkFree(t.id); });
   fillLocations(); checkFree(t.id);
+}
+// Many sessions: every picked weekday from the start date, for that many weeks.
+const reqMany = () => document.querySelector('#rq_count button.on')?.dataset.v==='many';
+function manyDates(){
+  const days=[...document.querySelectorAll('#rq_wd button.dept')].map(b=>+b.dataset.d);
+  const start=$('rq_start')?.value, weeks=+($('rq_weeks')?.value||0);
+  if(!start || !days.length) return [];
+  const out=[], first=parseYmd(start), end=addDays(first, weeks*7);
+  for(let d=first; d<end; d=addDays(d,1)) if(days.includes(d.getDay())) out.push(ymd(d));
+  return out;
 }
 // Is the tutor free at the day and time picked? Blocks Send when not.
 function checkFree(tid){
   const day=$('rq_day')?.value, time=$('rq_time')?.value, box=$('rq_free'), btn=$('rq_send'); if(!box) return;
+  if(reqMany()){
+    const dates=manyDates(), free=dates.filter(k=>freeAt(tid,k,time).free), busy=dates.length-free.length;
+    box.innerHTML = !dates.length ? '<span style="color:var(--muted);font-weight:700">Pick at least one day of the week.</span>'
+      : !free.length ? '<span style="color:#c23b5e;font-weight:800">✕ They are not free on any of those dates at '+esc(time)+'. Try another time.</span>'
+      : '<span class="seen on">✓ '+free.length+' session'+(free.length===1?'':'s')+', '+esc(fmtDate(free[0]))+' to '+esc(fmtDate(free[free.length-1]))+'</span>'
+        + (busy ? ' <span style="color:#c98b34;font-weight:700">· '+busy+' date'+(busy===1?'':'s')+' they are busy will be skipped</span>' : '');
+    if(btn){ btn.disabled=!free.length; }
+    return;
+  }
   const r=freeAt(tid, day, time);
   box.innerHTML = r.free ? '<span class="seen on">✓ Free then</span>' : '<span style="color:#c23b5e;font-weight:800">✕ Not available: '+esc(r.why)+'. Pick another time.</span>';
   if(btn){ btn.disabled=!r.free; }
@@ -1348,23 +1394,132 @@ async function submitRequest(tid){
   const date=$('rq_day').value||null;
   const time=$('rq_time').value||'TBD';
   const fmt=document.querySelector('#rq_fmt button.on')?.dataset.v||'In person';
-  if(!freeAt(tid, date, time).free){ toast('That tutor is not available then.'); return; }
+  const many=reqMany();
+  const dates = many ? manyDates().filter(k=>freeAt(tid,k,time).free) : [date];
+  if(many && !dates.length){ toast('Pick days the tutor is free.'); return; }
+  if(!many && !freeAt(tid, date, time).free){ toast('That tutor is not available then.'); return; }
   const locBase=$('rq_loc')?.value||'', locD=($('rq_locd')?.value||'').trim();
   const location = locBase + (locD && (locBase==='Classroom'||locBase==='Other') ? ' · '+locD : '');
   const btn=$('rq_send'); if(btn){ btn.disabled=true; btn.textContent='Sending…'; }
   try{
-    await sbFetch('/rest/v1/sl_requests', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({
+    // Many sessions go up as one row per date in a single insert, so they
+    // share a created_at — that is how the tutor's side groups them.
+    await sbFetch('/rest/v1/sl_requests', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify(dates.map(d=>({
       student_id:A.user.id, tutor_id:tid, student_alias:A.profile.student_alias, tutor_alias:t.name,
-      course, topic, note, date, time, format:fmt, location }) });
+      course, topic: many ? SERIES_TOPIC : topic, note, date:d, time, format:fmt, location }))) });
     await loadData();
     closeView(); go('tutoring');
-    toast('Request sent to '+t.name+' 🎉');
+    toast(many ? 'Asked '+t.name+' for '+dates.length+' sessions 🎉' : 'Request sent to '+t.name+' 🎉');
   }catch(e){
     toast(e.message); if(btn){ btn.disabled=false; btn.textContent='Send request to '+t.name; }
   }
 }
 
+/* -------- SCHEDULE A SESSION (tutor, overlay) -------- */
+// A tutor picks a student, a class and a time. It goes out as an offer with
+// a date; once the student accepts it, it is a booked session on both calendars.
+function scheduleStudents(course){
+  const by={};
+  S.roster.filter(r=>r.course===course).forEach(r=>{ by[r.user_id]=r.student_alias; });
+  S.incoming.filter(r=>r.course===course).forEach(r=>{ by[r.student_id]=r.student_alias; });
+  return Object.entries(by).map(([id,alias])=>({id,alias})).sort((a,b)=>a.alias.localeCompare(b.alias, undefined, {numeric:true}));
+}
+function renderSchedule(c){
+  const o=S.overlay;
+  if(!S.me.isTutor){ c.innerHTML=`<button class="back" onclick="closeView()">‹ Back</button><div class="empty"><div class="em">🎓</div>Add a class you tutor first, then you can schedule sessions.</div>`; return; }
+  const course = S.tutorClasses.includes(o.course) ? o.course : S.tutorClasses[0];
+  const students = scheduleStudents(course);
+  const date = o.date || ymd(addDays(new Date(),1));
+  c.innerHTML=`
+    <button class="back" onclick="closeView()">‹ Back</button>
+    <h2 class="title">Schedule a session</h2>
+    <div class="lead">The student gets it in Tutoring. Once they accept, it's on both calendars.</div>
+    <div class="card">
+      <div class="field"><label>Class</label>
+        <select id="sc_course" onchange="S.overlay.course=this.value; S.overlay.student=null; render()">${S.tutorClasses.map(x=>`<option ${x===course?'selected':''}>${esc(x)}</option>`).join('')}</select></div>
+      <div class="field"><label>Student</label>
+        ${students.length ? `<select id="sc_student">${students.map(st=>`<option value="${st.id}" ${st.id===o.student?'selected':''}>${esc(st.alias)}</option>`).join('')}</select>`
+          : `<div class="tiny">Nobody has added ${esc(course)} as a class yet, so there's no one to schedule with.</div>`}</div>
+      <div class="field"><label>Topic</label><input id="sc_topic" placeholder="e.g. Unit 3 review"></div>
+      <div class="row" style="gap:10px">
+        <div class="field" style="flex:1;margin:0"><label>Day</label><input id="sc_day" type="date" value="${date}" min="${ymd(new Date())}" onchange="checkClash()"></div>
+        <div class="field" style="flex:1;margin:0"><label>Time</label><select id="sc_time" onchange="checkClash()">${TIME_SLOTS.map(x=>`<option ${x==='3:30 PM'?'selected':''}>${x}</option>`).join('')}</select></div>
+      </div>
+      <div id="sc_clash" class="tiny" style="margin-top:8px"></div>
+      <div class="field" style="margin-top:12px"><label>Format</label>
+        <div class="seg" id="rq_fmt">
+          <button class="on" data-v="In person">In person</button>
+          <button data-v="Virtual">Virtual</button>
+        </div></div>
+      <div class="field"><label>Where</label>
+        <select id="rq_loc" onchange="locDetail()"></select>
+        <input id="rq_locd" placeholder="Room number, or where exactly" style="margin-top:8px;display:none"></div>
+      <div class="field" style="margin-bottom:0"><label>Note for the student</label><textarea id="sc_note" rows="2" placeholder="Optional — what to bring, what you'll cover…"></textarea></div>
+    </div>
+    <div style="margin-top:14px"><button class="btn" id="sc_send" ${students.length?'':'disabled'} onclick="sendSchedule()">Send to student</button></div>
+  `;
+  c.querySelectorAll('#rq_fmt button').forEach(b=>b.onclick=()=>{ c.querySelectorAll('#rq_fmt button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); fillLocations(); });
+  fillLocations(); checkClash();
+}
+// Warn when the tutor already has something booked at that day and time.
+function checkClash(){
+  const day=$('sc_day')?.value, time=$('sc_time')?.value, box=$('sc_clash'); if(!box) return;
+  const hit=[...S.incoming, ...S.myRequests].find(r=>r.date===day && r.time===time && ['accepted','offered','pending'].includes(r.status));
+  box.innerHTML = hit ? `<span style="color:#c98b34;font-weight:800">⚠ You already have ${esc(hit.course)} with ${esc(hit.tutor_id===A.user.id ? hit.student_alias : hit.tutor_alias)} then.</span>` : '';
+}
+async function sendSchedule(){
+  const sel=$('sc_student'); if(!sel) return;
+  const studentId=sel.value, alias=sel.options[sel.selectedIndex].text;
+  const date=$('sc_day').value;
+  if(!date){ toast('Pick a day.'); return; }
+  const fmt=document.querySelector('#rq_fmt button.on')?.dataset.v||'In person';
+  const locBase=$('rq_loc')?.value||'', locD=($('rq_locd')?.value||'').trim();
+  const location = locBase + (locD && (locBase==='Classroom'||locBase==='Other') ? ' · '+locD : '');
+  const btn=$('sc_send'); btn.disabled=true; btn.textContent='Sending…';
+  try{
+    await sbFetch('/rest/v1/sl_requests', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({
+      student_id:studentId, tutor_id:A.user.id, student_alias:alias, tutor_alias:A.profile.tutor_alias,
+      course:$('sc_course').value, topic:$('sc_topic').value.trim()||'Tutoring session', note:($('sc_note').value||'').trim(),
+      date, time:$('sc_time').value, format:fmt, location, status:'offered' }) });
+    await loadData();
+    closeView(); go('tutoring');
+    toast('Sent to '+alias+' — booked once they accept 📅');
+  }catch(e){
+    toast(e.message); btn.disabled=false; btn.textContent='Send to student';
+  }
+}
+
 /* -------- TUTORING -------- */
+const SERIES_TOPIC = 'Ongoing sessions';
+// Pending requests, with each many-sessions request folded into one group.
+function requestGroups(rows){
+  const groups=[], by={};
+  rows.forEach(r=>{
+    const key = r.topic===SERIES_TOPIC ? r.student_id+'|'+r.course+'|'+r.created_at : r.id;
+    if(!by[key]) groups.push(by[key]=[]);
+    by[key].push(r);
+  });
+  groups.forEach(g=>g.sort((a,b)=>(a.date||'').localeCompare(b.date||'')));
+  return groups;
+}
+function seriesCard(g){
+  const r=g[0], ids=g.map(x=>x.id).join(',');
+  return `<div class="card">
+    <div class="row">${avatarDot(initials(r.student_alias), S.presence && S.presence[r.id], 'background:'+courseColor(r.course))}
+      <div><div style="font-weight:800">${esc(r.student_alias)} ${seenHtml(S.presence && S.presence[r.id])}</div><div class="tiny">${esc(r.course)} · ${g.length} sessions · ${esc(r.time||'TBD')} · ${esc(r.format)}${r.location?' · 📍 '+esc(r.location):''}</div></div></div>
+    ${r.note ? `<div style="font-size:13px;margin:8px 0 0;color:#555">${esc(r.note)}</div>` : ''}
+    <div style="margin:8px 0 10px">${g.map(x=>`<span class="pill">${esc(fmtDate(x.date))}</span>`).join('')}</div>
+    <div class="row" style="gap:8px">
+      <button class="btn sm gray" style="flex:1" onclick="respondSeries('${ids}',false)">Decline all</button>
+      <button class="btn sm green" style="flex:1" onclick="respondSeries('${ids}',true)">Accept all ${g.length}</button>
+    </div>
+  </div>`;
+}
+function respondSeries(ids, accept){
+  sbFetch('/rest/v1/sl_requests?id=in.('+ids+')', { method:'PATCH', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ status: accept ? 'accepted' : 'declined' }) })
+    .then(loadData).then(function(){ render(); toast(accept ? ids.split(',').length+' sessions booked ✅' : 'Sessions declined'); })
+    .catch(function(e){ toast(e.message); });
+}
 function renderTutoring(c){
   const inc = S.incoming.filter(r=>r.status==='pending');
   const offers = S.myRequests.filter(r=>r.status==='offered');
@@ -1375,10 +1530,20 @@ function renderTutoring(c){
   c.innerHTML=`
     <h2 class="title">Tutoring</h2>
     <div class="lead">Your requests and sessions.</div>
+    ${S.me.isTutor ? `<button class="btn" style="margin-bottom:6px" onclick="openView({type:'schedule'})">📅 Schedule a session with a student</button>` : ''}
+
+    ${S.incoming.filter(r=>r.status==='offered').length ? `<div class="sectlabel">Waiting on the student</div>
+      ${S.incoming.filter(r=>r.status==='offered').map(r=>`<div class="card row">
+        <div class="avatar" style="background:${courseColor(r.course)}">${initials(r.student_alias)}</div>
+        <div style="min-width:0;flex:1"><div style="font-weight:800">${esc(r.student_alias)} <span class="tiny">· ${esc(r.course)}</span></div>
+          <div class="tiny">${r.date ? esc(fmtDate(r.date))+' · '+esc(r.time||'TBD') : 'No date yet'}${r.location?' · 📍 '+esc(r.location):''}</div></div>
+        <span class="pill">Sent</span>
+        ${cancelBtn(r.id,'offer').replace('margin-left:auto;','')}
+      </div>`).join('')}` : ''}
 
     ${S.me.isTutor || inc.length ? `
       <div class="sectlabel">Requests to you ${inc.length?`(${inc.length})`:''}</div>
-      ${inc.length ? inc.map(r=>`
+      ${inc.length ? requestGroups(inc).map(g=>g.length>1 ? seriesCard(g) : g[0]).map(r=>typeof r==='string' ? r : `
         <div class="card">
           <div class="row">${avatarDot(initials(r.student_alias), S.presence && S.presence[r.id], 'background:'+courseColor(r.course))}
             <div><div style="font-weight:800">${esc(r.student_alias)} ${seenHtml(S.presence && S.presence[r.id])}</div><div class="tiny">${esc(r.course)} · ${esc(r.topic)}</div></div></div>
@@ -1395,6 +1560,8 @@ function renderTutoring(c){
       ${offers.map(r=>`<div class="card">
         <div class="row">${avatarDot(initials(r.tutor_alias), S.presence && S.presence[r.id], 'background:'+courseColor(r.course))}
           <div><div style="font-weight:800">${esc(r.tutor_alias)} ${seenHtml(S.presence && S.presence[r.id])}</div><div class="tiny">offers to help with ${esc(r.course)} · ${esc(r.format)}</div></div></div>
+        ${r.date ? `<div class="tiny" style="margin-top:8px">🗓️ ${esc(fmtDate(r.date))} · ${esc(r.time||'TBD')}${r.location?' · 📍 '+esc(r.location):''}</div>` : ''}
+        ${r.note ? `<div style="font-size:13px;margin-top:6px;color:#555">${esc(r.note)}</div>` : ''}
         <div class="row" style="gap:8px;margin-top:10px">
           <button class="btn sm gray" style="flex:1" onclick="respondOffer('${r.id}',false)">No thanks</button>
           <button class="btn sm green" style="flex:1" onclick="respondOffer('${r.id}',true)">Accept</button>
@@ -1418,7 +1585,7 @@ function renderTutoring(c){
         <div style="min-width:0"><div style="font-weight:800">${esc(r.course)}</div>
           <div class="tiny">${esc(r.topic)} · with ${esc(r.tutor_alias)} · ${esc(fmtDate(r.date))} ${esc(r.time||'')}${r.location?' · 📍 '+esc(r.location):''}</div></div>
         <span class="pill" style="margin-left:auto;${style[r.status]||''}">${label[r.status]||r.status}</span>
-        ${r.status==='pending' ? `<button class="del" title="Cancel request" style="border:none;background:none;color:var(--muted);cursor:pointer;font-size:16px" onclick="cancelRequest('${r.id}')">✕</button>` : ''}
+        ${r.status==='pending' ? cancelBtn(r.id,'request').replace('margin-left:auto;','') : r.status==='accepted' ? cancelBtn(r.id,'session').replace('margin-left:auto;','') : ''}
       </div>`).join('') : `<div class="card tiny" style="text-align:center">You haven't requested tutoring yet. Open a class to find a tutor.</div>`}
   `;
 }
@@ -1429,6 +1596,19 @@ function patchRequest(id, patch, okMsg){
     .catch(function(e){ toast(e.message); });
 }
 function cancelRequest(id){ patchRequest(id, { status:'cancelled' }, 'Request cancelled'); }
+// Taking a tutoring date off the calendar. Either person in a session can
+// cancel it; it asks once, right where the ✕ was, before anything changes.
+const CANCEL_WORDS = { session:['Cancel session','Session cancelled'], request:['Cancel request','Request cancelled'], offer:['Withdraw offer','Offer withdrawn'] };
+function cancelBtn(id, kind){
+  if(S.confirmCancel===id) return `<span class="row" style="gap:6px;margin-left:auto;flex:0 0 auto" onclick="event.stopPropagation()">
+      <button class="btn sm gray" onclick="S.confirmCancel=null; render()">Keep</button>
+      <button class="btn sm pink" onclick="cancelTutoring('${id}','${kind}')">${CANCEL_WORDS[kind][0]}</button></span>`;
+  return `<button class="del" title="${CANCEL_WORDS[kind][0]}" style="margin-left:auto;border:none;background:none;color:var(--muted);cursor:pointer;font-size:16px" onclick="event.stopPropagation(); S.confirmCancel='${id}'; render()">✕</button>`;
+}
+function cancelTutoring(id, kind){
+  S.confirmCancel=null;
+  patchRequest(id, { status:'cancelled' }, CANCEL_WORDS[kind][1]);
+}
 // Take a completed session off the books. The hours come off with it.
 function removeDone(id){
   const r=S.incoming.find(x=>x.id===id); if(!r) return;
@@ -2123,6 +2303,7 @@ function renderOverlay(c){
   if(o.type==='becomeTutor') return renderBecomeTutor(c);
   if(o.type==='search') return renderSearch(c);
   if(o.type==='addClasses') return renderAddClasses(c);
+  if(o.type==='schedule') return renderSchedule(c);
   S.overlay=null; return renderBody(c);   // an unknown overlay falls back to the page
 }
 
