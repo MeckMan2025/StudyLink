@@ -954,7 +954,7 @@ function renderCalendar(c){
     const anyBusy=myBlocks.some(b=>b.kind==='unavailable'), anyFree=myBlocks.some(b=>b.kind==='available');
     cells += `<div class="day ${d.getMonth()!==m?'out':''} ${k===today?'today':''} ${k===S.cal.open?'sel':''} ${allBusy?'busy':anyFree&&!anyBusy?'free':''}" role="button" tabindex="0" onclick="openDay('${k}')" onkeydown="if(event.key==='Enter')openDay('${k}')">
       <span class="n">${d.getDate()}</span>
-      <button class="plus" title="Add to ${esc(fmtDate(k))}" aria-label="Add to ${esc(fmtDate(k))}" onclick="event.stopPropagation(); openDay('${k}','event')">+</button>
+      <button class="plus" title="Add to ${esc(fmtDate(k))}" aria-label="Add to ${esc(fmtDate(k))}" onclick="event.stopPropagation(); openDay('${k}')">+</button>
       ${allBusy ? '<span class="avmark no">Unavailable</span>' : anyBusy ? '<span class="avmark no">Partly busy</span>' : anyFree ? '<span class="avmark ok">Available</span>' : ''}
       ${evs.slice(0,2).map(e=>`<div class="ev" style="--c:${courseColor(e.course)}">${esc(e.title)}</div>`).join('')}
       ${evs.length>2?`<div class="more">+${evs.length-2} more</div>`:''}
@@ -978,7 +978,7 @@ function renderCalendar(c){
 // One day, opened from its square: what's on it, and tabs to add more.
 function openDay(k, tab){
   S.cal.open=k; S.cal.sel=k; S.availForm=null; S.confirmCancel=null;
-  S.cal.tab = tab || (calItems().some(e=>e.date===k) || blocksOn(A.user.id,k).length ? 'see' : 'event');
+  S.cal.tab = tab || 'pick';
   render();
 }
 function closeDay(){ S.cal.open=null; render(); }
@@ -987,10 +987,17 @@ function dayModalHtml(k){
   const evs=calItems().filter(e=>e.date===k).sort(byWhen);
   const blocks=blocksOn(A.user.id, k);
   const canSchedule = S.me.isTutor && k>=ymd(new Date());
-  const tabs=[['see','On this day'+(evs.length+blocks.length?` (${evs.length+blocks.length})`:'')],['event','＋ Event'],['avail','＋ Availability']].concat(canSchedule?[['tutor','＋ Tutoring']]:[]);
+  const n=evs.length+blocks.length;
+  const choices=[['see','👀','See this day', n ? n+' thing'+(n===1?'':'s')+' on it' : 'Nothing on it yet'],['event','📝','Add an event','Test, homework, study time'],['avail','🕒','Set availability','When you are free or busy']].concat(canSchedule?[['tutor','🤝','Schedule tutoring','Book a session with a student']]:[]);
   const t=S.cal.tab;
   let body='';
-  if(t==='see'){
+  if(t==='pick'){
+    body = `<div class="tiny" style="margin:-4px 0 10px;font-size:13px">What do you want to do?</div>
+      ${choices.map(([id,ic,l,sub])=>`<div class="card row" style="cursor:pointer;margin-top:8px" onclick="S.cal.tab='${id}'; render()">
+        <div class="avatar" style="width:38px;height:38px;font-size:17px;background:#eef0fb">${ic}</div>
+        <div><div style="font-weight:800">${l}</div><div class="tiny">${sub}</div></div>
+        <div style="margin-left:auto;color:var(--muted)">›</div></div>`).join('')}`;
+  } else if(t==='see'){
     body = `<div class="card">
       ${evs.length || blocks.length ? evs.map(eventRow).join('') + blocks.map(b=>`<div class="avrow">
           <span class="tag ${b.kind==='available'?'ok':'no'}">${b.kind==='available'?'Available':'Unavailable'}</span>
@@ -1025,7 +1032,7 @@ function dayModalHtml(k){
     <div class="dm" role="dialog" aria-label="${esc(fmtDate(k))}">
       <div class="dmhead"><h3>${esc(parseYmd(k).toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'}))}</h3>
         <button onclick="closeDay()" aria-label="Close">✕</button></div>
-      <div class="seg" style="margin-bottom:12px;flex-wrap:wrap">${tabs.map(([id,l])=>`<button class="${t===id?'on':''}" onclick="S.cal.tab='${id}'; render()">${l}</button>`).join('')}</div>
+      ${t==='pick' ? '' : `<button class="back" onclick="S.cal.tab='pick'; render()">‹ ${esc((choices.find(x=>x[0]===t)||[,,'Back'])[2])}</button>`}
       ${body}
     </div>
   </div>`;
