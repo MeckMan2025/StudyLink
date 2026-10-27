@@ -94,6 +94,22 @@
   .cal{display:grid; grid-template-columns:repeat(7,1fr); gap:4px}
   .cal .dow{font-size:11px; font-weight:800; color:var(--muted); text-align:center; padding:4px 0; text-transform:uppercase}
   .cal .day{background:#fff; border:1px solid var(--line); border-radius:10px; min-height:84px; padding:5px; cursor:pointer; overflow:hidden; text-align:left; font:inherit; color:var(--ink); display:flex; flex-direction:column; justify-content:flex-start; min-width:0}
+  .pencil{border:none; background:#f2f0fb; border-radius:8px; width:28px; height:28px; cursor:pointer; font-size:13px; margin-left:auto}
+  .pencil:hover{background:#e3ecfd}
+  .freerow{display:flex; gap:8px; font-size:12.5px; font-weight:700; padding:3px 0; color:#2e9b6a}
+  .freerow .d{width:44px; flex:0 0 auto; color:var(--ink)}
+  .freerow .none{color:var(--muted)}
+  .periodrow{display:flex; align-items:center; gap:6px; padding:6px 0; border-bottom:1px solid var(--line); flex-wrap:wrap}
+  .periodrow input{padding:8px 9px; border:1.5px solid #e5e2f0; border-radius:9px; font:inherit; font-size:14px; color:var(--ink); background:#fff}
+  .periodrow input:first-child{flex:1; min-width:110px; font-weight:700}
+  .periodrow .del{border:none; background:none; color:var(--muted); cursor:pointer; font-size:16px; margin-left:auto}
+  .chat{display:flex; flex-direction:column; gap:6px; max-height:52vh; overflow-y:auto; padding:4px 2px}
+  .msg{max-width:78%; padding:8px 12px; border-radius:14px; font-size:14px; line-height:1.4; background:#fff; border:1px solid var(--line); align-self:flex-start}
+  .msg.me{align-self:flex-end; background:#e3ecfd; border-color:#d3e0fb}
+  .msg .t{font-size:10.5px; color:var(--muted); font-weight:700; margin-top:2px}
+  .msg.sys{align-self:center; background:none; border:none; color:var(--muted); font-size:12px; font-weight:700; text-align:center}
+  .acts{display:flex; gap:6px; flex-wrap:wrap; margin-top:8px}
+  .acts button{border:1px solid var(--line); background:#fff; border-radius:9px; padding:6px 10px; font:inherit; font-size:12.5px; font-weight:800; color:var(--blue-d); cursor:pointer}
   .cal .day{position:relative}
   .cal .day .plus{position:absolute; top:4px; right:4px; width:24px; height:24px; border-radius:50%; border:none; cursor:pointer;
     background:#f2f0fb; color:var(--muted); font-size:16px; font-weight:800; line-height:1; display:flex; align-items:center; justify-content:center}
@@ -181,6 +197,8 @@
   .wday .wi{font-size:10px; font-weight:700; padding:2px 5px; border-radius:6px; background:#f2f0fb; border-left:3px solid var(--c); text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
   .wday .wi.sess{background:#e4f6ec}
   .wday .wi.pend{background:#fbf1e2}
+  .wday .wi.busy{background:#fdecef; color:#c23b5e; border-left-color:#e7a1b3}
+  .wday .wi.free{background:#e4f6ec; color:#2e9b6a; border-left-color:#9fd8b9}
   .wday .more{font-size:9.5px; color:var(--muted); font-weight:700}
   .sessrow{display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--line)}
   .sessrow:last-child{border-bottom:none}
@@ -230,6 +248,9 @@
   .avrow .tag.no{background:#fdecef; color:#c23b5e}
   .cal .day.busy{background:#fdf3f5}
   .cal .day.free{background:#f3fbf6}
+  .cal .ev.busyev{background:#fdecef; color:#c23b5e; border-left-color:#e7a1b3}
+  .cal .ev.freeev{background:#e4f6ec; color:#2e9b6a; border-left-color:#9fd8b9}
+  @media (max-width:600px){ .cal .ev.busyev{background:#e7a1b3} .cal .ev.freeev{background:#9fd8b9} }
   .cal .avmark{font-size:9.5px; font-weight:800; border-radius:5px; padding:1px 4px; margin-top:3px; align-self:flex-start}
   .cal .avmark.no{background:#fdecef; color:#c23b5e}
   .cal .avmark.ok{background:#e4f6ec; color:#2e9b6a}
@@ -609,6 +630,13 @@ function renderHelp(c){
 }
 
 /* -------- HOME -------- */
+function scheduleNudgeHtml(){
+  if(!hasGrade() || mySchedule().length) return '';
+  return `<div class="card row" style="margin-bottom:12px;border-color:#f3dcb4;background:#fffaf1">
+    <div style="font-size:24px">🔔</div>
+    <div style="flex:1"><div style="font-weight:800">Add your class schedule</div><div class="tiny">So nobody books tutoring with you during class.</div></div>
+    <button class="btn sm" onclick="S.schedDraft=null; openView({type:'classSchedule'})">Add it</button></div>`;
+}
 function renderHome(c){
   const hour = new Date().getHours();
   const hi = hour<12 ? 'Good morning' : hour<17 ? 'Good afternoon' : 'Good evening';
@@ -618,7 +646,7 @@ function renderHome(c){
       <div class="lead">${new Date().toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'})}</div></div>
       ${adminButtonHtml()}
     </div>`;
-  c.innerHTML = head + (S.mode==='tutor' && S.me.isTutor ? tutorDashboard() : studentDashboard());
+  c.innerHTML = head + scheduleNudgeHtml() + (S.mode==='tutor' && S.me.isTutor ? tutorDashboard() : studentDashboard());
 }
 
 // ---- helpers shared by both dashboards ----
@@ -733,10 +761,10 @@ function tutorDashboard(){
       <div>
         <div class="sectlabel">Availability</div>
         <div class="card">
-          <div style="font-weight:800">${away.length ? 'Away this week' : 'Available this week'}</div>
-          <div class="tiny" style="margin:2px 0 10px">${S.me.avail ? esc(S.me.avail) : 'Set your usual times under Calendar.'}</div>
+          <div class="row" style="gap:6px"><div style="font-weight:800">${away.length ? 'Away this week' : 'Available this week'}</div>
+            <button class="pencil" title="Edit availability" aria-label="Edit availability" onclick="go('calendar')">✏️</button></div>
+          <div style="margin:6px 0 10px">${away.length ? '<div class="tiny">Students can\'t book you until next week.</div>' : weekFreeHtml()}</div>
           <button class="btn sm ${away.length?'green':'gray'}" style="width:100%" onclick="toggleAwayWeek()">${away.length ? 'I\'m available again' : 'Mark me away this week'}</button>
-          <button class="btn ghost sm" style="width:100%;margin-top:6px" onclick="go('calendar')">Edit availability</button>
         </div>
       </div>
     </div>
@@ -754,6 +782,26 @@ function tutorDashboard(){
 
     <div class="sectlabel">This week</div>
     ${weekStrip()}`;
+}
+// When I'm actually free on a day, between 7 AM and 8 PM: inside any
+// "available" windows I set, minus busy times and class periods.
+function freeWindows(userId, k){
+  const blocks=blocksOn(userId, k);
+  const avail=blocks.filter(b=>b.kind==='available');
+  let free = avail.length ? avail.map(b=>[Math.max(b.start_min,420), Math.min(b.end_min,1200)]) : [[420,1200]];
+  const cut=[...blocks.filter(b=>b.kind==='unavailable'), ...classesOn(userId, k)];
+  cut.forEach(b=>{ free = free.flatMap(([a,z])=> b.end_min<=a || b.start_min>=z ? [[a,z]] : [[a,b.start_min],[b.end_min,z]]); });
+  return free.filter(([a,z])=>z-a>=15).sort((x,y)=>x[0]-y[0]);
+}
+// Today to Saturday, one line per day.
+function weekFreeHtml(){
+  const now=new Date(), rows=[];
+  for(let i=0; i<=6-now.getDay(); i++){
+    const k=ymd(addDays(now,i)), nowMin=now.getHours()*60+now.getMinutes();
+    const w=freeWindows(A.user.id, k).map(([a,z])=> i===0 ? [Math.max(a,nowMin),z] : [a,z]).filter(([a,z])=>z-a>=15);
+    rows.push(`<div class="freerow"><span class="d">${i===0?'Today':esc(parseYmd(k).toLocaleDateString(undefined,{weekday:'short'}))}</span><span class="${w.length?'':'none'}">${w.length ? w.map(([a,z])=>esc(timeRange(a,z))).join(', ') : 'Not available'}</span></div>`);
+  }
+  return rows.join('');
 }
 // "Away this week": one-time all-day unavailable blocks from today to Saturday.
 function awayBlocks(){
@@ -773,6 +821,27 @@ function toggleAwayWeek(){
     .then(loadData).then(function(){ toast('Marked away through Saturday'); render(); }).catch(function(e){ toast(e.message); });
 }
 
+// Everything on one day, in time order: all-day busy first, then timed things
+// (events, sessions, busy or free times), then events with no time.
+const shortTime = m => minLabel(m).replace(':00 ',' ');
+function timeRange(a,b){
+  const A=shortTime(a), B=shortTime(b);
+  return A.slice(-2)===B.slice(-2) ? A.slice(0,-3)+'–'+B : A+'–'+B;
+}
+function dayEntries(k){
+  const out=[];
+  calItems().filter(e=>e.date===k).forEach(e=>{
+    const m=slotMin(e.time);
+    out.push({ min: m===null ? 2000 : m, text:(m===null ? '' : shortTime(m)+' ')+(e.kind==='session' ? e.title.replace(/^(Tutoring|Session with) /,'🤝 ') : e.title), kind:e.kind, color:courseColor(e.course) });
+  });
+  if(A.user) blocksOn(A.user.id, k).forEach(b=>{
+    const all=b.start_min===0 && b.end_min===1440;
+    const word=b.kind==='available' ? 'Free' : (b.note && b.note!=='Away this week' ? b.note : 'Busy');
+    out.push({ min: all ? -1 : b.start_min, text: word+' '+(all ? 'all day' : timeRange(b.start_min, b.end_min)), kind: b.kind==='available' ? 'free' : 'busy' });
+  });
+  return out.sort((a,b)=>a.min-b.min);
+}
+
 // Sunday to Saturday of the current week, with sessions, requests and events on
 // each day. Tapping a day opens the calendar there.
 function weekStrip(){
@@ -782,12 +851,12 @@ function weekStrip(){
   let cells='';
   for(let i=0;i<7;i++){
     const d=addDays(start,i), k=ymd(d);
-    const evs=items.filter(e=>e.date===k).sort(byWhen);
+    const evs=dayEntries(k);
     cells += `<button class="wday ${k===today?'today':''} ${k<today?'past':''}" onclick="S.cal={y:${d.getFullYear()},m:${d.getMonth()},sel:'${k}'}; go('calendar')" title="${esc(fmtDate(k))}">
       <span class="dn">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][i]}</span>
       <span class="dd">${d.getDate()}</span>
-      ${evs.slice(0,3).map(e=>`<span class="wi ${e.kind==='session'?'sess':e.kind==='pending'?'pend':''}" style="--c:${courseColor(e.course)}">${esc(e.time ? e.time.replace(/:00 /,' ')+' ' : '')}${esc(e.kind==='session' ? e.title.replace(/^(Tutoring|Session with) /,'') : e.title)}</span>`).join('')}
-      ${evs.length>3?`<span class="more">+${evs.length-3} more</span>`:''}
+      ${evs.slice(0,4).map(e=>`<span class="wi ${e.kind==='session'?'sess':e.kind==='pending'?'pend':e.kind==='busy'?'busy':e.kind==='free'?'free':''}" style="--c:${e.color||'transparent'}">${esc(e.text)}</span>`).join('')}
+      ${evs.length>4?`<span class="more">+${evs.length-4} more</span>`:''}
     </button>`;
   }
   return `<div class="week">${cells}</div>`;
@@ -846,7 +915,8 @@ function classGrid(removable, withAdd){
 }
 
 function sessionCard(s){
-  return `<div class="card row">
+  const r=findReq(s.id);
+  return `<div class="card"><div class="row">
     <div class="avatar" style="background:${courseColor(s.course)}">${courseEmoji(s.course)}</div>
     <div style="min-width:0">
       <div style="font-weight:800">${esc(s.course)}</div>
@@ -854,7 +924,7 @@ function sessionCard(s){
     </div>
     ${s.role==='tutor' ? `<button class="btn sm green" style="margin-left:auto" onclick="completeSession('${s.id}')">Complete</button>` : `<span class="pill" style="margin-left:auto">Confirmed</span>`}
     ${cancelBtn(s.id, 'session').replace('margin-left:auto;','')}
-  </div>`;
+  </div>${r ? actsHtml(r) : ''}</div>`;
 }
 
 /* -------- CLASSES -------- */
@@ -955,9 +1025,8 @@ function renderCalendar(c){
     cells += `<div class="day ${d.getMonth()!==m?'out':''} ${k===today?'today':''} ${k===S.cal.open?'sel':''} ${allBusy?'busy':anyFree&&!anyBusy?'free':''}" role="button" tabindex="0" onclick="openDay('${k}')" onkeydown="if(event.key==='Enter')openDay('${k}')">
       <span class="n">${d.getDate()}</span>
       <button class="plus" title="Add to ${esc(fmtDate(k))}" aria-label="Add to ${esc(fmtDate(k))}" onclick="event.stopPropagation(); openDay('${k}')">+</button>
-      ${allBusy ? '<span class="avmark no">Unavailable</span>' : anyBusy ? '<span class="avmark no">Partly busy</span>' : anyFree ? '<span class="avmark ok">Available</span>' : ''}
-      ${evs.slice(0,2).map(e=>`<div class="ev" style="--c:${courseColor(e.course)}">${esc(e.title)}</div>`).join('')}
-      ${evs.length>2?`<div class="more">+${evs.length-2} more</div>`:''}
+      ${dayEntries(k).slice(0,3).map(e=>`<div class="ev ${e.kind==='busy'?'busyev':e.kind==='free'?'freeev':''}" style="--c:${e.color||'transparent'}">${esc(e.text)}</div>`).join('')}
+      ${dayEntries(k).length>3?`<div class="more">+${dayEntries(k).length-3} more</div>`:''}
     </div>`;
   }
   c.innerHTML = `
@@ -1348,30 +1417,52 @@ function manyDates(){
   return out;
 }
 // Is the tutor free at the day and time picked? Blocks Send when not.
+// Both people have to be out of class and not busy.
+const bothFree = (otherId, day, time) => freeAt(otherId, day, time).free && freeAt(A.user.id, day, time).free;
 function checkFree(tid){
   const day=$('rq_day')?.value, time=$('rq_time')?.value, box=$('rq_free'), btn=$('rq_send'); if(!box) return;
   if(reqMany()){
-    const dates=manyDates(), free=dates.filter(k=>freeAt(tid,k,time).free), busy=dates.length-free.length;
+    const dates=manyDates(), free=dates.filter(k=>bothFree(tid,k,time)), busy=dates.length-free.length;
     box.innerHTML = !dates.length ? '<span style="color:var(--muted);font-weight:700">Pick at least one day of the week.</span>'
-      : !free.length ? '<span style="color:#c23b5e;font-weight:800">✕ They are not free on any of those dates at '+esc(time)+'. Try another time.</span>'
+      : !free.length ? '<span style="color:#c23b5e;font-weight:800">✕ None of those dates work at '+esc(time)+' (class or busy). Try another time.</span>'
       : '<span class="seen on">✓ '+free.length+' session'+(free.length===1?'':'s')+', '+esc(fmtDate(free[0]))+' to '+esc(fmtDate(free[free.length-1]))+'</span>'
-        + (busy ? ' <span style="color:#c98b34;font-weight:700">· '+busy+' date'+(busy===1?'':'s')+' they are busy will be skipped</span>' : '');
+        + (busy ? ' <span style="color:#c98b34;font-weight:700">· '+busy+' date'+(busy===1?'':'s')+' when one of you is busy or in class will be skipped</span>' : '');
     if(btn){ btn.disabled=!free.length; }
     return;
   }
+  const mine=freeAt(A.user.id, day, time);
+  if(!mine.free){ box.innerHTML='<span style="color:#c23b5e;font-weight:800">✕ You are '+esc(mine.why.replace(/^unavailable/,'busy'))+'. Pick another time.</span>'; if(btn) btn.disabled=true; return; }
   const r=freeAt(tid, day, time);
   box.innerHTML = r.free ? '<span class="seen on">✓ Free then</span>' : '<span style="color:#c23b5e;font-weight:800">✕ Not available: '+esc(r.why)+'. Pick another time.</span>';
   if(btn){ btn.disabled=!r.free; }
 }
 // ---- Availability ----
 // Minutes since midnight for a slot label like "3:30 PM".
-function slotMin(label){ const m=/^(\d+):(\d\d) (AM|PM)$/.exec(label||''); if(!m) return null; let h=+m[1]%12; if(m[3]==='PM') h+=12; return h*60 + +m[2]; }
+function slotMin(label){ const m=/^(\d+):(\d\d) (AM|PM)$/.exec((label||'').replace(/[\u202f\u00a0]/g,' ').trim()); if(!m) return null; let h=+m[1]%12; if(m[3]==='PM') h+=12; return h*60 + +m[2]; }
 function minLabel(min){ if(min>=1440) return '12:00 AM'; const h=Math.floor(min/60), mm=min%60, h12=((h+11)%12)+1; return h12+':'+(mm<10?'0':'')+mm+' '+(h<12?'AM':'PM'); }
 const DAY_NAMES=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 // The blocks that apply to one date, for one person.
+// Class periods are stored as weekly 'unavailable' blocks whose note starts
+// with CLASS_NOTE. They block tutoring like any busy time, but they belong to
+// the class schedule, not the calendar, so blocksOn leaves them out.
+const CLASS_NOTE = 'Class · ';
+const isClassBlock = b => b.kind==='unavailable' && (b.note||'').startsWith(CLASS_NOTE);
 function blocksOn(userId, dateKey){
   const wd=parseYmd(dateKey).getDay();
-  return (S.availability||[]).filter(b => b.user_id===userId && (b.recurring ? b.weekday===wd : b.date===dateKey));
+  return (S.availability||[]).filter(b => b.user_id===userId && !isClassBlock(b) && (b.recurring ? b.weekday===wd : b.date===dateKey));
+}
+function classesOn(userId, dateKey){
+  const wd=parseYmd(dateKey).getDay();
+  return (S.availability||[]).filter(b => b.user_id===userId && isClassBlock(b) && b.recurring && b.weekday===wd);
+}
+// My class periods, one per period (they repeat Monday to Friday).
+function mySchedule(){
+  const seen={}, out=[];
+  (S.availability||[]).filter(b=>A.user && b.user_id===A.user.id && isClassBlock(b)).forEach(b=>{
+    const key=b.start_min+'-'+b.end_min; if(seen[key]) return; seen[key]=1;
+    out.push({ name:b.note.slice(CLASS_NOTE.length), start:b.start_min, end:b.end_min });
+  });
+  return out.sort((a,b)=>a.start-b.start);
 }
 // Free at a date and time? Unavailable blocks win. If the person has set any
 // available blocks for that day, the time must fall inside one; with none
@@ -1380,6 +1471,8 @@ function freeAt(userId, dateKey, timeLabel){
   const min=slotMin(timeLabel); if(min===null || !dateKey) return { free:true };
   const blocks=blocksOn(userId, dateKey);
   const hit = b => min>=b.start_min && min<b.end_min;
+  const cls=classesOn(userId, dateKey).find(hit);
+  if(cls) return { free:false, inClass:true, why:'in class then ('+cls.note.slice(CLASS_NOTE.length)+', '+minLabel(cls.start_min)+'–'+minLabel(cls.end_min)+')' };
   const busy=blocks.find(b=>b.kind==='unavailable' && hit(b));
   if(busy) return { free:false, why: busy.start_min===0&&busy.end_min===1440 ? 'unavailable that day' : 'unavailable '+minLabel(busy.start_min)+'–'+minLabel(busy.end_min) };
   const windows=blocks.filter(b=>b.kind==='available');
@@ -1425,9 +1518,9 @@ async function submitRequest(tid){
   const time=$('rq_time').value||'TBD';
   const fmt=document.querySelector('#rq_fmt button.on')?.dataset.v||'In person';
   const many=reqMany();
-  const dates = many ? manyDates().filter(k=>freeAt(tid,k,time).free) : [date];
+  const dates = many ? manyDates().filter(k=>bothFree(tid,k,time)) : [date];
   if(many && !dates.length){ toast('Pick days the tutor is free.'); return; }
-  if(!many && !freeAt(tid, date, time).free){ toast('That tutor is not available then.'); return; }
+  if(!many && !bothFree(tid, date, time)){ toast('One of you is in class or busy then.'); return; }
   const locBase=$('rq_loc')?.value||'', locD=($('rq_locd')?.value||'').trim();
   const location = locBase + (locD && (locBase==='Classroom'||locBase==='Other') ? ' · '+locD : '');
   const btn=$('rq_send'); if(btn){ btn.disabled=true; btn.textContent='Sending…'; }
@@ -1443,6 +1536,71 @@ async function submitRequest(tid){
   }catch(e){
     toast(e.message); if(btn){ btn.disabled=false; btn.textContent='Send request to '+t.name; }
   }
+}
+
+/* -------- CLASS SCHEDULE -------- */
+// Nobody can book tutoring during your classes. Study hall and lunch are
+// left off the list, so those stay open.
+const DEFAULT_PERIODS = [['Period 1','08:00','08:50'],['Period 2','08:55','09:45'],['Period 3','09:50','10:40'],['Period 4','10:45','11:35'],['Period 5','12:10','13:00'],['Period 6','13:05','13:55'],['Period 7','14:00','14:50']];
+const hhmm = m => String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
+const toMin = v => { const [h,m]=(v||'').split(':').map(Number); return isNaN(h)||isNaN(m) ? null : h*60+m; };
+function scheduleDraft(){
+  const have=mySchedule();
+  return have.length ? have.map(p=>({ name:p.name, start:hhmm(p.start), end:hhmm(p.end) }))
+                     : DEFAULT_PERIODS.map(([name,start,end])=>({ name, start, end }));
+}
+function scheduleEditorHtml(d){
+  return `<div class="card">
+    <div class="tiny" style="font-size:13px;margin-bottom:10px;line-height:1.5">Add the periods you're <b>in class</b>, Monday to Friday. Nobody can book tutoring with you then.
+      <b>Delete your study hall and lunch</b> (✕), since those stay open for tutoring.</div>
+    ${d.map((p,i)=>`<div class="periodrow">
+      <input value="${esc(p.name)}" aria-label="Period name" oninput="S.schedDraft[${i}].name=this.value">
+      <input type="time" step="300" value="${p.start}" aria-label="Starts" onchange="S.schedDraft[${i}].start=this.value">
+      <span class="tiny">to</span>
+      <input type="time" step="300" value="${p.end}" aria-label="Ends" onchange="S.schedDraft[${i}].end=this.value">
+      <button class="del" title="Remove (study hall, lunch)" onclick="S.schedDraft.splice(${i},1); render()">✕</button>
+    </div>`).join('') || '<div class="tiny" style="text-align:center;padding:8px">No class periods. You can be booked any time.</div>'}
+    <button class="btn ghost sm" style="width:100%;margin-top:8px" onclick="addPeriod()">＋ Add a class period</button>
+  </div>`;
+}
+function addPeriod(){
+  const d=S.schedDraft, last=d[d.length-1], start=last ? toMin(last.end)+5 : 8*60;
+  d.push({ name:'Period '+(d.length+1), start:hhmm(start), end:hhmm(Math.min(start+50, 23*60)) }); render();
+}
+function scheduleProblem(d){
+  for(const p of d){
+    const a=toMin(p.start), b=toMin(p.end);
+    if(!p.name.trim()) return 'Every period needs a name.';
+    if(a===null || b===null || b<=a) return (p.name||'A period')+' needs to end after it starts.';
+  }
+  return '';
+}
+async function saveSchedule(d){
+  const me=A.user.id;
+  await sbFetch('/rest/v1/sl_availability?user_id=eq.'+me+'&kind=eq.unavailable&note=like.'+encodeURIComponent(CLASS_NOTE+'*'), { method:'DELETE', headers:{ Prefer:'return=minimal' } });
+  const rows=[];
+  d.forEach(p=>{ for(let wd=1; wd<=5; wd++) rows.push({ user_id:me, kind:'unavailable', recurring:true, weekday:wd, start_min:toMin(p.start), end_min:toMin(p.end), note:CLASS_NOTE+p.name.trim() }); });
+  if(rows.length) await sbFetch('/rest/v1/sl_availability', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify(rows) });
+}
+function renderClassSchedule(c){
+  S.schedDraft = S.schedDraft || scheduleDraft();
+  c.innerHTML = `
+    <button class="back" onclick="S.schedDraft=null; closeView()">‹ Back</button>
+    <h2 class="title">My class schedule</h2>
+    <div class="lead">So no one books tutoring while you're in class.</div>
+    ${scheduleEditorHtml(S.schedDraft)}
+    <div style="margin-top:14px"><button class="btn" id="cs_save" onclick="saveScheduleView(this)">Save schedule</button></div>`;
+}
+async function saveScheduleView(btn){
+  const bad=scheduleProblem(S.schedDraft); if(bad){ toast(bad); return; }
+  btn.disabled=true; btn.textContent='Saving…';
+  try{ await saveSchedule(S.schedDraft); await loadData(); S.schedDraft=null; closeView(); toast('Class schedule saved'); }
+  catch(e){ toast(e.message); btn.disabled=false; btn.textContent='Save schedule'; }
+}
+function scheduleSummaryHtml(){
+  const p=mySchedule();
+  return p.length ? p.map(x=>`<div class="row" style="margin-bottom:6px"><span style="font-weight:700;font-size:14px">${esc(x.name)}</span><span class="tiny" style="margin-left:auto">${minLabel(x.start)} – ${minLabel(x.end)}</span></div>`).join('')
+    : `<div class="tiny">Not added yet. Add it so nobody books tutoring during your classes.</div>`;
 }
 
 /* -------- SCHEDULE A SESSION (tutor, overlay) -------- */
@@ -1468,7 +1626,7 @@ function renderSchedule(c){
       <div class="field"><label>Class</label>
         <select id="sc_course" onchange="S.overlay.course=this.value; S.overlay.student=null; render()">${S.tutorClasses.map(x=>`<option ${x===course?'selected':''}>${esc(x)}</option>`).join('')}</select></div>
       <div class="field"><label>Student</label>
-        ${students.length ? `<select id="sc_student">${students.map(st=>`<option value="${st.id}" ${st.id===o.student?'selected':''}>${esc(st.alias)}</option>`).join('')}</select>`
+        ${students.length ? `<select id="sc_student" onchange="checkClash()">${students.map(st=>`<option value="${st.id}" ${st.id===o.student?'selected':''}>${esc(st.alias)}</option>`).join('')}</select>`
           : `<div class="tiny">Nobody has added ${esc(course)} as a class yet, so there's no one to schedule with.</div>`}</div>
       <div class="field"><label>Topic</label><input id="sc_topic" placeholder="e.g. Unit 3 review"></div>
       <div class="row" style="gap:10px">
@@ -1494,6 +1652,11 @@ function renderSchedule(c){
 // Warn when the tutor already has something booked at that day and time.
 function checkClash(){
   const day=$('sc_day')?.value, time=$('sc_time')?.value, box=$('sc_clash'); if(!box) return;
+  const sid=$('sc_student')?.value, btn=$('sc_send');
+  const me=freeAt(A.user.id, day, time), them=sid ? freeAt(sid, day, time) : { free:true };
+  if(btn) btn.disabled = !sid || !me.free || !them.free;
+  if(!me.free){ box.innerHTML='<span style="color:#c23b5e;font-weight:800">✕ You are '+esc(me.why.replace(/^unavailable/,'busy'))+'.</span>'; return; }
+  if(!them.free){ box.innerHTML='<span style="color:#c23b5e;font-weight:800">✕ '+esc($('sc_student').options[$('sc_student').selectedIndex].text)+' is '+esc(them.why.replace(/^unavailable/,'busy'))+'.</span>'; return; }
   const hit=[...S.incoming, ...S.myRequests].find(r=>r.date===day && r.time===time && ['accepted','offered','pending'].includes(r.status));
   box.innerHTML = hit ? `<span style="color:#c98b34;font-weight:800">⚠ You already have ${esc(hit.course)} with ${esc(hit.tutor_id===A.user.id ? hit.student_alias : hit.tutor_alias)} then.</span>` : '';
 }
@@ -1502,6 +1665,7 @@ async function sendSchedule(){
   const studentId=sel.value, alias=sel.options[sel.selectedIndex].text;
   const date=$('sc_day').value;
   if(!date){ toast('Pick a day.'); return; }
+  if(!bothFree(studentId, date, $('sc_time').value)){ toast('One of you is in class or busy then.'); return; }
   const fmt=document.querySelector('#rq_fmt button.on')?.dataset.v||'In person';
   const locBase=$('rq_loc')?.value||'', locD=($('rq_locd')?.value||'').trim();
   const location = locBase + (locD && (locBase==='Classroom'||locBase==='Other') ? ' · '+locD : '');
@@ -1517,6 +1681,114 @@ async function sendSchedule(){
   }catch(e){
     toast(e.message); btn.disabled=false; btn.textContent='Send to student';
   }
+}
+
+/* -------- ANOTHER TIME, AND CHAT -------- */
+// Either side can suggest a new time, back and forth, until it works. A time
+// from the tutor waits on the student ('offered'); one from the student waits
+// on the tutor ('pending'). Each request also has a private chat.
+const findReq = id => [...S.myRequests, ...S.incoming].find(x=>x.id===id);
+function otherSide(r){
+  const tutor = r.tutor_id===A.user.id;
+  return tutor ? { id:r.student_id, alias:r.student_alias, iAmTutor:true } : { id:r.tutor_id, alias:r.tutor_alias, iAmTutor:false };
+}
+function actsHtml(r){
+  return `<div class="acts">
+    <button onclick="openView({type:'retime', id:'${r.id}'})">🕒 Suggest another time</button>
+    <button onclick="openView({type:'chat', id:'${r.id}'})">💬 Chat with ${esc(otherSide(r).alias)}</button></div>`;
+}
+function renderRetime(c){
+  const r=findReq(S.overlay.id); if(!r){ closeView(); return; }
+  const o=otherSide(r);
+  c.innerHTML=`
+    <button class="back" onclick="closeView()">‹ Back</button>
+    <h2 class="title">Suggest another time</h2>
+    <div class="lead">${esc(r.course)} with ${esc(o.alias)} · now ${esc(fmtDate(r.date))} ${esc(r.time||'')}</div>
+    <div class="card">
+      <div class="row" style="gap:10px">
+        <div class="field" style="flex:1;margin:0"><label>Day</label><input id="rt_day" type="date" value="${r.date && r.date>=ymd(new Date()) ? r.date : ymd(addDays(new Date(),1))}" min="${ymd(new Date())}" onchange="checkRetime()"></div>
+        <div class="field" style="flex:1;margin:0"><label>Time</label><select id="rt_time" onchange="checkRetime()">${TIME_SLOTS.map(x=>`<option ${x===(r.time||'3:30 PM')?'selected':''}>${x}</option>`).join('')}</select></div>
+      </div>
+      <div id="rt_ok" class="tiny" style="margin-top:8px"></div>
+      <div class="field" style="margin:12px 0 0"><label>Message (optional)</label><input id="rt_msg" placeholder="e.g. I have practice Thursday — does Friday work?"></div>
+    </div>
+    <div style="margin-top:14px"><button class="btn" id="rt_send" onclick="sendRetime()">Send to ${esc(o.alias)}</button></div>
+    <p class="tiny" style="text-align:center;margin-top:10px">${o.iAmTutor ? 'They accept it or suggest another time.' : 'Your tutor accepts it or suggests another time.'}</p>`;
+  checkRetime();
+}
+function checkRetime(){
+  const r=findReq(S.overlay.id), o=otherSide(r), day=$('rt_day').value, time=$('rt_time').value, box=$('rt_ok'), btn=$('rt_send');
+  const me=freeAt(A.user.id, day, time), them=freeAt(o.id, day, time);
+  box.innerHTML = !me.free ? '<span style="color:#c23b5e;font-weight:800">✕ You are '+esc(me.why.replace(/^unavailable/,'busy'))+'.</span>'
+    : !them.free ? '<span style="color:#c23b5e;font-weight:800">✕ '+esc(o.alias)+' is '+esc(them.why.replace(/^unavailable/,'busy'))+'.</span>'
+    : '<span class="seen on">✓ You are both free then</span>';
+  btn.disabled = !me.free || !them.free;
+}
+async function sendRetime(){
+  const r=findReq(S.overlay.id), o=otherSide(r), date=$('rt_day').value, time=$('rt_time').value, msg=$('rt_msg').value.trim();
+  if(!bothFree(o.id, date, time)){ toast('One of you is in class or busy then.'); return; }
+  const btn=$('rt_send'); btn.disabled=true; btn.textContent='Sending…';
+  try{
+    await sbFetch('/rest/v1/sl_requests?id=eq.'+r.id, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ date, time, status: o.iAmTutor ? 'offered' : 'pending' }) });
+    // Leave a line in the chat so the other person sees why the time moved.
+    sendMessage(r.id, '🕒 Suggested '+fmtDate(date)+' at '+time+(msg ? ' — '+msg : '')).catch(()=>{});
+    await loadData(); closeView(); go('tutoring');
+    toast('New time sent to '+o.alias+' — waiting on them');
+  }catch(e){ toast(e.message); btn.disabled=false; btn.textContent='Send to '+o.alias; }
+}
+
+let chatTimer=null;
+function sendMessage(requestId, body){
+  return sbFetch('/rest/v1/sl_messages', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ request_id:requestId, sender_id:A.user.id, body }) });
+}
+async function loadChat(id){
+  try{
+    const rows = await sbFetch('/rest/v1/sl_messages?select=*&request_id=eq.'+id+'&order=created_at');
+    S.chat = { id, rows:rows||[], err:'' };
+  }catch(e){
+    S.chat = { id, rows:[], err: /sl_messages|relation|schema cache|does not exist/i.test(e.message) ? 'setup' : e.message };
+  }
+  if(S.overlay && S.overlay.type==='chat' && S.overlay.id===id) drawChat();
+}
+function renderChat(c){
+  const r=findReq(S.overlay.id); if(!r){ closeView(); return; }
+  const o=otherSide(r);
+  c.innerHTML=`
+    <button class="back" onclick="closeView()">‹ Back</button>
+    <div class="row" style="margin-bottom:10px">${avatarDot(initials(o.alias), S.presence && S.presence[r.id], 'background:'+courseColor(r.course))}
+      <div><h2 class="title" style="margin:0">${esc(o.alias)}</h2><div class="tiny">${esc(r.course)} · ${esc(fmtDate(r.date))} ${esc(r.time||'')}</div></div></div>
+    <div class="card"><div class="chat" id="chatbox"><div class="tiny" style="text-align:center;padding:10px">Loading…</div></div></div>
+    <div class="composer">
+      <input id="chat_in" maxlength="1000" placeholder="Message ${esc(o.alias)}…" onkeydown="if(event.key==='Enter')sendChat()">
+      <button class="btn sm" onclick="sendChat()">Send</button>
+    </div>
+    <div class="acts"><button onclick="openView({type:'retime', id:'${r.id}'})">🕒 Suggest another time</button></div>
+    <p class="tiny" style="margin:8px 2px">🔒 Keep it to scheduling and schoolwork. Don't share phone numbers, social media or where you live.</p>`;
+  if(S.chat && S.chat.id===r.id) drawChat();
+  loadChat(r.id);
+  clearInterval(chatTimer);
+  chatTimer=setInterval(()=>{ if(S.overlay && S.overlay.type==='chat' && S.overlay.id===r.id) loadChat(r.id); else clearInterval(chatTimer); }, 5000);
+}
+function drawChat(){
+  const box=$('chatbox'); if(!box || !S.chat) return;
+  if(S.chat.err==='setup'){ box.innerHTML='<div class="tiny" style="text-align:center;padding:12px">Chat isn\'t switched on yet. It needs a one-time database update from the site owner.</div>'; return; }
+  if(S.chat.err){ box.innerHTML='<div class="tiny" style="text-align:center;padding:12px;color:#c23b5e">'+esc(S.chat.err)+'</div>'; return; }
+  const near = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
+  box.innerHTML = S.chat.rows.length ? S.chat.rows.map(m=>{
+    const mine=m.sender_id===A.user.id, sys=m.body.startsWith('🕒 Suggested');
+    const when=new Date(m.created_at).toLocaleString([], {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
+    return sys ? `<div class="msg sys">${mine?'You':esc(otherSide(findReq(S.chat.id)).alias)}: ${esc(m.body)}<div class="t">${when}</div></div>`
+      : `<div class="msg ${mine?'me':''}">${esc(m.body)}<div class="t">${when}</div></div>`;
+  }).join('') : '<div class="tiny" style="text-align:center;padding:12px">No messages yet. Say hi and sort out a time.</div>';
+  if(near || !box.dataset.drawn){ box.scrollTop=box.scrollHeight; box.dataset.drawn='1'; }
+}
+async function sendChat(){
+  const inp=$('chat_in'), body=(inp.value||'').trim(); if(!body || !S.chat) return;
+  if(S.chat.err==='setup'){ toast('Chat is not switched on yet.'); return; }
+  inp.value='';
+  S.chat.rows.push({ sender_id:A.user.id, body, created_at:new Date().toISOString() }); drawChat();
+  try{ await sendMessage(S.chat.id, body); loadChat(S.chat.id); }
+  catch(e){ toast(e.message); loadChat(S.chat.id); }
 }
 
 /* -------- TUTORING -------- */
@@ -1563,13 +1835,13 @@ function renderTutoring(c){
     ${S.me.isTutor ? `<button class="btn" style="margin-bottom:6px" onclick="openView({type:'schedule'})">📅 Schedule a session with a student</button>` : ''}
 
     ${S.incoming.filter(r=>r.status==='offered').length ? `<div class="sectlabel">Waiting on the student</div>
-      ${S.incoming.filter(r=>r.status==='offered').map(r=>`<div class="card row">
+      ${S.incoming.filter(r=>r.status==='offered').map(r=>`<div class="card"><div class="row">
         <div class="avatar" style="background:${courseColor(r.course)}">${initials(r.student_alias)}</div>
         <div style="min-width:0;flex:1"><div style="font-weight:800">${esc(r.student_alias)} <span class="tiny">· ${esc(r.course)}</span></div>
           <div class="tiny">${r.date ? esc(fmtDate(r.date))+' · '+esc(r.time||'TBD') : 'No date yet'}${r.location?' · 📍 '+esc(r.location):''}</div></div>
         <span class="pill">Sent</span>
         ${cancelBtn(r.id,'offer').replace('margin-left:auto;','')}
-      </div>`).join('')}` : ''}
+      </div>${actsHtml(r)}</div>`).join('')}` : ''}
 
     ${S.me.isTutor || inc.length ? `
       <div class="sectlabel">Requests to you ${inc.length?`(${inc.length})`:''}</div>
@@ -1583,6 +1855,7 @@ function renderTutoring(c){
             <button class="btn sm gray" style="flex:1" onclick="respondRequest('${r.id}',false)">Decline</button>
             <button class="btn sm green" style="flex:1" onclick="respondRequest('${r.id}',true)">Accept</button>
           </div>
+          ${actsHtml(r)}
         </div>`).join('') : `<div class="card tiny" style="text-align:center">No new requests right now.</div>`}
     ` : ''}
 
@@ -1596,6 +1869,7 @@ function renderTutoring(c){
           <button class="btn sm gray" style="flex:1" onclick="respondOffer('${r.id}',false)">No thanks</button>
           <button class="btn sm green" style="flex:1" onclick="respondOffer('${r.id}',true)">Accept</button>
         </div>
+        ${actsHtml(r)}
       </div>`).join('')}` : ''}
 
     ${tutoring.length ? `<div class="sectlabel">Sessions you're tutoring</div>${tutoring.map(sessionCard).join('')}` : ''}
@@ -1610,13 +1884,13 @@ function renderTutoring(c){
 
     <div class="sectlabel">Your tutoring (as student)</div>
     ${mine.length ? mine.map(r=>`
-      <div class="card row">
+      <div class="card"><div class="row">
         <div class="avatar" style="background:${courseColor(r.course)}">${courseEmoji(r.course)}</div>
         <div style="min-width:0"><div style="font-weight:800">${esc(r.course)}</div>
           <div class="tiny">${esc(r.topic)} · with ${esc(r.tutor_alias)} · ${esc(fmtDate(r.date))} ${esc(r.time||'')}${r.location?' · 📍 '+esc(r.location):''}</div></div>
         <span class="pill" style="margin-left:auto;${style[r.status]||''}">${label[r.status]||r.status}</span>
         ${r.status==='pending' ? cancelBtn(r.id,'request').replace('margin-left:auto;','') : r.status==='accepted' ? cancelBtn(r.id,'session').replace('margin-left:auto;','') : ''}
-      </div>`).join('') : `<div class="card tiny" style="text-align:center">You haven't requested tutoring yet. Open a class to find a tutor.</div>`}
+      </div>${r.status==='pending' || r.status==='accepted' ? actsHtml(r) : ''}</div>`).join('') : `<div class="card tiny" style="text-align:center">You haven't requested tutoring yet. Open a class to find a tutor.</div>`}
   `;
 }
 // Status changes go to the server, then everything reloads so both sides agree.
@@ -1751,6 +2025,9 @@ function renderProfile(c){
       <div class="tiny" style="margin-top:8px">An administrator checks each grade against school records. Only classes here can be tutored.</div>
     </div>`}
 
+    ${hasGrade() ? `<div class="sectlabel">Class schedule <button class="btn ghost sm" style="margin-left:8px;padding:4px 10px" onclick="S.schedDraft=null; openView({type:'classSchedule'})">Edit</button></div>
+    <div class="card">${scheduleSummaryHtml()}<div class="tiny" style="margin-top:8px">Nobody can book tutoring with you during these. Study hall and lunch stay open.</div></div>` : ''}
+
     <div class="sectlabel">Account</div>
     <div class="card tiny">🔒 Other members only ever see your aliases. Your name and email stay with the school administrator; coordination happens in-app.</div>
     <button class="btn gray" style="margin-top:14px" onclick="logOut()">Log out</button>
@@ -1773,8 +2050,8 @@ function setupState(){
   return S.setup;
 }
 function renderSetup(c){
-  const st=setupState(), step=st.step, total=4;
-  const bar=`<div class="progress">${[1,2,3,4].map(i=>`<span class="${i<=step?'on':''}"></span>`).join('')}</div>`;
+  const st=setupState(), step=st.step, total=5;
+  const bar=`<div class="progress">${[1,2,3,4,5].map(i=>`<span class="${i<=step?'on':''}"></span>`).join('')}</div>`;
   const chipsFor = (sel, fn) => DEPTS.map(dep=>`<div class="sectlabel" style="margin-top:12px">${dep.emoji} ${dep.name}</div><div class="chips">
       ${dep.courses.map(course=>`<button class="chip ${sel(course)?'dept':''}" style="${sel(course)?'background:'+dep.color:''}" onclick="${fn}('${esc(course)}')">${sel(course)?'✓ ':''}${esc(course)}</button>`).join('')}
     </div>`).join('');
@@ -1803,7 +2080,13 @@ function renderSetup(c){
           <select onchange="S.setup.taken['${esc(course)}'].grade=this.value">${LETTERS.map(g=>`<option ${st.taken[course].grade===g?'selected':''}>${g}</option>`).join('')}</select>
           <select onchange="S.setup.taken['${esc(course)}'].year=this.value">${TAKEN_GRADES.map(y=>`<option ${st.taken[course].year===y?'selected':''}>${y}</option>`).join('')}</select>
         </div>`).join('')}</div>` : ''}
-      ${nav(2, picked.length ? 'Next · '+picked.length+' taken' : 'Next · none yet', 'S.setup.step=4;render()', false)}`;
+      ${nav(2, picked.length ? 'Next · '+picked.length+' taken' : 'Next · none yet', 'S.setup.step='+(hasGrade()?4:5)+';render()', false)}`;
+  } else if(step===4){
+    S.schedDraft = S.schedDraft || scheduleDraft();
+    body = `<h2>What's your class schedule?</h2>
+      <div class="lead">Tutoring can't be booked during class, only before or after school, at lunch, or in study hall.</div>
+      <div style="text-align:left">${scheduleEditorHtml(S.schedDraft)}</div>
+      ${nav(3, 'Next', 'setupScheduleNext()', false)}`;
   } else {
     const taken=Object.keys(st.taken);
     const wantsTutor = st.use==='tutor' || st.use==='both';
@@ -1825,7 +2108,7 @@ function renderSetup(c){
         <div class="seg">${['In person','Virtual','In person + Virtual'].map(f=>`<button class="${st.format===f?'on':''}" onclick="S.setup.format='${f}';render()">${f}</button>`).join('')}</div>
         <div class="field" style="margin-top:12px"><label>A line about you (optional)</label><input id="su_bio" value="${esc(st.bio)}" maxlength="140" placeholder="e.g. Math clicked for me late, so I get where you're stuck." oninput="S.setup.bio=this.value"></div>
       ` : ''}
-      ${nav(3, 'Finish', 'finishSetup(this)', false)}`;
+      ${nav(hasGrade()?4:3, 'Finish', 'finishSetup(this)', false)}`;
   }
   c.innerHTML = `<div class="auth-wrap"><div class="auth-card setup-card"><div class="auth-logo">S</div>${bar}${body}${A.setupMsg ? '<div class="auth-msg err">'+esc(A.setupMsg)+'</div>' : ''}</div></div>`;
   // Only a change of step jumps to the top; tapping a chip keeps your place.
@@ -1840,6 +2123,10 @@ async function syncTakenClaims(taken){
   if(drop.length) await sbFetch('/rest/v1/sl_grades?id=in.('+drop.join(',')+')', { method:'DELETE', headers:{ Prefer:'return=minimal' } });
   const submit=Object.entries(taken).filter(([course])=>!have.some(g=>keep.has(g.id) && g.course===course)).map(([course,v])=>({ user_id:me, course, grade:v.grade, year:v.year }));
   if(submit.length) await sbFetch('/rest/v1/sl_grades', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify(submit) });
+}
+function setupScheduleNext(){
+  const bad=scheduleProblem(S.schedDraft); if(bad){ A.setupMsg=bad; return render(); }
+  A.setupMsg=''; S.setup.sched=S.schedDraft.map(p=>({...p})); S.setup.step=5; render();
 }
 function setupToggleTaking(course){ const a=S.setup.taking, i=a.indexOf(course); if(i<0) a.push(course); else a.splice(i,1); render(); }
 function setupToggleTaken(course){ const t=S.setup.taken; if(t[course]){ delete t[course]; S.setup.tutorPick=S.setup.tutorPick.filter(x=>x!==course); } else t[course]={ grade:'A', year:defaultTaken() }; render(); }
@@ -1860,6 +2147,8 @@ async function finishSetup(btn){
     await sbFetch('/rest/v1/sl_student_classes?user_id=eq.'+me, { method:'DELETE', headers:{ Prefer:'return=minimal' } });
     if(st.taking.length) await sbFetch('/rest/v1/sl_student_classes', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify(st.taking.map(course=>({ user_id:me, course }))) });
     await syncTakenClaims(st.taken);
+    if(hasGrade() && st.sched) await saveSchedule(st.sched);
+    S.schedDraft=null;
     // Tutoring.
     if(wantsTutor){
       await ensureTutorAlias();
@@ -2334,6 +2623,9 @@ function renderOverlay(c){
   if(o.type==='search') return renderSearch(c);
   if(o.type==='addClasses') return renderAddClasses(c);
   if(o.type==='schedule') return renderSchedule(c);
+  if(o.type==='classSchedule') return renderClassSchedule(c);
+  if(o.type==='retime') return renderRetime(c);
+  if(o.type==='chat') return renderChat(c);
   S.overlay=null; return renderBody(c);   // an unknown overlay falls back to the page
 }
 
