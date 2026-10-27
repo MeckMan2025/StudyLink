@@ -96,9 +96,14 @@
   .cal .day{background:#fff; border:1px solid var(--line); border-radius:10px; min-height:84px; padding:5px; cursor:pointer; overflow:hidden; text-align:left; font:inherit; color:var(--ink); display:flex; flex-direction:column; justify-content:flex-start; min-width:0}
   .pencil{border:none; background:#f2f0fb; border-radius:8px; width:28px; height:28px; cursor:pointer; font-size:13px; margin-left:auto}
   .pencil:hover{background:#e3ecfd}
-  .freerow{display:flex; gap:8px; font-size:12.5px; font-weight:700; padding:3px 0; color:#2e9b6a}
-  .freerow .d{width:44px; flex:0 0 auto; color:var(--ink)}
-  .freerow .none{color:var(--muted)}
+  .freesqs{display:grid; grid-auto-flow:column; grid-auto-columns:1fr; gap:5px}
+  .freesq{border:1px solid #cdebd9; background:#f1faf5; border-radius:9px; padding:5px 2px; min-height:52px; display:flex; flex-direction:column; align-items:center; gap:1px; cursor:pointer; font:inherit; min-width:0}
+  .freesq:hover{border-color:#9fd8b9}
+  .freesq .d{font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.3px; color:var(--ink); margin-bottom:2px}
+  .freesq .t{font-size:9.5px; font-weight:700; color:#2e9b6a; white-space:nowrap; max-width:100%; overflow:hidden; text-overflow:ellipsis}
+  .freesq.none{background:#f6f5fa; border-color:var(--line)}
+  .freesq.none .t{color:var(--muted)}
+  .freesq.today{box-shadow:0 0 0 2px #dbe5fb}
   .periodrow{display:flex; align-items:center; gap:6px; padding:6px 0; border-bottom:1px solid var(--line); flex-wrap:wrap}
   .periodrow input{padding:8px 9px; border:1.5px solid #e5e2f0; border-radius:9px; font:inherit; font-size:14px; color:var(--ink); background:#fff}
   .periodrow input:first-child{flex:1; min-width:110px; font-weight:700}
@@ -793,15 +798,24 @@ function freeWindows(userId, k){
   cut.forEach(b=>{ free = free.flatMap(([a,z])=> b.end_min<=a || b.start_min>=z ? [[a,z]] : [[a,b.start_min],[b.end_min,z]]); });
   return free.filter(([a,z])=>z-a>=15).sort((x,y)=>x[0]-y[0]);
 }
-// Today to Saturday, one line per day.
+// "7–8a", "10:40a–8p": short enough to fit a small square.
+function tinyRange(a,b){
+  const t = m => { const h=Math.floor(m/60)%24, mm=m%60; return ((h+11)%12+1)+(mm?':'+String(mm).padStart(2,'0'):''); };
+  const ap = m => Math.floor(m/60)%24<12 ? 'a' : 'p';
+  return ap(a)===ap(b) ? t(a)+'–'+t(b)+ap(b) : t(a)+ap(a)+'–'+t(b)+ap(b);
+}
+// Today to Saturday, one small square per day.
 function weekFreeHtml(){
   const now=new Date(), rows=[];
   for(let i=0; i<=6-now.getDay(); i++){
-    const k=ymd(addDays(now,i)), nowMin=now.getHours()*60+now.getMinutes();
+    const k=ymd(addDays(now,i)), nowMin=Math.ceil((now.getHours()*60+now.getMinutes())/15)*15;
     const w=freeWindows(A.user.id, k).map(([a,z])=> i===0 ? [Math.max(a,nowMin),z] : [a,z]).filter(([a,z])=>z-a>=15);
-    rows.push(`<div class="freerow"><span class="d">${i===0?'Today':esc(parseYmd(k).toLocaleDateString(undefined,{weekday:'short'}))}</span><span class="${w.length?'':'none'}">${w.length ? w.map(([a,z])=>esc(timeRange(a,z))).join(', ') : 'Not available'}</span></div>`);
+    rows.push(`<button class="freesq ${w.length?'':'none'} ${i===0?'today':''}" title="${esc(fmtDate(k))}" onclick="S.cal={y:${addDays(now,i).getFullYear()},m:${addDays(now,i).getMonth()},sel:'${k}'}; go('calendar')">
+      <span class="d">${i===0?'Today':esc(parseYmd(k).toLocaleDateString(undefined,{weekday:'short'}))}</span>
+      ${w.length ? w.map(([a,z])=>`<span class="t">${esc(tinyRange(a,z))}</span>`).join('') : '<span class="t">—</span>'}
+    </button>`);
   }
-  return rows.join('');
+  return `<div class="freesqs">${rows.join('')}</div>`;
 }
 // "Away this week": one-time all-day unavailable blocks from today to Saturday.
 function awayBlocks(){
