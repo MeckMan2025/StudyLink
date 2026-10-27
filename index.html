@@ -94,6 +94,16 @@
   .cal{display:grid; grid-template-columns:repeat(7,1fr); gap:4px}
   .cal .dow{font-size:11px; font-weight:800; color:var(--muted); text-align:center; padding:4px 0; text-transform:uppercase}
   .cal .day{background:#fff; border:1px solid var(--line); border-radius:10px; min-height:84px; padding:5px; cursor:pointer; overflow:hidden; text-align:left; font:inherit; color:var(--ink); display:flex; flex-direction:column; justify-content:flex-start; min-width:0}
+  .cal .day{position:relative}
+  .cal .day .plus{position:absolute; top:4px; right:4px; width:24px; height:24px; border-radius:50%; border:none; cursor:pointer;
+    background:#f2f0fb; color:var(--muted); font-size:16px; font-weight:800; line-height:1; display:flex; align-items:center; justify-content:center}
+  .cal .day:hover .plus, .cal .day .plus:focus-visible{background:var(--blue-d); color:#fff}
+  @media (max-width:600px){ .cal .day .plus{width:18px; height:18px; font-size:13px; top:2px; right:2px} }
+  .dm-back{position:fixed; inset:0; background:rgba(30,30,60,.35); z-index:60; display:flex; align-items:center; justify-content:center; padding:16px}
+  .dm{background:var(--bg); border-radius:18px; width:100%; max-width:520px; max-height:88vh; overflow-y:auto; padding:16px; box-shadow:0 20px 60px rgba(30,30,60,.3)}
+  .dm .dmhead{display:flex; align-items:center; gap:8px; margin-bottom:10px}
+  .dm .dmhead h3{margin:0; font-size:18px; font-weight:800; flex:1}
+  .dm .dmhead button{border:none; background:#fff; width:32px; height:32px; border-radius:50%; font-size:16px; color:var(--muted); cursor:pointer}
   .cal .day.out{opacity:.4}
   .cal .day.today .n{background:var(--blue-d); color:#fff}
   .cal .day.sel{border-color:var(--purple); box-shadow:0 0 0 2px #e4dcfa}
@@ -942,14 +952,14 @@ function renderCalendar(c){
     const myBlocks=blocksOn(A.user.id, k);
     const allBusy=myBlocks.some(b=>b.kind==='unavailable' && b.start_min===0 && b.end_min===1440);
     const anyBusy=myBlocks.some(b=>b.kind==='unavailable'), anyFree=myBlocks.some(b=>b.kind==='available');
-    cells += `<button class="day ${d.getMonth()!==m?'out':''} ${k===today?'today':''} ${k===sel?'sel':''} ${allBusy?'busy':anyFree&&!anyBusy?'free':''}" onclick="S.cal.sel='${k}'; render()">
+    cells += `<div class="day ${d.getMonth()!==m?'out':''} ${k===today?'today':''} ${k===S.cal.open?'sel':''} ${allBusy?'busy':anyFree&&!anyBusy?'free':''}" role="button" tabindex="0" onclick="openDay('${k}')" onkeydown="if(event.key==='Enter')openDay('${k}')">
       <span class="n">${d.getDate()}</span>
+      <button class="plus" title="Add to ${esc(fmtDate(k))}" aria-label="Add to ${esc(fmtDate(k))}" onclick="event.stopPropagation(); openDay('${k}','event')">+</button>
       ${allBusy ? '<span class="avmark no">Unavailable</span>' : anyBusy ? '<span class="avmark no">Partly busy</span>' : anyFree ? '<span class="avmark ok">Available</span>' : ''}
       ${evs.slice(0,2).map(e=>`<div class="ev" style="--c:${courseColor(e.course)}">${esc(e.title)}</div>`).join('')}
       ${evs.length>2?`<div class="more">+${evs.length-2} more</div>`:''}
-    </button>`;
+    </div>`;
   }
-  const dayEvs = items.filter(e=>e.date===sel).sort(byWhen);
   c.innerHTML = `
     <div class="calhead">
       <h3>${MONTHS[m]} ${y}</h3>
@@ -962,50 +972,63 @@ function renderCalendar(c){
       ${cells}
     </div>
 
-    <div class="cols" style="margin-top:16px">
-      <div>
-        <div class="sectlabel">${esc(parseYmd(sel).toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'}))}</div>
-        <div class="card">${dayEvs.length ? dayEvs.map(eventRow).join('') : `<div class="tiny" style="text-align:center;padding:8px">Nothing on this day.</div>`}</div>
-        ${S.me.isTutor && S.mode==='tutor' && sel>=ymd(new Date()) ? `<button class="btn ghost sm" style="width:100%;margin-top:10px" onclick="openView({type:'schedule', date:'${sel}'})">📅 Schedule tutoring on this day</button>` : ''}
-      </div>
-      <div>
-        <div class="sectlabel">Add to this day</div>
-        <div class="card">
-          <div class="field"><label>What</label><input id="ev_title" placeholder="e.g. Unit 3 test" onkeydown="if(event.key==='Enter')addEvent()"></div>
-          <div class="row" style="gap:10px">
-            <div class="field" style="flex:1"><label>Type</label><select id="ev_kind">
-              ${['test','homework','study','other'].map(k=>`<option value="${k}">${EVENT_KINDS[k]}</option>`).join('')}</select></div>
-            <div class="field" style="flex:1"><label>Time</label><input id="ev_time" type="time"></div>
-          </div>
-          <div class="field"><label>Class</label><select id="ev_course">
-            <option value="">No class</option>
-            ${S[classKey()].map(x=>`<option>${esc(x)}</option>`).join('')}</select></div>
-          <button class="btn" onclick="addEvent()">Add to calendar</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="cols" style="margin-top:16px">
-      <div>
-        <div class="sectlabel">My availability</div>
-        <div class="card">${availListHtml()}</div>
-      </div>
-      <div>
-        <div class="sectlabel">Add availability</div>
-        <div class="card">${availFormHtml(sel)}</div>
-      </div>
-    </div>
+    ${S.cal.open ? dayModalHtml(S.cal.open) : ''}
   `;
 }
-// The blocks I have set, recurring first, each removable.
-function availListHtml(){
-  const mine=(S.availability||[]).filter(b=>b.user_id===A.user.id);
-  if(!mine.length) return `<div class="tiny" style="text-align:center;padding:8px">Nothing set. With nothing here you count as free any time${S.me.isTutor ? ', and students can request you whenever' : ''}.</div>`;
-  return mine.map(b=>`<div class="avrow">
-      <span class="tag ${b.kind==='available'?'ok':'no'}">${b.kind==='available'?'Available':'Unavailable'}</span>
-      <div style="min-width:0;flex:1"><div style="font-weight:800;font-size:13.5px">${esc(availLabel(b))}</div>${b.note?`<div class="tiny">${esc(b.note)}</div>`:''}${b.recurring?'<div class="tiny">Repeats weekly</div>':''}</div>
-      <button class="del" title="Remove" style="border:none;background:none;color:var(--muted);cursor:pointer;font-size:16px" onclick="deleteAvail('${b.id}')">✕</button>
-    </div>`).join('') + `<div class="tiny" style="margin-top:8px">Unavailable always wins. ${S.me.isTutor ? 'Students cannot request you for a time you have marked unavailable.' : ''}</div>`;
+// One day, opened from its square: what's on it, and tabs to add more.
+function openDay(k, tab){
+  S.cal.open=k; S.cal.sel=k; S.availForm=null; S.confirmCancel=null;
+  S.cal.tab = tab || (calItems().some(e=>e.date===k) || blocksOn(A.user.id,k).length ? 'see' : 'event');
+  render();
+}
+function closeDay(){ S.cal.open=null; render(); }
+document.addEventListener('keydown', e=>{ if(e.key==='Escape' && S.cal && S.cal.open) closeDay(); });
+function dayModalHtml(k){
+  const evs=calItems().filter(e=>e.date===k).sort(byWhen);
+  const blocks=blocksOn(A.user.id, k);
+  const canSchedule = S.me.isTutor && k>=ymd(new Date());
+  const tabs=[['see','On this day'+(evs.length+blocks.length?` (${evs.length+blocks.length})`:'')],['event','＋ Event'],['avail','＋ Availability']].concat(canSchedule?[['tutor','＋ Tutoring']]:[]);
+  const t=S.cal.tab;
+  let body='';
+  if(t==='see'){
+    body = `<div class="card">
+      ${evs.length || blocks.length ? evs.map(eventRow).join('') + blocks.map(b=>`<div class="avrow">
+          <span class="tag ${b.kind==='available'?'ok':'no'}">${b.kind==='available'?'Available':'Unavailable'}</span>
+          <div style="min-width:0;flex:1"><div style="font-weight:800;font-size:13.5px">${esc(availLabel(b))}</div>${b.note?`<div class="tiny">${esc(b.note)}</div>`:''}${b.recurring?'<div class="tiny">Repeats weekly — removing it removes every week</div>':''}</div>
+          <button class="del" title="Remove" style="border:none;background:none;color:var(--muted);cursor:pointer;font-size:16px" onclick="deleteAvail('${b.id}')">✕</button>
+        </div>`).join('')
+      : `<div class="tiny" style="text-align:center;padding:10px">Nothing on this day yet.</div>`}
+    </div>`;
+  } else if(t==='event'){
+    body = `<div class="card">
+      <div class="field"><label>What</label><input id="ev_title" placeholder="e.g. Unit 3 test" onkeydown="if(event.key==='Enter')addEvent()"></div>
+      <div class="row" style="gap:10px">
+        <div class="field" style="flex:1"><label>Type</label><select id="ev_kind">
+          ${['test','homework','study','other'].map(x=>`<option value="${x}">${EVENT_KINDS[x]}</option>`).join('')}</select></div>
+        <div class="field" style="flex:1"><label>Time</label><input id="ev_time" type="time"></div>
+      </div>
+      <div class="field"><label>Class</label><select id="ev_course">
+        <option value="">No class</option>
+        ${S[classKey()].map(x=>`<option>${esc(x)}</option>`).join('')}</select></div>
+      <button class="btn" onclick="addEvent()">Add to calendar</button>
+    </div>`;
+  } else if(t==='avail'){
+    body = `<div class="card">${availFormHtml(k)}</div>`;
+  } else {
+    body = `<div class="card" style="text-align:center">
+      <div style="font-size:30px">🤝</div>
+      <div class="tiny" style="margin:6px 0 12px">Pick a student, a time and a place. They get it in Tutoring, and once they accept it's on both calendars.</div>
+      <button class="btn" onclick="S.cal.open=null; openView({type:'schedule', date:'${k}'})">Schedule tutoring on ${esc(fmtDate(k))}</button>
+    </div>`;
+  }
+  return `<div class="dm-back" onclick="if(event.target===this)closeDay()">
+    <div class="dm" role="dialog" aria-label="${esc(fmtDate(k))}">
+      <div class="dmhead"><h3>${esc(parseYmd(k).toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'}))}</h3>
+        <button onclick="closeDay()" aria-label="Close">✕</button></div>
+      <div class="seg" style="margin-bottom:12px;flex-wrap:wrap">${tabs.map(([id,l])=>`<button class="${t===id?'on':''}" onclick="S.cal.tab='${id}'; render()">${l}</button>`).join('')}</div>
+      ${body}
+    </div>
+  </div>`;
 }
 function availFormHtml(sel){
   const f = S.availForm = S.availForm || { kind:'unavailable', recurring:false, weekdays:[parseYmd(sel).getDay()], allDay:true, start:'3:00 PM', end:'5:00 PM', note:'' };
@@ -1035,7 +1058,7 @@ function addAvail(sel){
     ? f.weekdays.map(wd=>({ user_id:me, kind:f.kind, recurring:true, weekday:wd, start_min:start, end_min:end, note:f.note.trim() }))
     : [{ user_id:me, kind:f.kind, recurring:false, date:sel, start_min:start, end_min:end, note:f.note.trim() }];
   sbFetch('/rest/v1/sl_availability', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify(rows) })
-    .then(loadData).then(function(){ S.availForm.note=''; toast('Saved'); render(); }).catch(function(e){ toast(e.message); });
+    .then(loadData).then(function(){ S.availForm.note=''; if(S.cal) S.cal.tab='see'; toast('Saved'); render(); }).catch(function(e){ toast(e.message); });
 }
 function deleteAvail(id){
   S.availability = S.availability.filter(b=>b.id!==id); render();
@@ -1054,7 +1077,7 @@ function addEvent(){
   const time = t ? new Date('2000-01-01T'+t).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}) : '';
   const ev={ id:uid(), user_id:A.user.id, date:S.cal.sel, time, title, kind:$('ev_kind').value, course:$('ev_course').value };
   S.events.push(ev);
-  render(); toast('Added to '+fmtDate(S.cal.sel));
+  S.cal.tab='see'; render(); toast('Added to '+fmtDate(S.cal.sel));
   sbFetch('/rest/v1/sl_events', { method:'POST', body:JSON.stringify({ user_id:ev.user_id, date:ev.date, time, title, kind:ev.kind, course:ev.course }) })
     .then(function(rows){ if(rows && rows[0]) ev.id = rows[0].id; })
     .catch(function(e){ toast(e.message); loadData().then(render); });
