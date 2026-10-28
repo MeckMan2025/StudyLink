@@ -376,14 +376,32 @@ const fmtDate = k => k ? parseYmd(k).toLocaleDateString(undefined,{weekday:'shor
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 /* ============================= DATA ============================= */
+// Every class at Pleasant Valley, from the 9th–12th grade course request
+// sheets, grouped the way the sheets group them. Names match the sheets.
 const DEPTS = [
-  { name:'Math', emoji:'📐', color:'#7aa7f0', courses:['Algebra I','Geometry','Algebra II','Precalculus','AP Precalculus','AP Calculus'] },
-  { name:'Science', emoji:'🔬', color:'#63c39a', courses:['Biology','Chemistry','Honors Chemistry','Physics','AP Physics','AP Biology'] },
-  { name:'Social Studies', emoji:'🌍', color:'#f0a868', courses:['AP Human Geography','World History','US History','AP US History','American Government'] },
-  { name:'English', emoji:'📖', color:'#f28fb4', courses:['English 9','English 10','English 11','AP English Lang'] },
-  { name:'World Languages', emoji:'🗣️', color:'#a78be6', courses:['Spanish 1','Spanish 2','Spanish 3','Spanish 4','AP Spanish','French 2'] },
-  { name:'Business & Technology', emoji:'💻', color:'#5bbfd6', courses:['Computer Science Principles (CSP)','Financial Accounting'] },
+  { name:'English', emoji:'📖', color:'#f28fb4', courses:['English 9','English 9 Academy','Honors English 9','English 10','Honors English 10','English 11','AP Lang/Comp','AP Lit/Comp','World Literature','Literature 1960s to Today','Literature of a Genre Novel','Creative Writing','Journalistic Writing','Honors Journalistic Writing','SPC:112 Public Speaking','ENG:105 Composition 1','Digital Storytelling','Young Adult Lit','Essential English','Publications'] },
+  { name:'Math', emoji:'📐', color:'#7aa7f0', courses:['Intro to Algebra 1','Intro Algebra 2','Algebra','Geometry','Honors Geometry','Algebra 2','Intermediate Algebra','Advanced Alg & Trig','Honors Adv Alg & Trig','Application of Stats & Prob','MAT:156 Stats','Discrete Math','Pre-Calculus','AP Pre-Calculus','AP Calculus','MAT:210 Calc 1','MAT:216 Calc 2','MAT:219 Calc 3','MAT:227 Differential Equations'] },
+  { name:'Science', emoji:'🔬', color:'#63c39a', courses:['Earth Science','Biology','Honors Biology','Physical Science','Chemistry','Honors Chemistry','AP Chemistry','Physics','AP Physics 1','AP Physics 2','Anat & Physiology','Organic Chem/Micro','AP Environmental Science'] },
+  { name:'Social Studies', emoji:'🌍', color:'#f0a868', courses:['Modern US History','Modern US History Academy','World History','AP Human Geography','AP United States History','American Government','Economics','AP Microeconomics','AP US Gov and Politics','SOC:110 Intro to Soc','PSY:111 Intro to Psych'] },
+  { name:'World Language', emoji:'🗣️', color:'#a78be6', courses:['Spanish 1','Spanish 2','Spanish 3','Spanish 4','AP Spanish','French 1','French 2','French 3','French 4','AP French'] },
+  { name:'Computer Science', emoji:'💻', color:'#5bbfd6', courses:['Computer Science Principles (CSP)','3D VREP','Coding and Gaming','JAVA Programming','AP Comp Science A','NET:303 Windows Workstation Operating Systems','Computer Science Academy'] },
+  { name:'Business', emoji:'💼', color:'#e0a93a', courses:['Intro to Business','Micro Computer Apps','Micro Office Cert.','Digital Media I','Digital Media II','Accounting 1','Principles of Marketing','Personal Finance','ACC:142 Financial Accounting','ACC:146 Managerial Accounting'] },
+  { name:'Industrial Technology', emoji:'🔧', color:'#8c98a8', courses:['Intro to Engineering Design','Principles of Engineering','Civil Engineering & Arch','Robotics Engineering','Engineering Problems','Eng Academy (ENG:107)','CAD:140 Parametric Solid Modeling','Intro to Manf & Mechanics','Intro to Woods & Construction','Wood Prod Processes','Automotive Maintenance','Weld & Metal Fab','Advanced Manufacturing','Construction Skills','AUT:115 Auto Shop Safety','AUT:524 Auto Brake Syst and Serv','AUT:404 Auto Susp and Steering'] },
+  { name:'Family & Consumer Science', emoji:'🍳', color:'#e8835e', courses:['Food Prep 1','Spartan Bakery','Advanced Baking','Top Chefs','Preschool + Early Childhood Education','Caring for Young Children','Caring for Children with Exceptionalities','Housing & Interior Design','Exploring Fashion'] },
+  { name:'Health Sciences', emoji:'🩺', color:'#5fb9a7', courses:['Principles of Biomedical Science','Sports Med & Emerg Tx','Sports Med II','HSC:113 Med Term'] },
+  { name:'Health & Wellness', emoji:'🏃', color:'#6fc26f', courses:['Health','Physical Education','Basic Strength Trng & Cond','Int. Strength Trng & Cond','Adv. Strength Trng & Cond','Lifeguarding'] },
+  { name:'Art', emoji:'🎨', color:'#e8699c', courses:['Commercial Art','Drawing I','Drawing II','Painting','Ceramics I','Ceramics II','Sculpture','Photography I','Photography II','AP 2D Studio Art','AP 3D Studio Art'] },
+  { name:'Music', emoji:'🎵', color:'#9b7ad6', courses:['Freshman Band','Band','9/10 Orchestra','11/12 Orchestra','PV Singers','Intro to Music Theory','AP Music Theory'] },
 ];
+// Older rows were written with the app's first names for a few classes.
+// They read as the sheet's name everywhere; sql/course_renames.sql fixes
+// the rows for good.
+const COURSE_RENAMES = { 'Algebra I':'Algebra', 'Algebra II':'Algebra 2', 'Precalculus':'Pre-Calculus', 'AP Precalculus':'AP Pre-Calculus', 'AP Physics':'AP Physics 1',
+  'US History':'Modern US History', 'AP US History':'AP United States History', 'AP English Lang':'AP Lang/Comp', 'Financial Accounting':'ACC:142 Financial Accounting', 'World Languages':'World Language' };
+const canon = c => COURSE_RENAMES[c] || c;
+// Every name a class may be stored under, for deletes.
+const courseKeys = c => [c, ...Object.keys(COURSE_RENAMES).filter(k => COURSE_RENAMES[k]===c)];
+const courseIn = c => 'course=in.(' + courseKeys(c).map(k=>'"'+encodeURIComponent(k.replace(/"/g,''))+'"').join(',') + ')';
 const ALL_COURSES = DEPTS.flatMap(d => d.courses);
 const courseColor = c => (DEPTS.find(d => d.courses.includes(c))?.color) || '#7aa7f0';
 const courseEmoji = c => (DEPTS.find(d => d.courses.includes(c))?.emoji) || '📚';
@@ -1177,7 +1195,7 @@ function saveClass(course, add){
   const table = tutor ? 'sl_tutor_courses' : 'sl_student_classes';
   const p = add
     ? sbFetch('/rest/v1/'+table, { method:'POST', headers:{ Prefer:'return=minimal,resolution=ignore-duplicates' }, body:JSON.stringify(tutor ? { user_id:me, course, availability:S.me.avail||'' } : { user_id:me, course }) })
-    : sbFetch('/rest/v1/'+table+'?user_id=eq.'+me+'&course=eq.'+encodeURIComponent(course), { method:'DELETE', headers:{ Prefer:'return=minimal' } });
+    : sbFetch('/rest/v1/'+table+'?user_id=eq.'+me+'&'+courseIn(course), { method:'DELETE', headers:{ Prefer:'return=minimal' } });
   p.then(function(){ if(tutor) return loadData().then(render); }).catch(function(e){ toast(e.message); loadData().then(render); });
 }
 function removeClass(course){
@@ -1561,6 +1579,8 @@ function renderTutorProfile(c){
 /* -------- REQUEST TUTORING (overlay) -------- */
 function renderRequest(c){
   const t=findTutor(S.overlay.id); if(!t){closeView();return;}
+  if(S.overlay.pickKey!==S.overlay.id+S.overlay.course){ pick.times.clear(); pick.places.clear(); pick.otherText=''; S.overlay.pickKey=S.overlay.id+S.overlay.course; }
+  pickerTutor=t.id;
   const course=S.overlay.course;
   const coursesTutored=t.courses.map(x=>x.course);
   c.innerHTML=`
@@ -1586,26 +1606,13 @@ function renderRequest(c){
       </div>
       <div class="field"><label>What do you need help with?</label><textarea id="rq_desc" rows="2" placeholder="A sentence or two…"></textarea></div>
       ${t.avail ? `<div class="tiny" style="margin:-4px 0 10px">🗓️ ${esc(t.name)} is usually free: ${esc(t.avail)}</div>` : ''}
-      <div class="row" style="gap:10px">
-        <div class="field" id="rq_dayWrap" style="flex:1;margin:0"><label>Day</label><input id="rq_day" type="date" value="${ymd(addDays(new Date(),1))}" min="${ymd(new Date())}" onchange="checkFree('${t.id}')"></div>
-        <div class="field" style="flex:1;margin:0"><label>Time</label><select id="rq_time" onchange="checkFree('${t.id}')">${TIME_SLOTS.map(x=>`<option ${x===suggestTime(t)?'selected':''}>${x}</option>`).join('')}</select></div>
-        ${lengthField()}
-      </div>
+      <div class="field" id="rq_dayWrap" style="margin:0"><label>Day</label><input id="rq_day" type="date" value="${ymd(addDays(new Date(),1))}" min="${ymd(new Date())}" onchange="togglePick('times','__none__')"></div>
+      <div id="rq_pick">${pickerHtml()}</div>
       <div id="rq_free" class="tiny" style="margin-top:8px"></div>
-      <div class="field" style="margin-top:12px"><label>Format</label>
-        <div class="seg" id="rq_fmt">
-          <button class="on" data-v="In person">In person</button>
-          <button data-v="Virtual">Virtual</button>
-        </div></div>
-      ${longNoteHtml()}
-      <div class="field" style="margin-bottom:0"><label>Where</label>
-        <select id="rq_loc" onchange="locDetail()"></select>
-        <input id="rq_locd" placeholder="Room number, or where exactly" style="margin-top:8px;display:none"></div>
     </div>
     <div style="margin-top:14px"><button class="btn" id="rq_send" onclick="submitRequest('${t.id}')">Send request to ${esc(t.name)}</button></div>
     <p class="tiny" style="text-align:center;margin-top:10px">🔒 Coordination stays inside SilverCircle — no phone numbers or personal emails shared.</p>
   `;
-  c.querySelectorAll('#rq_fmt button').forEach(b=>b.onclick=()=>{ c.querySelectorAll('#rq_fmt button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); fillLocations(); });
   c.querySelectorAll('#rq_count button').forEach(b=>b.onclick=()=>{
     c.querySelectorAll('#rq_count button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
     const many=b.dataset.v==='many';
@@ -1615,7 +1622,7 @@ function renderRequest(c){
     checkFree(t.id);
   });
   c.querySelectorAll('#rq_wd button').forEach(b=>b.onclick=()=>{ b.classList.toggle('dept'); b.style.background = b.classList.contains('dept') ? 'var(--blue)' : ''; checkFree(t.id); });
-  fillLocations(); checkFree(t.id);
+  checkFree(t.id);
 }
 // Many sessions: every picked weekday from the start date, for that many weeks.
 const reqMany = () => document.querySelector('#rq_count button.on')?.dataset.v==='many';
@@ -1631,26 +1638,94 @@ function manyDates(){
 // Both people have to be out of class and not busy.
 const bothFree = (otherId, day, time) => freeAt(otherId, day, time).free && freeAt(A.user.id, day, time).free;
 function checkFree(tid){
-  const day=$('rq_day')?.value, time=$('rq_time')?.value, box=$('rq_free'), btn=$('rq_send'); if(!box) return;
+  const day=$('rq_day')?.value, box=$('rq_free'), btn=$('rq_send'); if(!box) return;
+  const times=pickedTimes();
   if(reqMany()){
-    const dates=manyDates(), free=dates.filter(k=>bothFree(tid,k,time)), busy=dates.length-free.length;
+    const dates=manyDates(), time=times[0];
+    const free=time ? dates.filter(k=>bothFree(tid,k,time)) : dates, busy=dates.length-free.length;
     box.innerHTML = !dates.length ? '<span style="color:var(--muted);font-weight:700">Pick at least one day of the week.</span>'
+      : !time ? '<span style="color:var(--muted);font-weight:700">Tick one time for the series.</span>'
       : !free.length ? '<span style="color:#c23b5e;font-weight:800">✕ None of those dates work at '+esc(time)+' (class or busy). Try another time.</span>'
       : '<span class="seen on">✓ '+free.length+' session'+(free.length===1?'':'s')+', '+esc(fmtDate(free[0]))+' to '+esc(fmtDate(free[free.length-1]))+'</span>'
         + (busy ? ' <span style="color:#c98b34;font-weight:700">· '+busy+' date'+(busy===1?'':'s')+' when one of you is busy or in class will be skipped</span>' : '');
-    if(btn){ btn.disabled=!free.length; }
+    if(btn){ btn.disabled=!free.length || !time; }
     return;
   }
-  const mine=freeAt(A.user.id, day, time);
-  if(!mine.free){ box.innerHTML='<span style="color:#c23b5e;font-weight:800">✕ You are '+esc(mine.why.replace(/^unavailable/,'busy'))+'. Pick another time.</span>'; if(btn) btn.disabled=true; return; }
-  const r=freeAt(tid, day, time);
-  box.innerHTML = r.free ? '<span class="seen on">✓ Free then</span>' : '<span style="color:#c23b5e;font-weight:800">✕ Not available: '+esc(r.why)+'. Pick another time.</span>';
-  if(btn){ btn.disabled=!r.free; }
+  if(!times.length){ box.innerHTML='<span style="color:var(--muted);font-weight:700">No time ticked — '+esc(findTutor(tid)?.name||'the tutor')+' will pick one.</span>'; if(btn) btn.disabled=false; return; }
+  const ok=times.filter(x=>bothFree(tid, day, x)), bad=times.length-ok.length;
+  box.innerHTML = ok.length ? '<span class="seen on">✓ '+ok.length+' time'+(ok.length===1?'':'s')+' you are both free</span>'+(bad?' <span style="color:#c98b34;font-weight:700">· '+bad+' busy, will be left out</span>':'')
+    : '<span style="color:#c23b5e;font-weight:800">✕ One of you is busy or in class at every time ticked. Try others, or tick none and let the tutor pick.</span>';
+  if(btn){ btn.disabled=!ok.length; }
 }
 // ---- Availability ----
 // Minutes since midnight for a slot label like "3:30 PM".
-function slotMin(label){ const m=/^(\d+):(\d\d) (AM|PM)$/.exec((label||'').replace(/[\u202f\u00a0]/g,' ').trim()); if(!m) return null; let h=+m[1]%12; if(m[3]==='PM') h+=12; return h*60 + +m[2]; }
+// "3:30 PM", or a range like "7:30–8:00 AM" / "3:30–4:30 PM": the start, in minutes.
+function slotMin(label){
+  const t=(label||'').replace(/[\u202f\u00a0]/g,' ').trim();
+  const m=/^(\d+):(\d\d)(?: (AM|PM))?(?:\s*[–-]\s*(\d+):(\d\d) (AM|PM))?$/.exec(t); if(!m) return null;
+  let h=+m[1]%12;
+  const ap = m[3] || (m[6]==='AM' ? 'AM' : (+m[1]>=7 && +m[1]<=11 && +m[1] > +m[4]) ? 'AM' : m[6]);
+  if(ap==='PM') h+=12;
+  return h*60 + +m[2];
+}
 function minLabel(min){ if(min>=1440) return '12:00 AM'; const h=Math.floor(min/60), mm=min%60, h12=((h+11)%12)+1; return h12+':'+(mm<10?'0':'')+mm+' '+(h<12?'AM':'PM'); }
+// When tutoring happens, and where. Before school and 8th period are inside
+// the school; the hour-long after-school slots are off campus, so nothing
+// over 45 minutes is ever in the building. A student may tick several times
+// and places (or none) and the tutor picks when they accept.
+const SESSION_SLOTS = [
+  { group:'Before school', label:'7:30–8:00 AM', start:450, end:480, school:true },
+  { group:'8th period',    label:'2:45–3:30 PM', start:885, end:930, school:true },
+  ...[[930,990],[960,1020],[990,1050],[1020,1080],[1050,1110],[1080,1140],[1110,1170],[1140,1200]].map(([a,b])=>({ group:'After school', label:minLabel(a).replace(/ (AM|PM)$/,'')+'–'+minLabel(b), start:a, end:b, school:false })),
+];
+const slotByLabel = l => SESSION_SLOTS.find(x=>x.label===l);
+const SLOT_GROUPS = ['Before school','8th period','After school'];
+const SCHOOL_PLACES = ['Library','Cafeteria','Commons','Other'];
+const OFF_CAMPUS_PLACES = ['Bettendorf Public Library','Vibrant Coffeehouse and Kitchen','Other'];
+const VIBRANT = 'Vibrant Coffeehouse and Kitchen', VIBRANT_CLOSE = 18*60, VIBRANT_BOOK_URL = 'https://cal.com/vibrant-qc';
+const MAX_SCHOOL_MINUTES = 45;
+const OPTION_SEP = ' / ';
+const splitOptions = v => (v||'').split(OPTION_SEP).map(x=>x.trim()).filter(Boolean);
+function placesFor(slots){
+  const out=[];
+  if(slots.some(x=>x.school)) SCHOOL_PLACES.forEach(p=>{ if(!out.includes(p)) out.push(p); });
+  if(slots.some(x=>!x.school)) OFF_CAMPUS_PLACES.forEach(p=>{ if(p===VIBRANT && !slots.some(x=>!x.school && x.end<=VIBRANT_CLOSE)) return; if(!out.includes(p)) out.push(p); });
+  return out;
+}
+const placeFits = (place, slot) => slot ? (slot.school ? SCHOOL_PLACES.includes(place.split(' · ')[0]) : (OFF_CAMPUS_PLACES.includes(place.split(' · ')[0]) && !(place.startsWith(VIBRANT) && slot.end>VIBRANT_CLOSE))) : true;
+const vibrantNote = () => `<div class="card tiny" style="margin-top:8px;border-color:var(--pink)">☕ Vibrant needs to be booked ahead. <a href="${VIBRANT_BOOK_URL}" target="_blank" rel="noopener" style="font-weight:800">Reserve a table →</a> It closes at 6 PM.</div>`;
+const pick = { times:new Set(), places:new Set() };
+function pickerHtml(){
+  const chosen=[...pick.times].map(slotByLabel).filter(Boolean);
+  const places=placesFor(chosen);
+  [...pick.places].forEach(pl=>{ if(!places.includes(pl)) pick.places.delete(pl); });
+  const chip=(on,label,fn,extra='')=>`<button class="chip ${on?'dept':''}" style="${on?'background:var(--blue)':''}" onclick="${fn}">${on?'✓ ':''}${esc(label)}${extra}</button>`;
+  return `
+    <div class="field" style="margin-top:12px"><label>When works for you? <span class="tiny" style="text-transform:none;letter-spacing:0;font-weight:600">Tick any that work, or none and the tutor picks.</span></label>
+      ${SLOT_GROUPS.map(g=>`<div class="tiny" style="margin:6px 0 4px;font-weight:800">${g}${g==='After school'?' <span style="font-weight:600">· one hour, off campus</span>':''}</div>
+        <div class="chips">${SESSION_SLOTS.filter(x=>x.group===g).map(x=>{ const r=pickerFree(x.label); return chip(pick.times.has(x.label), x.label, `togglePick('times','${x.label}')`, r===null?'':r?'':' <span style="color:#c23b5e">busy</span>'); }).join('')}</div>`).join('')}
+    </div>
+    <div class="field" style="margin-bottom:0"><label>Where? <span class="tiny" style="text-transform:none;letter-spacing:0;font-weight:600">${chosen.length ? 'Tick any.' : 'Pick a time first, or leave it to the tutor.'}</span></label>
+      <div class="chips">${places.map(pl=>chip(pick.places.has(pl), pl, `togglePick('places','${pl}')`)).join('')}</div>
+      ${pick.places.has('Other') ? `<input id="rq_locd" placeholder="Where exactly?" value="${esc(pick.otherText||'')}" oninput="pick.otherText=this.value" style="margin-top:8px">` : ''}
+      ${pick.places.has(VIBRANT) ? vibrantNote() : ''}
+    </div>`;
+}
+let pickerTutor=null;
+function pickerFree(label){ const day=$('rq_day')?.value; if(!day || !pickerTutor || reqMany()) return null; return bothFree(pickerTutor, day, label); }
+function togglePick(kind, v){ if(v!=='__none__'){ pick[kind].has(v) ? pick[kind].delete(v) : pick[kind].add(v); } const box=$('rq_pick'); if(box) box.innerHTML=pickerHtml(); checkFree(pickerTutor); }
+function pickedTimes(){ return SESSION_SLOTS.filter(x=>pick.times.has(x.label)).map(x=>x.label); }
+function pickedPlaces(){ return [...pick.places].map(pl=> pl==='Other' && (pick.otherText||'').trim() ? 'Other · '+pick.otherText.trim() : pl); }
+const slotMinutes = label => { const x=slotByLabel(label); return x ? x.end-x.start : 45; };
+// The tutor's schedule form: one slot, and the places that fit it.
+function fillLocations(){
+  const sel=$('rq_loc'); if(!sel) return;
+  const slot=slotByLabel($('sc_time')?.value) || SESSION_SLOTS[2];
+  const keep=sel.value;
+  sel.innerHTML = placesFor([slot]).map(x=>`<option>${x}</option>`).join('');
+  if([...sel.options].some(o=>o.value===keep)) sel.value=keep;
+  locDetail();
+}
 const DAY_NAMES=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 // The blocks that apply to one date, for one person.
 // Class periods are stored as weekly 'unavailable' blocks whose note starts
@@ -1708,31 +1783,10 @@ function suggestTime(t){
   return '3:30 PM';
 }
 // Where to meet, depending on the format. Classroom and Other take a detail.
-// Sessions longer than 45 minutes can't be held inside the school, so a long
-// in-person session has to pick a place off campus (or go virtual).
-const MAX_SCHOOL_MINUTES = 45;
-const SCHOOL_PLACES = ['Library','Learning commons','Cafeteria','Classroom','Front office / counseling'];
-const OFF_CAMPUS_PLACES = ['Public library','Coffee shop','A home','Community center','Other'];
-const PLACES = { 'In person':[...SCHOOL_PLACES,'Other'], 'Virtual':['Google Meet','Zoom','FaceTime','Phone call','Other'] };
-const SESSION_LENGTHS = [30,45,60,90];
-const sessionMinutes = () => Number($('rq_min')?.value||45);
-const lengthField = () => `<div class="field" style="flex:1;margin:0"><label>Length</label><select id="rq_min" onchange="fillLocations()">${SESSION_LENGTHS.map(m=>`<option value="${m}" ${m===45?'selected':''}>${m} min</option>`).join('')}</select></div>`;
-function fillLocations(){
-  const fmt=document.querySelector('#rq_fmt button.on')?.dataset.v||'In person', sel=$('rq_loc'); if(!sel) return;
-  const long = fmt==='In person' && sessionMinutes()>MAX_SCHOOL_MINUTES;
-  const keep = sel.value;
-  sel.innerHTML = (long ? OFF_CAMPUS_PLACES : PLACES[fmt]).map(x=>`<option>${x}</option>`).join('');
-  if([...sel.options].some(o=>o.value===keep)) sel.value=keep;
-  const note=$('rq_long'); if(note){ note.style.display = long ? 'block' : 'none'; }
-  locDetail();
-}
-const longNoteHtml = () => `<div id="rq_long" class="tiny" style="display:none;margin:-4px 0 10px;color:#c98b34">⏱️ Sessions over ${MAX_SCHOOL_MINUTES} minutes can't be inside the school. Pick a place off campus, or go virtual.</div>`;
-function longSessionInSchool(fmt, locBase){ return fmt==='In person' && sessionMinutes()>MAX_SCHOOL_MINUTES && SCHOOL_PLACES.includes(locBase); }
 function locDetail(){
   const v=$('rq_loc')?.value||'', d=$('rq_locd'); if(!d) return;
-  const need = v==='Classroom' || v==='Other';
-  d.style.display = need ? 'block' : 'none';
-  d.placeholder = v==='Classroom' ? 'Room number and teacher' : 'Say where';
+  d.style.display = v==='Other' ? 'block' : 'none';
+  const vb=$('rq_vib'); if(vb) vb.innerHTML = v===VIBRANT ? vibrantNote() : '';
 }
 async function submitRequest(tid){
   const t=findTutor(tid); if(!t) return;
@@ -1740,22 +1794,24 @@ async function submitRequest(tid){
   const topic=$('rq_topic').value.trim()||'General help';
   const note=($('rq_desc').value||'').trim();
   const date=$('rq_day').value||null;
-  const time=$('rq_time').value||'TBD';
-  const fmt=document.querySelector('#rq_fmt button.on')?.dataset.v||'In person';
   const many=reqMany();
-  const dates = many ? manyDates().filter(k=>bothFree(tid,k,time)) : [date];
+  const all=pickedTimes();
+  const times = many ? all.slice(0,1) : all.filter(x=>bothFree(tid, date, x));
+  if(all.length && !times.length){ toast('One of you is busy at every time ticked.'); return; }
+  const time = times.join(OPTION_SEP) || 'Tutor picks';
+  const dates = many ? manyDates().filter(k=>bothFree(tid,k,times[0])) : [date];
   if(many && !dates.length){ toast('Pick days the tutor is free.'); return; }
-  if(!many && !bothFree(tid, date, time)){ toast('One of you is in class or busy then.'); return; }
-  const locBase=$('rq_loc')?.value||'', locD=($('rq_locd')?.value||'').trim();
-  const location = locBase + (locD && (locBase==='Classroom'||locBase==='Other') ? ' · '+locD : '');
-  if(longSessionInSchool(fmt, locBase)){ toast('Sessions over '+MAX_SCHOOL_MINUTES+' minutes can\'t be inside the school. Pick a place off campus or go virtual.'); return; }
+  const location = pickedPlaces().join(OPTION_SEP);
+  const fmt = 'In person';
+  // One time: settled now. Several, or none: the tutor picks when accepting.
+  const minutes = times.length ? Math.min(...times.map(slotMinutes)) : 45;
   const btn=$('rq_send'); if(btn){ btn.disabled=true; btn.textContent='Sending…'; }
   try{
     // Many sessions go up as one row per date in a single insert, so they
     // share a created_at — that is how the tutor's side groups them.
     await sbFetch('/rest/v1/sl_requests', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify(dates.map(d=>({
       student_id:A.user.id, tutor_id:tid, student_alias:A.profile.student_alias, tutor_alias:t.name,
-      course, topic: many ? SERIES_TOPIC : topic, note, date:d, time, minutes:sessionMinutes(), format:fmt, location }))) });
+      course, topic: many ? SERIES_TOPIC : topic, note, date:d, time, minutes, format:fmt, location }))) });
     await loadData();
     closeView(); go('tutoring');
     toast(many ? 'Asked '+t.name+' for '+dates.length+' sessions 🎉' : 'Request sent to '+t.name+' 🎉');
@@ -1857,24 +1913,17 @@ function renderSchedule(c){
       <div class="field"><label>Topic</label><input id="sc_topic" placeholder="e.g. Unit 3 review"></div>
       <div class="row" style="gap:10px">
         <div class="field" style="flex:1;margin:0"><label>Day</label><input id="sc_day" type="date" value="${date}" min="${ymd(new Date())}" onchange="checkClash()"></div>
-        <div class="field" style="flex:1;margin:0"><label>Time</label><select id="sc_time" onchange="checkClash()">${TIME_SLOTS.map(x=>`<option ${x==='3:30 PM'?'selected':''}>${x}</option>`).join('')}</select></div>
+        <div class="field" style="flex:1;margin:0"><label>Time</label><select id="sc_time" onchange="checkClash();fillLocations()">${SESSION_SLOTS.map(x=>`<option value="${x.label}" ${x.label==='3:30–4:30 PM'?'selected':''}>${x.group} · ${x.label}</option>`).join('')}</select></div>
       </div>
       <div id="sc_clash" class="tiny" style="margin-top:8px"></div>
-      <div class="row" style="gap:10px;margin-top:12px">${lengthField()}</div>
-      <div class="field" style="margin-top:12px"><label>Format</label>
-        <div class="seg" id="rq_fmt">
-          <button class="on" data-v="In person">In person</button>
-          <button data-v="Virtual">Virtual</button>
-        </div></div>
-      ${longNoteHtml()}
-      <div class="field"><label>Where</label>
+      <div class="field" style="margin-top:12px"><label>Where</label>
         <select id="rq_loc" onchange="locDetail()"></select>
-        <input id="rq_locd" placeholder="Room number, or where exactly" style="margin-top:8px;display:none"></div>
+        <input id="rq_locd" placeholder="Where exactly" style="margin-top:8px;display:none">
+        <div id="rq_vib"></div></div>
       <div class="field" style="margin-bottom:0"><label>Note for the student</label><textarea id="sc_note" rows="2" placeholder="Optional — what to bring, what you'll cover…"></textarea></div>
     </div>
     <div style="margin-top:14px"><button class="btn" id="sc_send" ${students.length?'':'disabled'} onclick="sendSchedule()">Send to student</button></div>
   `;
-  c.querySelectorAll('#rq_fmt button').forEach(b=>b.onclick=()=>{ c.querySelectorAll('#rq_fmt button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); fillLocations(); });
   fillLocations(); checkClash();
 }
 // Warn when the tutor already has something booked at that day and time.
@@ -1894,16 +1943,16 @@ async function sendSchedule(){
   const date=$('sc_day').value;
   if(!date){ toast('Pick a day.'); return; }
   if(!bothFree(studentId, date, $('sc_time').value)){ toast('One of you is in class or busy then.'); return; }
-  const fmt=document.querySelector('#rq_fmt button.on')?.dataset.v||'In person';
+  const fmt='In person';
   const locBase=$('rq_loc')?.value||'', locD=($('rq_locd')?.value||'').trim();
-  const location = locBase + (locD && (locBase==='Classroom'||locBase==='Other') ? ' · '+locD : '');
-  if(longSessionInSchool(fmt, locBase)){ toast('Sessions over '+MAX_SCHOOL_MINUTES+' minutes can\'t be inside the school. Pick a place off campus or go virtual.'); return; }
+  const location = locBase + (locD && locBase==='Other' ? ' · '+locD : '');
+  if(!placeFits(location, slotByLabel($('sc_time').value))){ toast('That place does not fit that time.'); return; }
   const btn=$('sc_send'); btn.disabled=true; btn.textContent='Sending…';
   try{
     await sbFetch('/rest/v1/sl_requests', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({
       student_id:studentId, tutor_id:A.user.id, student_alias:alias, tutor_alias:A.profile.tutor_alias,
       course:$('sc_course').value, topic:$('sc_topic').value.trim()||'Tutoring session', note:($('sc_note').value||'').trim(),
-      date, time:$('sc_time').value, minutes:sessionMinutes(), format:fmt, location, status:'offered' }) });
+      date, time:$('sc_time').value, minutes:slotMinutes($('sc_time').value), format:fmt, location, status:'offered' }) });
     await loadData();
     closeView(); go('tutoring');
     toast('Sent to '+alias+' — booked once they accept 📅');
@@ -1936,7 +1985,7 @@ function renderRetime(c){
     <div class="card">
       <div class="row" style="gap:10px">
         <div class="field" style="flex:1;margin:0"><label>Day</label><input id="rt_day" type="date" value="${r.date && r.date>=ymd(new Date()) ? r.date : ymd(addDays(new Date(),1))}" min="${ymd(new Date())}" onchange="checkRetime()"></div>
-        <div class="field" style="flex:1;margin:0"><label>Time</label><select id="rt_time" onchange="checkRetime()">${TIME_SLOTS.map(x=>`<option ${x===(r.time||'3:30 PM')?'selected':''}>${x}</option>`).join('')}</select></div>
+        <div class="field" style="flex:1;margin:0"><label>Time</label><select id="rt_time" onchange="checkRetime()">${SESSION_SLOTS.map(x=>`<option value="${x.label}" ${x.label===(splitOptions(r.time)[0]||'3:30–4:30 PM')?'selected':''}>${x.group} · ${x.label}</option>`).join('')}</select></div>
       </div>
       <div id="rt_ok" class="tiny" style="margin-top:8px"></div>
       <div class="field" style="margin:12px 0 0"><label>Message (optional)</label><input id="rt_msg" placeholder="e.g. I have practice Thursday — does Friday work?"></div>
@@ -1958,7 +2007,8 @@ async function sendRetime(){
   if(!bothFree(o.id, date, time)){ toast('One of you is in class or busy then.'); return; }
   const btn=$('rt_send'); btn.disabled=true; btn.textContent='Sending…';
   try{
-    await sbFetch('/rest/v1/sl_requests?id=eq.'+r.id, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ date, time, status: o.iAmTutor ? 'offered' : 'pending' }) });
+    const keepPlace = splitOptions(r.location).filter(pl=>placeFits(pl, slotByLabel(time)));
+    await sbFetch('/rest/v1/sl_requests?id=eq.'+r.id, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ date, time, minutes:slotMinutes(time), location:keepPlace.join(OPTION_SEP), status: o.iAmTutor ? 'offered' : 'pending' }) });
     // Leave a line in the chat so the other person sees why the time moved.
     sendMessage(r.id, '🕒 Suggested '+fmtDate(date)+' at '+time+(msg ? ' — '+msg : '')).catch(()=>{});
     await loadData(); closeView(); go('tutoring');
@@ -2156,7 +2206,40 @@ function respondOffer(id, accept){
 }
 function respondRequest(id, accept){
   const r=S.incoming.find(x=>x.id===id); if(!r)return;
+  if(accept && needsPick(r)){ openView({type:'pickSlot', id}); return; }
   patchRequest(id, { status: accept ? 'accepted' : 'declined' }, accept ? 'Session confirmed with '+r.student_alias+' ✅' : 'Request declined');
+}
+// A request with several times or places (or none) is settled by the tutor.
+const needsPick = r => splitOptions(r.time).length!==1 || !slotByLabel(splitOptions(r.time)[0]) || splitOptions(r.location).length!==1;
+function renderPickSlot(c){
+  const r=findReq(S.overlay.id); if(!r){ closeView(); return; }
+  const times = splitOptions(r.time).filter(slotByLabel); const anyTime = !times.length;
+  const slots = anyTime ? SESSION_SLOTS : SESSION_SLOTS.filter(x=>times.includes(x.label));
+  const st = S.overlay.pickSlot = S.overlay.pickSlot || { time: (slots.find(x=>bothFree(r.student_id, r.date, x.label))||slots[0]||{}).label, place:'' };
+  const slot=slotByLabel(st.time);
+  const offered = splitOptions(r.location);
+  const places = (offered.length ? offered : placesFor([slot])).filter(pl=>placeFits(pl, slot));
+  if(!places.includes(st.place)) st.place = places[0] || '';
+  c.innerHTML=`
+    <button class="back" onclick="closeView()">‹ Back</button>
+    <h2 class="title">Pick a time and place</h2>
+    <div class="lead">${esc(r.student_alias)} · ${esc(r.course)} · ${esc(fmtDate(r.date))}${anyTime ? ' · they left the time to you' : ' · they ticked '+times.length+' time'+(times.length===1?'':'s')}</div>
+    <div class="card">
+      <div class="field"><label>Time</label><div class="chips">${slots.map(x=>{ const ok=bothFree(r.student_id, r.date, x.label);
+        return `<button class="chip ${st.time===x.label?'dept':''}" style="${st.time===x.label?'background:var(--blue)':''}" onclick="S.overlay.pickSlot.time='${x.label}';render()">${x.group} · ${x.label}${ok?'':' <span style=\"color:#c23b5e\">busy</span>'}</button>`; }).join('')}</div></div>
+      <div class="field" style="margin-bottom:0"><label>Where</label><div class="chips">${places.map(pl=>`<button class="chip ${st.place===pl?'dept':''}" style="${st.place===pl?'background:var(--blue)':''}" onclick="S.overlay.pickSlot.place='${esc(pl)}';render()">${esc(pl)}</button>`).join('') || '<span class="tiny">No place fits that time.</span>'}</div>
+        ${st.place==='Other' ? `<input id="ps_other" placeholder="Where exactly?" style="margin-top:8px">` : ''}
+        ${st.place.startsWith(VIBRANT) ? vibrantNote() : ''}</div>
+    </div>
+    <div style="margin-top:14px"><button class="btn" ${st.time && st.place ? '' : 'disabled'} onclick="confirmPick('${r.id}')">Confirm session</button></div>`;
+}
+function confirmPick(id){
+  const r=findReq(id), st=S.overlay.pickSlot; if(!r||!st) return;
+  if(!bothFree(r.student_id, r.date, st.time)){ toast('One of you is busy then.'); return; }
+  const other=($('ps_other')?.value||'').trim();
+  const place = st.place==='Other' && other ? 'Other · '+other : st.place;
+  closeView();
+  patchRequest(id, { status:'accepted', time:st.time, location:place, minutes:slotMinutes(st.time) }, 'Session confirmed with '+r.student_alias+' ✅');
 }
 function completeSession(id){
   patchRequest(id, { status:'done', done_at:new Date().toISOString() }, 'Logged 0.75 service hours 🎉');
@@ -2523,7 +2606,7 @@ async function saveTaken(){
     await syncTakenClaims(taken);
     // Tutoring stays limited to classes taken: drop tutor courses no longer on the list.
     const gone=S.tutorClasses.filter(c=>!taken[c]);
-    if(gone.length) await sbFetch('/rest/v1/sl_tutor_courses?user_id=eq.'+A.user.id+'&course=in.('+gone.map(c=>'"'+c.replace(/"/g,'')+'"').join(',')+')', { method:'DELETE', headers:{ Prefer:'return=minimal' } });
+    if(gone.length) await sbFetch('/rest/v1/sl_tutor_courses?user_id=eq.'+A.user.id+'&course=in.('+gone.flatMap(courseKeys).map(c=>'"'+c.replace(/"/g,'')+'"').join(',')+')', { method:'DELETE', headers:{ Prefer:'return=minimal' } });
     await loadData();
     S.editTaken=null; toast('Saved'); render();
   }catch(e){ toast(e.message); if(btn){ btn.disabled=false; btn.textContent='Save'; } }
@@ -2901,6 +2984,7 @@ function renderOverlay(c){
   if(o.type==='retime') return renderRetime(c);
   if(o.type==='chat') return renderChat(c);
   if(o.type==='adminDay') return renderAdminDay(c);
+  if(o.type==='pickSlot') return renderPickSlot(c);
   S.overlay=null; return renderBody(c);   // an unknown overlay falls back to the page
 }
 
@@ -3327,7 +3411,7 @@ async function loadData(){
   if(!A.user) return;
   const me = A.user.id;
   if(dataLoaded) { try { await loadProfile(); } catch(e) {} }   // background refreshes pick up profile changes too
-  const [classes, tcourses, reqs, events, tutors, posts, myGrades, pendingGrades, materials, roster, presence, people, allReqs, avail] = await Promise.all([
+  let [classes, tcourses, reqs, events, tutors, posts, myGrades, pendingGrades, materials, roster, presence, people, allReqs, avail] = await Promise.all([
     sbFetch('/rest/v1/sl_student_classes?select=course&user_id=eq.'+me+'&order=created_at'),
     sbFetch('/rest/v1/sl_tutor_courses?select=course,grade,year,availability&user_id=eq.'+me+'&order=created_at'),
     sbFetch('/rest/v1/sl_requests?select=*&or=(student_id.eq.'+me+',tutor_id.eq.'+me+')&order=created_at.desc'),
@@ -3343,8 +3427,10 @@ async function loadData(){
     isAdmin() ? sbFetch('/rest/v1/sl_requests?select=*&order=created_at.desc&limit=500') : Promise.resolve([]),
     sbFetch('/rest/v1/sl_availability?select=*&order=recurring.desc,weekday,date,start_min'),
   ]);
-  S.myClasses = (classes||[]).map(r=>r.course);
-  S.tutorClasses = (tcourses||[]).map(r=>r.course);
+  const fixC = rows => (rows||[]).map(r => r && r.course ? { ...r, course: canon(r.course) } : r);
+  classes=fixC(classes); tcourses=fixC(tcourses); reqs=fixC(reqs); events=fixC(events); tutors=fixC(tutors); posts=fixC(posts); myGrades=fixC(myGrades); materials=fixC(materials); roster=fixC(roster); allReqs=fixC(allReqs);
+  S.myClasses = [...new Set((classes||[]).map(r=>r.course))];
+  S.tutorClasses = [...new Set((tcourses||[]).map(r=>r.course))];
   S.me.tutorCourses = (tcourses||[]).map(r=>{ const g=(myGrades||[]).find(x=>x.course===r.course); return { course:r.course, grade:r.grade||'', year:r.year||'', verify: g ? g.status : 'none' }; });
   S.taken = myGrades||[];   // classes I've taken, from setup; the only ones I may tutor
   S.pendingGrades = new Set((pendingGrades||[]).map(g=>g.user_id)).size;   // people waiting, not grades
