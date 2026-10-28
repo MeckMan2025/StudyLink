@@ -557,11 +557,15 @@ function renderNav(){
       ${item('home','🏠','Home Screen')}
       <hr>
       ${item('admin-grades','✅','Grade checks', S.pendingGrades ? `<span class="count">${S.pendingGrades}</span>` : '')}
+      <hr>
       ${item('admin-requests','📋','Requests', adminOpenRequests().length ? `<span class="count">${adminOpenRequests().length}</span>` : '')}
+      <hr>
       ${item('admin-team','🛡️','Members')}
       <hr>
       ${item('classes','📚','Classes')}
+      <hr>
       ${item('community','💬','Community')}
+      <hr>
       ${item('calendar','📅','Calendar')}
     </nav>` : `
     <div class="section" style="padding:12px 14px 0">I am a…</div>
