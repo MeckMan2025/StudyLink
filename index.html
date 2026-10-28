@@ -781,7 +781,7 @@ function renderAdminDay(c){
     ${sessions.length ? sessions.map(r=>`<div class="card row">
       <div class="avatar" style="background:${courseColor(r.course)}">${courseEmoji(r.course)}</div>
       <div style="min-width:0;flex:1"><div style="font-weight:800">${esc(r.student_alias||'Student')} with ${esc(r.tutor_alias||'Tutor')}</div>
-        <div class="tiny">${esc(r.course)}${r.time?' · '+esc(r.time):''}${r.location?' · '+esc(r.location):''}</div></div>
+        <div class="tiny">${esc(r.course)}${r.time?' · '+esc(r.time):''}${r.minutes?' · '+r.minutes+' min':''}${r.location?' · '+esc(r.location):''}</div></div>
       <button class="btn sm gray" onclick="adminRemoveSession('${r.id}')">Remove</button>
     </div>`).join('') : '<div class="card tiny" style="text-align:center">No sessions booked for this day.</div>'}
     ${pending.length ? `<div class="sectlabel">Waiting on an answer</div>${pending.map(r=>`<div class="card row">
@@ -1590,6 +1590,7 @@ function renderRequest(c){
       <div class="row" style="gap:10px">
         <div class="field" id="rq_dayWrap" style="flex:1;margin:0"><label>Day</label><input id="rq_day" type="date" value="${ymd(addDays(new Date(),1))}" min="${ymd(new Date())}" onchange="checkFree('${t.id}')"></div>
         <div class="field" style="flex:1;margin:0"><label>Time</label><select id="rq_time" onchange="checkFree('${t.id}')">${TIME_SLOTS.map(x=>`<option ${x===suggestTime(t)?'selected':''}>${x}</option>`).join('')}</select></div>
+        ${lengthField()}
       </div>
       <div id="rq_free" class="tiny" style="margin-top:8px"></div>
       <div class="field" style="margin-top:12px"><label>Format</label>
@@ -1597,6 +1598,7 @@ function renderRequest(c){
           <button class="on" data-v="In person">In person</button>
           <button data-v="Virtual">Virtual</button>
         </div></div>
+      ${longNoteHtml()}
       <div class="field" style="margin-bottom:0"><label>Where</label>
         <select id="rq_loc" onchange="locDetail()"></select>
         <input id="rq_locd" placeholder="Room number, or where exactly" style="margin-top:8px;display:none"></div>
@@ -1707,12 +1709,26 @@ function suggestTime(t){
   return '3:30 PM';
 }
 // Where to meet, depending on the format. Classroom and Other take a detail.
-const PLACES = { 'In person':['Library','Learning commons','Cafeteria','Classroom','Front office / counseling','Other'], 'Virtual':['Google Meet','Zoom','FaceTime','Phone call','Other'] };
+// Sessions longer than 45 minutes can't be held inside the school, so a long
+// in-person session has to pick a place off campus (or go virtual).
+const MAX_SCHOOL_MINUTES = 45;
+const SCHOOL_PLACES = ['Library','Learning commons','Cafeteria','Classroom','Front office / counseling'];
+const OFF_CAMPUS_PLACES = ['Public library','Coffee shop','A home','Community center','Other'];
+const PLACES = { 'In person':[...SCHOOL_PLACES,'Other'], 'Virtual':['Google Meet','Zoom','FaceTime','Phone call','Other'] };
+const SESSION_LENGTHS = [30,45,60,90];
+const sessionMinutes = () => Number($('rq_min')?.value||45);
+const lengthField = () => `<div class="field" style="flex:1;margin:0"><label>Length</label><select id="rq_min" onchange="fillLocations()">${SESSION_LENGTHS.map(m=>`<option value="${m}" ${m===45?'selected':''}>${m} min</option>`).join('')}</select></div>`;
 function fillLocations(){
   const fmt=document.querySelector('#rq_fmt button.on')?.dataset.v||'In person', sel=$('rq_loc'); if(!sel) return;
-  sel.innerHTML = PLACES[fmt].map(x=>`<option>${x}</option>`).join('');
+  const long = fmt==='In person' && sessionMinutes()>MAX_SCHOOL_MINUTES;
+  const keep = sel.value;
+  sel.innerHTML = (long ? OFF_CAMPUS_PLACES : PLACES[fmt]).map(x=>`<option>${x}</option>`).join('');
+  if([...sel.options].some(o=>o.value===keep)) sel.value=keep;
+  const note=$('rq_long'); if(note){ note.style.display = long ? 'block' : 'none'; }
   locDetail();
 }
+const longNoteHtml = () => `<div id="rq_long" class="tiny" style="display:none;margin:-4px 0 10px;color:#c98b34">⏱️ Sessions over ${MAX_SCHOOL_MINUTES} minutes can't be inside the school. Pick a place off campus, or go virtual.</div>`;
+function longSessionInSchool(fmt, locBase){ return fmt==='In person' && sessionMinutes()>MAX_SCHOOL_MINUTES && SCHOOL_PLACES.includes(locBase); }
 function locDetail(){
   const v=$('rq_loc')?.value||'', d=$('rq_locd'); if(!d) return;
   const need = v==='Classroom' || v==='Other';
@@ -1733,13 +1749,14 @@ async function submitRequest(tid){
   if(!many && !bothFree(tid, date, time)){ toast('One of you is in class or busy then.'); return; }
   const locBase=$('rq_loc')?.value||'', locD=($('rq_locd')?.value||'').trim();
   const location = locBase + (locD && (locBase==='Classroom'||locBase==='Other') ? ' · '+locD : '');
+  if(longSessionInSchool(fmt, locBase)){ toast('Sessions over '+MAX_SCHOOL_MINUTES+' minutes can\'t be inside the school. Pick a place off campus or go virtual.'); return; }
   const btn=$('rq_send'); if(btn){ btn.disabled=true; btn.textContent='Sending…'; }
   try{
     // Many sessions go up as one row per date in a single insert, so they
     // share a created_at — that is how the tutor's side groups them.
     await sbFetch('/rest/v1/sl_requests', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify(dates.map(d=>({
       student_id:A.user.id, tutor_id:tid, student_alias:A.profile.student_alias, tutor_alias:t.name,
-      course, topic: many ? SERIES_TOPIC : topic, note, date:d, time, format:fmt, location }))) });
+      course, topic: many ? SERIES_TOPIC : topic, note, date:d, time, minutes:sessionMinutes(), format:fmt, location }))) });
     await loadData();
     closeView(); go('tutoring');
     toast(many ? 'Asked '+t.name+' for '+dates.length+' sessions 🎉' : 'Request sent to '+t.name+' 🎉');
@@ -1844,11 +1861,13 @@ function renderSchedule(c){
         <div class="field" style="flex:1;margin:0"><label>Time</label><select id="sc_time" onchange="checkClash()">${TIME_SLOTS.map(x=>`<option ${x==='3:30 PM'?'selected':''}>${x}</option>`).join('')}</select></div>
       </div>
       <div id="sc_clash" class="tiny" style="margin-top:8px"></div>
+      <div class="row" style="gap:10px;margin-top:12px">${lengthField()}</div>
       <div class="field" style="margin-top:12px"><label>Format</label>
         <div class="seg" id="rq_fmt">
           <button class="on" data-v="In person">In person</button>
           <button data-v="Virtual">Virtual</button>
         </div></div>
+      ${longNoteHtml()}
       <div class="field"><label>Where</label>
         <select id="rq_loc" onchange="locDetail()"></select>
         <input id="rq_locd" placeholder="Room number, or where exactly" style="margin-top:8px;display:none"></div>
@@ -1879,12 +1898,13 @@ async function sendSchedule(){
   const fmt=document.querySelector('#rq_fmt button.on')?.dataset.v||'In person';
   const locBase=$('rq_loc')?.value||'', locD=($('rq_locd')?.value||'').trim();
   const location = locBase + (locD && (locBase==='Classroom'||locBase==='Other') ? ' · '+locD : '');
+  if(longSessionInSchool(fmt, locBase)){ toast('Sessions over '+MAX_SCHOOL_MINUTES+' minutes can\'t be inside the school. Pick a place off campus or go virtual.'); return; }
   const btn=$('sc_send'); btn.disabled=true; btn.textContent='Sending…';
   try{
     await sbFetch('/rest/v1/sl_requests', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({
       student_id:studentId, tutor_id:A.user.id, student_alias:alias, tutor_alias:A.profile.tutor_alias,
       course:$('sc_course').value, topic:$('sc_topic').value.trim()||'Tutoring session', note:($('sc_note').value||'').trim(),
-      date, time:$('sc_time').value, format:fmt, location, status:'offered' }) });
+      date, time:$('sc_time').value, minutes:sessionMinutes(), format:fmt, location, status:'offered' }) });
     await loadData();
     closeView(); go('tutoring');
     toast('Sent to '+alias+' — booked once they accept 📅');
