@@ -2687,7 +2687,7 @@ async function renderAdminTeam(c){
   try {
     [list, people] = await Promise.all([
       sbFetch('/rest/v1/sl_staff?select=*&order=role,added_at.desc'),
-      sbFetch('/rest/v1/sl_profiles?select=id,real_name,student_alias,role,created_at,last_seen_at'),
+      sbFetch('/rest/v1/sl_profiles?select=id,real_name,student_alias,tutor_alias,role,created_at,last_seen_at'),
     ]);
   } catch(e){ c.innerHTML = '<h2 class="title">Members</h2><div class="auth-msg err">' + esc(e.message) + '</div>'; return; }
   if(S.tab!=='admin-team') return;
@@ -2724,17 +2724,49 @@ async function renderAdminTeam(c){
       </div>` : ''}
     </div>`;
   };
-  list.forEach(s => { const p = s.user_id ? signedUp[s.user_id] : null; s.joined = p ? p.created_at : null; s.seen = p ? p.last_seen_at : null; });
+  list.forEach(s => { const p = s.user_id ? signedUp[s.user_id] : null; s.joined = p ? p.created_at : null; s.seen = p ? p.last_seen_at : null; s.tutors = !!(p && p.tutor_alias); });
   const online = list.filter(s => isOnline(s.seen)).length;
-  const students = list.filter(s => s.role==='student' && (!q || (s.real_name+' '+s.email).toLowerCase().includes(q)) && (!S.onlineOnly || isOnline(s.seen)));
-  const group = (role, title) => `
-    <div class="sectlabel">${title} (${list.filter(s=>s.role===role).length})</div>
-    ${list.filter(s=>s.role===role).map(row).join('') || '<div class="card tiny" style="text-align:center">Nobody yet.</div>'}`;
+  // Students: hundreds of them, so they are grouped by grade and folded, with
+  // chips to narrow the list and a search that opens every group.
+  const F = S.memFilter = S.memFilter || { status:'all', sort:'name' };
+  S.memOpen = S.memOpen || {};
+  const allStudents = list.filter(s => s.role==='student');
+  const matches = s => (!q || (s.real_name+' '+s.email).toLowerCase().includes(q))
+    && (F.status==='all' || (F.status==='online' && isOnline(s.seen)) || (F.status==='joined' && s.joined) || (F.status==='waiting' && !s.joined) || (F.status==='tutors' && s.tutors));
+  const sorters = { name:(a,b)=>String(a.real_name||a.email).localeCompare(String(b.real_name||b.email)), newest:(a,b)=>String(b.joined||b.added_at||'').localeCompare(String(a.joined||a.added_at||'')), seen:(a,b)=>String(b.seen||'').localeCompare(String(a.seen||'')) };
+  const students = allStudents.filter(matches).sort(sorters[F.sort]||sorters.name);
+  const chip = (key, val, label, n) => `<button class="chip ${F[key]===val?'dept':''}" style="${F[key]===val?'background:var(--blue)':''}" onclick="S.memFilter.${key}='${val}';render()">${label}${n!=null?' · '+n:''}</button>`;
+  const counts = { joined: allStudents.filter(s=>s.joined).length, waiting: allStudents.filter(s=>!s.joined).length, online: allStudents.filter(s=>isOnline(s.seen)).length, tutors: allStudents.filter(s=>s.tutors).length };
+  const PAGE = 25;
+  const gradeGroup = g => {
+    const key = g==null ? 'none' : String(g);
+    const rows = students.filter(s => (s.grade_level||null)===g);
+    if(!rows.length) return '';
+    const open = !!q || F.status!=='all' || !!S.memOpen[key];
+    const shown = S.memMore && S.memMore[key] ? rows : rows.slice(0, PAGE);
+    return `<div class="card" style="padding:0;overflow:hidden;margin-bottom:10px">
+      <button class="row" style="width:100%;border:none;background:none;font:inherit;color:inherit;padding:12px 14px;cursor:pointer;text-align:left" onclick="S.memOpen['${key}']=!S.memOpen['${key}'];render()">
+        <span class="chev ${open?'down':''}" style="margin-right:4px">▶</span>
+        <b style="flex:1">${g==null ? 'No grade set' : 'Grade '+g}</b>
+        <span class="tiny">${rows.length} student${rows.length===1?'':'s'} · ${rows.filter(s=>isOnline(s.seen)).length} online · ${rows.filter(s=>!s.joined).length} not signed up</span>
+      </button>
+      ${open ? `<div style="padding:0 10px 10px">${shown.map(row).join('')}
+        ${shown.length<rows.length ? `<button class="btn gray sm" style="width:100%" onclick="S.memMore=S.memMore||{};S.memMore['${key}']=true;render()">Show all ${rows.length}</button>` : ''}</div>` : ''}
+    </div>`;
+  };
+  const group = (role, title) => {
+    const rows = list.filter(s=>s.role===role), key='role-'+role, open = !!S.memOpen[key] || rows.length<=6;
+    return `<div class="card" style="padding:0;overflow:hidden;margin-bottom:10px">
+      <button class="row" style="width:100%;border:none;background:none;font:inherit;color:inherit;padding:12px 14px;cursor:pointer;text-align:left" onclick="S.memOpen['${key}']=!S.memOpen['${key}'];render()">
+        <span class="chev ${open?'down':''}" style="margin-right:4px">▶</span><b style="flex:1">${title}</b><span class="tiny">${rows.length}</span></button>
+      ${open ? `<div style="padding:0 10px 10px">${rows.map(row).join('') || '<div class="tiny" style="text-align:center;padding:8px">Nobody yet.</div>'}</div>` : ''}
+    </div>`;
+  };
   c.innerHTML = `
     <button class="back" onclick="go(isAdmin()?'home':'admin')">‹ ${isAdmin() ? 'Home' : A.profile.role==='board' ? 'Board' : 'Administration'}</button>
     <div class="row" style="align-items:center">
       <div style="flex:1"><h2 class="title" style="margin-bottom:0">Members</h2><div class="lead" style="margin-bottom:0">${list.length} member${list.length===1?'':'s'} · <span class="seen on">● ${online} online</span></div></div>
-      <button class="btn sm ${S.membersEdit?'':'gray'}" style="width:auto;padding:10px 14px;font-size:16px;line-height:1;margin-right:6px" title="${S.membersEdit?'Done editing':'Edit members'}" onclick="S.membersEdit=!S.membersEdit;render()">${S.membersEdit?'Done':'✎'}</button>
+      <button class="btn sm ${S.membersEdit?'':'gray'}" style="width:auto;padding:10px 14px;font-size:16px;line-height:1;margin-right:6px" title="${S.membersEdit?'Done editing':'Edit members'}" onclick="S.membersEdit=!S.membersEdit;render()">${S.membersEdit?'✓':'✎'}</button>
       <button class="btn sm ${S.addMemberOpen?'gray':''}" style="width:auto;padding:10px 14px;font-size:18px;line-height:1" title="Add a member" onclick="S.addMemberOpen=!S.addMemberOpen;render()">${S.addMemberOpen?'✕':'＋'}</button>
     </div>
     ${S.addMemberOpen ? `<div class="card" style="margin-top:12px;border-color:var(--blue)">
@@ -2747,12 +2779,18 @@ async function renderAdminTeam(c){
         <button class="btn sm" id="mb_add" onclick="addMember()">Add</button>
       </div>
     </div>` : ''}
+    <div class="sectlabel">Staff</div>
     ${group('board', 'Board')}
     ${group('admin', 'Administrators')}
-    <div class="sectlabel">Students (${list.filter(s=>s.role==='student').length})</div>
-    <div class="row" style="gap:8px;margin-bottom:10px"><div class="search" style="flex:1;margin:0"><span class="mag">🔍</span><input placeholder="Search students…" value="${esc(S.memberQuery||'')}" oninput="S.memberQuery=this.value; filterMembers()"></div>
-      <button class="btn ghost sm" style="${S.onlineOnly?'background:#e4f6ec;border-color:#bfe8d0;color:#2e9b6a':''}" onclick="S.onlineOnly=!S.onlineOnly;render()">● Online only</button></div>
-    <div id="memberlist">${students.map(row).join('') || '<div class="card tiny" style="text-align:center">No students yet. Press ＋ to add the first one.</div>'}</div>`;
+    <div class="sectlabel">Students (${allStudents.length})</div>
+    <div class="search" style="margin:0 0 8px"><span class="mag">🔍</span><input placeholder="Search by name or email…" value="${esc(S.memberQuery||'')}" oninput="S.memberQuery=this.value; render()"></div>
+    <div class="chips" style="margin-bottom:6px">
+      ${chip('status','all','Everyone', allStudents.length)}${chip('status','online','● Online', counts.online)}${chip('status','joined','Signed up', counts.joined)}${chip('status','waiting','Not signed up', counts.waiting)}${chip('status','tutors','Tutors', counts.tutors)}
+    </div>
+    <div class="chips" style="margin-bottom:12px">
+      <span class="tiny" style="align-self:center;margin-right:4px">Sort</span>${chip('sort','name','A–Z')}${chip('sort','newest','Newest')}${chip('sort','seen','Last seen')}
+    </div>
+    <div id="memberlist">${students.length ? [12,11,10,9,8,7,6,null].map(gradeGroup).join('') : `<div class="card tiny" style="text-align:center">${allStudents.length ? 'Nobody matches.' : 'No students yet. Press ＋ to add the first one.'}</div>`}</div>`;
   A.memberRows = list;
   window.scrollTo(0, keepY);
 }
