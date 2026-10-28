@@ -67,6 +67,18 @@
   .head .menu{border:none; background:#fff; border-radius:10px; width:38px; height:38px; font-size:18px; cursor:pointer; box-shadow:0 2px 8px rgba(60,50,110,.12)}
   .head h1{font-size:17px; margin:0; font-weight:800}
   .head .right{margin-left:auto; font-size:12px; color:var(--muted); font-weight:700; text-align:right}
+  .bell{position:relative; border:none; background:#fff; border-radius:10px; width:38px; height:38px; font-size:18px; cursor:pointer; box-shadow:0 2px 8px rgba(60,50,110,.12); flex:0 0 auto}
+  .bell .n{position:absolute; top:-5px; right:-5px; min-width:18px; height:18px; padding:0 5px; border-radius:9px; background:var(--pink-d); color:#fff; font-size:11px; font-weight:800; display:flex; align-items:center; justify-content:center}
+  .nscrim{position:fixed; inset:0; z-index:29}
+  .notifs{position:absolute; right:12px; top:58px; width:min(380px, calc(100vw - 24px)); background:#fff; border:1px solid var(--line); border-radius:16px; box-shadow:0 12px 36px rgba(60,50,110,.18); z-index:30; max-height:70vh; overflow:auto}
+  .notifs .nh{display:flex; align-items:center; gap:8px; padding:12px 14px; border-bottom:1px solid var(--line); font-weight:800}
+  .notifs .nh button{margin-left:auto; border:none; background:none; color:var(--blue-d); font:inherit; font-size:12px; font-weight:800; cursor:pointer}
+  .nrow{display:flex; gap:10px; align-items:flex-start; width:100%; text-align:left; padding:11px 14px; border:none; border-bottom:1px solid var(--line); background:#fff; font:inherit; color:var(--ink); cursor:pointer}
+  .nrow:last-child{border-bottom:none} .nrow:hover{background:#faf8ff}
+  .nrow.unread{background:#f3f6ff} .nrow .ic{font-size:18px; flex:0 0 auto} .nrow .t{font-weight:700; font-size:13.5px} .nrow .s{font-size:12px; color:var(--muted); margin-top:2px}
+  .nrow .dot{width:8px; height:8px; border-radius:50%; background:var(--pink-d); margin:6px 0 0 auto; flex:0 0 auto}
+  .head{position:sticky}
+  @media (max-width:640px){ .head .right{display:none} .head h1{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap} }
   .scroll{flex:1; width:100%; max-width:980px; margin:0 auto; padding:18px 18px 60px}
 
   @media (min-width:900px){
@@ -544,8 +556,63 @@ function renderHead(){
   $('head').innerHTML = `
     <button class="menu" onclick="toggleSide(true)" aria-label="Open navigation">☰</button>
     <h1>${esc(title)}</h1>
-    <div class="right">${esc(currentAlias())} ${roleBadge(A.profile.role)}<br><span class="seen on">● Online</span>${hasGrade() ? ' · Grade '+S.me.grade : ''}</div>`;
+    <div class="right">${esc(currentAlias())} ${roleBadge(A.profile.role)}<br><span class="seen on">● Online</span>${hasGrade() ? ' · Grade '+S.me.grade : ''}</div>
+    ${bellHtml()}`;
 }
+
+// ---- Notifications: what changed for you, built from what is already loaded ----
+// Requests moving, offers, replies to your posts, chat messages, grade checks.
+// Nothing new is stored on the server; "read" lives on this device.
+const NOTIF_LS = 'sc-notif-seen';
+function notifSeen(){ try { return JSON.parse(localStorage.getItem(NOTIF_LS)||'{}'); } catch { return {}; } }
+function notifMarkAll(items){ const seen=notifSeen(); const cut=Date.now()-30*86400000; Object.keys(seen).forEach(k=>{ if(seen[k]<cut) delete seen[k]; }); items.forEach(n=>{ seen[n.key]=Date.now(); }); try { localStorage.setItem(NOTIF_LS, JSON.stringify(seen)); } catch {} }
+function notifItems(){
+  const me=A.user ? A.user.id : null, out=[], cut=new Date(Date.now()-14*86400000).toISOString();
+  const when = r => r.done_at || r.created_at || '';
+  // Requests I made
+  (S.myRequests||[]).forEach(r=>{
+    if(r.status==='offered') out.push({ key:'req:'+r.id+':offered', at:when(r), ic:'🤝', t:(r.tutor_alias||'A tutor')+' offered to help with '+r.course, s:fmtDate(r.date)+(r.time?' · '+r.time:''), go:()=>go('tutoring') });
+    if(r.status==='accepted') out.push({ key:'req:'+r.id+':accepted', at:when(r), ic:'✅', t:'Session confirmed with '+(r.tutor_alias||'your tutor'), s:r.course+' · '+fmtDate(r.date)+(r.time?' · '+r.time:''), go:()=>go('tutoring') });
+    if(r.status==='declined') out.push({ key:'req:'+r.id+':declined', at:when(r), ic:'↩️', t:(r.tutor_alias||'The tutor')+' can\'t do '+r.course+' then', s:'Try another time or tutor', go:()=>go('tutoring') });
+    if(r.status==='cancelled') out.push({ key:'req:'+r.id+':cancelled', at:when(r), ic:'✕', t:r.course+' session cancelled', s:fmtDate(r.date), go:()=>go('tutoring') });
+  });
+  // Requests to me
+  (S.incoming||[]).forEach(r=>{
+    if(r.status==='pending') out.push({ key:'req:'+r.id+':pending', at:when(r), ic:'📬', t:(r.student_alias||'A student')+' asked for '+r.course, s:fmtDate(r.date)+' · '+(splitOptions(r.time).length>1 ? splitOptions(r.time).length+' times to pick from' : (r.time||'')), go:()=>go('tutoring') });
+    if(r.status==='accepted') out.push({ key:'req:'+r.id+':accepted', at:when(r), ic:'✅', t:(r.student_alias||'A student')+' confirmed '+r.course, s:fmtDate(r.date)+(r.time?' · '+r.time:''), go:()=>go('tutoring') });
+    if(r.status==='cancelled') out.push({ key:'req:'+r.id+':cancelled', at:when(r), ic:'✕', t:r.course+' with '+(r.student_alias||'a student')+' cancelled', s:fmtDate(r.date), go:()=>go('tutoring') });
+  });
+  // Replies to my posts
+  const mine=new Set((S.posts||[]).filter(p=>p.author_id===me).map(p=>p.id));
+  (S.posts||[]).filter(p=>p.parent_id && mine.has(p.parent_id) && p.author_id!==me && p.created_at>cut)
+    .forEach(p=>out.push({ key:'reply:'+p.id, at:p.created_at, ic:'💬', t:(p.author_alias||'Someone')+' replied in '+p.course, s:(p.body||'').slice(0,80), go:()=>openView({type:'board',course:p.course}) }));
+  // Chat messages to me
+  (S.inbox||[]).filter(m=>m.sender_id!==me && m.created_at>cut).forEach(m=>{ const r=findReq(m.request_id); if(!r) return;
+    out.push({ key:'msg:'+m.id, at:m.created_at, ic:'✉️', t:'Message from '+otherSide(r).alias, s:(m.body||'').slice(0,80), go:()=>openView({type:'chat', id:r.id}) }); });
+  // My grade checks
+  (S.taken||[]).forEach(g=>{
+    if(g.status==='verified') out.push({ key:'grade:'+g.id+':verified', at:g.reviewed_at||g.created_at||'', ic:'🎓', t:g.course+' verified — you can tutor it', s:'Grade '+(g.grade||''), go:()=>go('profile') });
+    if(g.status==='rejected') out.push({ key:'grade:'+g.id+':rejected', at:g.reviewed_at||g.created_at||'', ic:'⚠️', t:g.course+' grade wasn\'t verified', s:'Check it on your profile', go:()=>go('profile') });
+  });
+  // Staff: people waiting on a grade check
+  if(isStaff() && S.pendingGrades) out.push({ key:'admin:pending:'+S.pendingGrades, at:new Date().toISOString(), ic:'✅', t:S.pendingGrades+' '+(S.pendingGrades===1?'person':'people')+' waiting on a grade check', s:'Tap to review', go:()=>go('admin-grades') });
+  const seen=notifSeen();
+  out.forEach(n=>{ n.unread=!seen[n.key]; });
+  return out.sort((a,b)=>String(b.at).localeCompare(String(a.at))).slice(0,40);
+}
+// "just now", "12 min ago", "yesterday"
+function agoLabel(ts){ const d=(Date.now()-new Date(ts).getTime())/60000; if(!(d>=0)) return ''; if(d<1) return 'just now'; if(d<60) return Math.round(d)+' min ago'; if(d<36*60) return Math.round(d/60)+' h ago'; if(d<48*60) return 'yesterday'; return Math.round(d/1440)+' days ago'; }
+function bellHtml(){
+  const items=notifItems(), unread=items.filter(n=>n.unread).length;
+  return `<button class="bell" onclick="toggleNotifs()" aria-label="Notifications">🔔${unread?`<span class="n">${unread>9?'9+':unread}</span>`:''}</button>
+    ${S.notifOpen ? `<div class="nscrim" onclick="toggleNotifs(false)"></div><div class="notifs">
+      <div class="nh">Notifications ${unread?`<span class="count">${unread}</span>`:''}<button onclick="notifMarkAll(notifItems());render()">Mark all read</button></div>
+      ${items.length ? items.map((n,i)=>`<button class="nrow ${n.unread?'unread':''}" onclick="notifOpen(${i})"><span class="ic">${n.ic}</span><div style="min-width:0;flex:1"><div class="t">${esc(n.t)}</div><div class="s">${esc(n.s)}${n.at?' · '+esc(agoLabel(n.at)):''}</div></div>${n.unread?'<span class="dot"></span>':''}</button>`).join('')
+        : '<div class="tiny" style="padding:18px;text-align:center">Nothing yet. Requests, replies and messages show up here.</div>'}
+    </div>` : ''}`;
+}
+function toggleNotifs(open){ S.notifOpen = open===undefined ? !S.notifOpen : open; renderHead(); }
+function notifOpen(i){ const n=notifItems()[i]; if(!n) return; const seen=notifSeen(); seen[n.key]=Date.now(); try { localStorage.setItem(NOTIF_LS, JSON.stringify(seen)); } catch {} S.notifOpen=false; n.go(); }
 
 function incomingCount(){
   return S.incoming.filter(r=>r.status==='pending').length;
@@ -3411,20 +3478,21 @@ async function loadData(){
   if(!A.user) return;
   const me = A.user.id;
   if(dataLoaded) { try { await loadProfile(); } catch(e) {} }   // background refreshes pick up profile changes too
-  let [classes, tcourses, reqs, events, tutors, posts, myGrades, pendingGrades, materials, roster, presence, people, allReqs, avail] = await Promise.all([
+  let [classes, tcourses, reqs, events, tutors, posts, myGrades, pendingGrades, materials, roster, presence, people, allReqs, inbox, avail] = await Promise.all([
     sbFetch('/rest/v1/sl_student_classes?select=course&user_id=eq.'+me+'&order=created_at'),
     sbFetch('/rest/v1/sl_tutor_courses?select=course,grade,year,availability&user_id=eq.'+me+'&order=created_at'),
     sbFetch('/rest/v1/sl_requests?select=*&or=(student_id.eq.'+me+',tutor_id.eq.'+me+')&order=created_at.desc'),
     sbFetch('/rest/v1/sl_events?select=*&user_id=eq.'+me+'&order=date'),
     sbFetch('/rest/v1/sl_tutors?select=*'),
     sbFetch('/rest/v1/sl_posts?select=*&order=created_at.desc&limit=500'),
-    sbFetch('/rest/v1/sl_grades?select=id,course,grade,year,status&user_id=eq.'+me),
+    sbFetch('/rest/v1/sl_grades?select=id,course,grade,year,status,reviewed_at&user_id=eq.'+me),
     isStaff() ? sbFetch('/rest/v1/sl_grades?select=user_id&status=eq.pending') : Promise.resolve([]),
     sbFetch('/rest/v1/sl_materials?select=*&order=created_at.desc&limit=500'),
     sbFetch('/rest/v1/sl_class_students?select=*'),
     sbFetch('/rest/v1/sl_request_presence?select=*'),
     sbFetch('/rest/v1/sl_people?select=*'),
     isAdmin() ? sbFetch('/rest/v1/sl_requests?select=*&order=created_at.desc&limit=500') : Promise.resolve([]),
+    sbFetch('/rest/v1/sl_messages?select=id,request_id,sender_id,body,created_at&sender_id=neq.'+me+'&order=created_at.desc&limit=60').catch(()=>[]),
     sbFetch('/rest/v1/sl_availability?select=*&order=recurring.desc,weekday,date,start_min'),
   ]);
   const fixC = rows => (rows||[]).map(r => r && r.course ? { ...r, course: canon(r.course) } : r);
@@ -3446,6 +3514,7 @@ async function loadData(){
   S.people = (people||[]).filter(x => x.user_id !== me);
   S.allRequests = allReqs||[];
   S.availability = avail||[];
+  S.inbox = inbox||[];
   S.tutors = buildTutors(tutors||[], me);
   S.helped = S.incoming.filter(r=>r.status==='done').length;
   S.hours = Math.round(S.helped*0.75*100)/100;
