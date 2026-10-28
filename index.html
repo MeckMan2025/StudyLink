@@ -664,7 +664,7 @@ function renderNav(){
         <span class="ic">📚</span>Classes<span class="chev ${S.classesOpen?'down':''}">▶</span>
       </button>
       ${S.classesOpen && S.mode==='tutor' ? `<div class="sub">
-        ${DEPTS.filter(d=>d.courses.some(x=>S.tutorClasses.includes(x))).map(d=>`
+        ${DEPTS.filter(d=>d.courses.some(x=>S.tutorClasses.includes(x) && S.roster.some(r=>r.course===x))).map(d=>`
           <button class="nitem ${S.tab==='classes' && !ov && S.tutorDept===d.name ? 'on' : ''}" onclick="S.tutorDept='${esc(d.name)}'; go('classes')">
             <span class="dot" style="background:${d.color}"></span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d.emoji} ${esc(d.name)}</span>
           </button>`).join('')}
@@ -1224,17 +1224,20 @@ function renderClasses(c){
     return;
   }
   if(S.mode==='tutor'){
-    const mine=S.tutorClasses;
+    // Only the classes somebody is actually taking: an empty class is noise.
+    const mine=S.tutorClasses.filter(x=>S.roster.some(r=>r.course===x));
+    const quiet=S.tutorClasses.length-mine.length;
     const depts=DEPTS.filter(d=>d.courses.some(x=>mine.includes(x)));
     const sel=depts.find(d=>d.name===S.tutorDept) || null;
     c.innerHTML = `
       <h2 class="title">Classes I tutor</h2>
-      <div class="lead">${mine.length ? 'By subject. Open one for its classes, then a class for the students taking it.' : 'Add the classes you tutor and they show up here by subject.'}</div>
+      <div class="lead">${mine.length ? 'By subject. Open one for its classes, then a class for the students taking it.' : S.tutorClasses.length ? 'None of your classes has a student in it yet. They show up here as soon as someone adds one.' : 'Add the classes you tutor and they show up here by subject.'}</div>
       ${depts.length ? `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:4px 0 14px">${depts.map(d=>{ const n=d.courses.filter(x=>mine.includes(x)).length, students=d.courses.filter(x=>mine.includes(x)).reduce((a,x)=>a+S.roster.filter(r=>r.course===x).length,0);
         return `<button class="card" style="margin:0;text-align:left;cursor:pointer;font:inherit;color:inherit;border:2px solid ${sel===d?d.color:'transparent'};${sel===d?'background:#fff':''}" onclick="S.tutorDept=${sel===d?'null':`'${esc(d.name)}'`};render()">
           <div style="font-size:22px">${d.emoji}</div><div style="font-weight:800;font-size:15px;margin-top:4px">${esc(d.name)}</div>
           <div class="tiny">${n} class${n===1?'':'es'} · ${students} student${students===1?'':'s'}</div></button>`; }).join('')}</div>` : ''}
       ${sel ? `<div class="sectlabel">${sel.emoji} ${esc(sel.name)}</div>${classGrid(true, false, sel.courses.filter(x=>mine.includes(x)))}` : ''}
+      ${quiet && mine.length ? `<div class="tiny" style="margin:4px 2px 10px">${quiet} more class${quiet===1?'':'es'} you tutor ${quiet===1?'has':'have'} no students yet, so ${quiet===1?'it is':'they are'} hidden here.</div>` : ''}
       <div style="margin-top:${sel?'14px':'0'}"><button class="card addcard" style="width:100%;min-height:56px" onclick="S.tab='classes'; openView({type:'addClasses'})">＋ Add a class I tutor</button></div>`;
     return;
   }
