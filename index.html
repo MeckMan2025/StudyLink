@@ -1140,36 +1140,35 @@ function renderClasses(c){
   `;
 }
 function renderAddClasses(c){
+  // A button per subject, then that subject's classes. Searching looks across
+  // every subject at once.
+  const mine = S[classKey()];
+  const q = (S.addQuery||'').toLowerCase();
+  const sel = q ? null : (S.addDept || null);
+  const chipFor = (d, course) => { const on=mine.includes(course);
+    return `<button class="chip ${on?'dept':''}" style="${on?'background:'+d.color:''}" onclick="toggleClass('${esc(course)}')">${on?'✓ ':''}${esc(course)}</button>`; };
+  const deptBtn = d => { const n=d.courses.filter(x=>mine.includes(x)).length;
+    return `<button class="card" style="margin:0;text-align:left;cursor:pointer;font:inherit;color:inherit;border:2px solid ${sel===d.name?d.color:'transparent'};${sel===d.name?'background:#fff':''}" onclick="S.addDept=${sel===d.name?'null':`'${esc(d.name)}'`};S.addQuery='';render()">
+      <div style="font-size:22px">${d.emoji}</div><div style="font-weight:800;font-size:15px;margin-top:4px">${esc(d.name)}</div>
+      <div class="tiny">${n ? `<b style="color:${d.color}">${n} picked</b> · ` : ''}${d.courses.length} class${d.courses.length===1?'':'es'}</div></button>`; };
+  const dept = DEPTS.find(d=>d.name===sel);
+  const hits = q ? DEPTS.map(d=>({ d, courses:d.courses.filter(x=>x.toLowerCase().includes(q)) })).filter(x=>x.courses.length) : [];
   c.innerHTML = `
     <button class="back" onclick="closeView()">‹ Back</button>
     <h2 class="title">Add classes</h2>
-    <div class="lead">${S.mode==='tutor' ? 'Tap the classes you can tutor.' : 'Tap the classes you are taking.'} They show up in your sidebar.</div>
-    <div class="search"><span class="mag">🔍</span><input id="acq" placeholder="Search classes…" oninput="filterAdd(this.value)"></div>
-    <div id="addlist">
-    ${DEPTS.map(d=>`<div class="adddept"><div class="sectlabel">${d.emoji} ${d.name}</div><div class="chips">
-      ${d.courses.map(course=>{
-        const on=S[classKey()].includes(course);
-        return `<button class="chip ${on?'dept':''}" data-name="${esc(course.toLowerCase())}" style="${on?'background:'+d.color:''}" onclick="toggleClass('${esc(course)}')">${on?'✓ ':''}${esc(course)}</button>`;
-      }).join('')}
-    </div></div>`).join('')}
-    </div>
-    <div style="margin-top:20px"><button class="btn" onclick="closeView()">Done · ${S[classKey()].length} class${S[classKey()].length===1?'':'es'}</button></div>
+    <div class="lead">${S.mode==='tutor' ? 'Pick a subject, then tap the classes you can tutor.' : 'Pick a subject, then tap the classes you are taking.'} They show up in your sidebar.</div>
+    <div class="search"><span class="mag">🔍</span><input id="acq" placeholder="Search every class…" value="${esc(S.addQuery||'')}" oninput="S.addQuery=this.value; render(); const i=document.getElementById('acq'); if(i){ i.focus(); i.setSelectionRange(i.value.length,i.value.length); }"></div>
+    ${q ? (hits.length ? hits.map(({d,courses})=>`<div class="sectlabel">${d.emoji} ${esc(d.name)}</div><div class="chips">${courses.map(x=>chipFor(d,x)).join('')}</div>`).join('') : '<div class="card tiny" style="text-align:center">No class matches.</div>')
+        : `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:4px 0 14px">${DEPTS.map(deptBtn).join('')}</div>
+          ${dept ? `<div class="sectlabel">${dept.emoji} ${esc(dept.name)}</div><div class="chips">${dept.courses.map(x=>chipFor(dept,x)).join('')}</div>`
+                 : `<div class="card tiny" style="text-align:center">Tap a subject to see its classes.</div>`}`}
+    <div style="margin-top:20px"><button class="btn" onclick="closeView()">Done · ${mine.length} class${mine.length===1?'':'es'}</button></div>
   `;
 }
-function filterAdd(q){
-  q=q.toLowerCase();
-  document.querySelectorAll('#addlist .adddept').forEach(dep=>{
-    let any=false;
-    dep.querySelectorAll('.chip').forEach(ch=>{ const hit=ch.dataset.name.includes(q); ch.hidden=!hit; any=any||hit; });
-    dep.hidden=!any;
-  });
-}
 function toggleClass(course){
-  const q=$('acq')?.value||'';
   const key=classKey(), had=S[key].includes(course);
   S[key] = had ? S[key].filter(x=>x!==course) : [...S[key], course];
   render();
-  if(q){ $('acq').value=q; filterAdd(q); }
   saveClass(course, !had);
 }
 // The class lists are written straight through; a failure reloads from the server.
