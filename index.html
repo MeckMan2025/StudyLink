@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>SilverCircle — Peer Tutoring</title>
+<link rel="icon" type="image/png" href="img/favicon.png">
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+<meta name="theme-color" content="#0b2375">
 <style>
   :root{
     --bg:#eef2fb; --card:#ffffff; --ink:#2f3350; --muted:#8b8fa8; --line:#eceaf5;
@@ -29,7 +32,7 @@
   .scrim{position:fixed; inset:0; background:rgba(0,0,0,.3); z-index:30; display:none}
   .app.open .scrim{display:block}
   .side .shead{display:flex; align-items:center; gap:9px; padding:16px; border-bottom:1px solid var(--line)}
-  .side .shead .logo{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--blue),var(--purple));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:16px}
+  .side .shead .logo{width:30px;height:30px;border-radius:9px;background:#0a2374 url(img/logo-icon.png) center/cover no-repeat;flex:0 0 auto}
   .side .shead b{font-size:17px; font-weight:800}
   .side .shead{position:relative}
   .side .shead .dots{margin-left:auto; border:none; background:none; font-size:20px; font-weight:900; color:var(--muted); cursor:pointer; width:32px; height:32px; border-radius:8px}
@@ -160,7 +163,8 @@
   .auth-wrap{min-height:100vh; display:flex; align-items:center; justify-content:center; padding:28px 16px;
     background:radial-gradient(900px 520px at 15% -10%, #dde8fd 0%, transparent 60%), radial-gradient(800px 520px at 100% 110%, #fbe3ee 0%, transparent 60%), var(--bg)}
   .auth-card{width:100%; max-width:400px; background:#fff; border:1px solid var(--line); border-radius:22px; padding:28px 24px 22px; box-shadow:0 22px 60px rgba(60,50,110,.14)}
-  .auth-logo{width:58px; height:58px; border-radius:17px; background:linear-gradient(135deg,var(--blue),var(--purple)); display:flex; align-items:center; justify-content:center; color:#fff; font-weight:900; font-size:28px; margin:0 auto 12px; box-shadow:0 10px 22px rgba(120,100,220,.28)}
+  .auth-logo{width:58px; height:58px; border-radius:17px; background:#0a2374 url(img/logo-icon.png) center/cover no-repeat; margin:0 auto 12px; box-shadow:0 10px 22px rgba(11,35,117,.28)}
+  .auth-wordmark{display:block; width:min(260px, 80%); margin:0 auto 14px; border-radius:16px; box-shadow:0 10px 22px rgba(11,35,117,.25)}
   .auth-card h2{margin:0; text-align:center; font-size:24px; font-weight:800; letter-spacing:.2px}
   .auth-card .lead{text-align:center; margin:4px 0 18px}
   .auth-card .field:last-child{margin-bottom:0}
@@ -625,7 +629,7 @@ function renderNav(){
   const inc = incomingCount();
   $('nav').innerHTML = `
     <div class="shead">
-      <div class="logo">S</div><b>SilverCircle</b>
+      <div class="logo" aria-label="Silver Circle"></div><b>SilverCircle</b>
       <button class="dots" onclick="toggleMenu()" aria-label="More options">⋮</button>
       <button class="x" onclick="toggleSide(false)" aria-label="Close navigation">✕</button>
       ${menuOpen ? `<div class="menuscrim" onclick="toggleMenu(false)"></div>
@@ -2535,7 +2539,7 @@ function renderSetup(c){
       ${nav(6, 'Finish', 'finishSetup(this)', false)}`;
   }
 
-  c.innerHTML = `<div class="auth-wrap"><div class="auth-card setup-card"><div class="auth-logo">S</div>${bar}${body}${A.setupMsg ? '<div class="auth-msg err">'+esc(A.setupMsg)+'</div>' : ''}</div></div>`;
+  c.innerHTML = `<div class="auth-wrap"><div class="auth-card setup-card"><div class="auth-logo" aria-label="Silver Circle"></div>${bar}${body}${A.setupMsg ? '<div class="auth-msg err">'+esc(A.setupMsg)+'</div>' : ''}</div></div>`;
   // Only a change of step jumps to the top; tapping a chip keeps your place.
   if(st.step !== S.setupShownStep){ S.setupShownStep = st.step; S._top = true; }
 }
@@ -3107,7 +3111,7 @@ function renderAuth(){
   const msg = A.authMsg ? '<div class="auth-msg err">' + esc(A.authMsg) + '</div>'
             : A.authOk ? '<div class="auth-msg ok">' + esc(A.authOk) + '</div>' : '';
   const card = inner => '<div class="auth-wrap"><div class="auth-card">' + inner + '</div></div>';
-  const logo = '<div class="auth-logo">S</div>';
+  const logo = '<img class="auth-wordmark" src="img/logo-full.png" alt="Silver Circle · Pleasant Valley">';
   const pw = (id, ph, extra) =>
     '<div class="pw"><input id="' + id + '" type="password" autocomplete="' + (extra || 'current-password') + '"' + (ph ? ' placeholder="' + ph + '"' : '') + '>' +
     '<button type="button" class="eye" onclick="togglePw(\'' + id + '\', this)">Show</button></div>';
@@ -3176,7 +3180,6 @@ function renderAuth(){
   }
 
   body.innerHTML = card(logo +
-    '<h2>SilverCircle</h2>' +
     '<div class="lead">Peer tutoring, arranged anonymously.</div>' +
     '<div class="field"><label>Alias or email</label><input id="si_user" autocomplete="username" placeholder="Student 14 — or your email, the first time" value="' + v('si_user') + '"></div>' +
     '<div class="field"><label>Password</label>' + pw('si_pass') + '</div>' + msg +
