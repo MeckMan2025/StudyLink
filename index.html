@@ -1507,6 +1507,8 @@ function renderCourseDetail(c, course){
 }
 
 // Tutee side: the tutors for this class, with the grade and format filters.
+// The one Filter button every list uses: a count of what's active, a caret.
+const filterBtn = (key, active) => `<button class="btn ghost sm" style="margin-left:auto;white-space:nowrap" onclick="S.${key}=!S.${key};render()">⚙ Filter${active?' · '+active:''} ${S[key]?'▴':'▾'}</button>`;
 function tutorsHtml(course){
   let tutors = tutorsFor(course);
   const f = S.overlay.filter || {};
@@ -1696,7 +1698,7 @@ function renderRequest(c){
       </div>
       <div class="field"><label>What do you need help with?</label><textarea id="rq_desc" rows="2" placeholder="A sentence or two…"></textarea></div>
       ${t.avail ? `<div class="tiny" style="margin:-4px 0 10px">🗓️ ${esc(t.name)} is usually free: ${esc(t.avail)}</div>` : ''}
-      <div class="field" id="rq_dayWrap" style="margin:0"><label>Day</label><input id="rq_day" type="date" value="${ymd(addDays(new Date(),1))}" min="${ymd(new Date())}" onchange="togglePick('times','__none__')"></div>
+      <div class="field" id="rq_dayWrap" style="margin:0"><label>Day</label><input id="rq_day" type="date" value="${ymd(addDays(new Date(),1))}" min="${ymd(new Date())}" onchange="pickToggle('times','__none__')"></div>
       <div id="rq_pick">${pickerHtml()}</div>
       <div id="rq_free" class="tiny" style="margin-top:8px"></div>
     </div>
@@ -1793,17 +1795,17 @@ function pickerHtml(){
   return `
     <div class="field" style="margin-top:12px"><label>When works for you? <span class="tiny" style="text-transform:none;letter-spacing:0;font-weight:600">Tick any that work, or none and the tutor picks.</span></label>
       ${SLOT_GROUPS.map(g=>`<div class="tiny" style="margin:6px 0 4px;font-weight:800">${g}${g==='After school'?' <span style="font-weight:600">· one hour, off campus</span>':''}</div>
-        <div class="chips">${SESSION_SLOTS.filter(x=>x.group===g).map(x=>{ const r=pickerFree(x.label); return chip(pick.times.has(x.label), x.label, `togglePick('times','${x.label}')`, r===null?'':r?'':' <span style="color:#c23b5e">busy</span>'); }).join('')}</div>`).join('')}
+        <div class="chips">${SESSION_SLOTS.filter(x=>x.group===g).map(x=>{ const r=pickerFree(x.label); return chip(pick.times.has(x.label), x.label, `pickToggle('times','${x.label}')`, r===null?'':r?'':' <span style="color:#c23b5e">busy</span>'); }).join('')}</div>`).join('')}
     </div>
     <div class="field" style="margin-bottom:0"><label>Where? <span class="tiny" style="text-transform:none;letter-spacing:0;font-weight:600">${chosen.length ? 'Tick any.' : 'Pick a time first, or leave it to the tutor.'}</span></label>
-      <div class="chips">${places.map(pl=>chip(pick.places.has(pl), pl, `togglePick('places','${pl}')`)).join('')}</div>
+      <div class="chips">${places.map(pl=>chip(pick.places.has(pl), pl, `pickToggle('places','${pl}')`)).join('')}</div>
       ${pick.places.has('Other') ? `<input id="rq_locd" placeholder="Where exactly?" value="${esc(pick.otherText||'')}" oninput="pick.otherText=this.value" style="margin-top:8px">` : ''}
       ${pick.places.has(VIBRANT) ? vibrantNote() : ''}
     </div>`;
 }
 let pickerTutor=null;
 function pickerFree(label){ const day=$('rq_day')?.value; if(!day || !pickerTutor || reqMany()) return null; return bothFree(pickerTutor, day, label); }
-function togglePick(kind, v){ if(v!=='__none__'){ pick[kind].has(v) ? pick[kind].delete(v) : pick[kind].add(v); } const box=$('rq_pick'); if(box) box.innerHTML=pickerHtml(); checkFree(pickerTutor); }
+function pickToggle(kind, v){ if(v!=='__none__'){ pick[kind].has(v) ? pick[kind].delete(v) : pick[kind].add(v); } const box=$('rq_pick'); if(box) box.innerHTML=pickerHtml(); checkFree(pickerTutor); }
 function pickedTimes(){ return SESSION_SLOTS.filter(x=>pick.times.has(x.label)).map(x=>x.label); }
 function pickedPlaces(){ return [...pick.places].map(pl=> pl==='Other' && (pick.otherText||'').trim() ? 'Other · '+pick.otherText.trim() : pl); }
 const slotMinutes = label => { const x=slotByLabel(label); return x ? x.end-x.start : 45; };
@@ -2871,7 +2873,10 @@ async function renderAdminRequests(c){
     <button class="back" onclick="go(isAdmin()?'home':'admin')">‹ ${isAdmin() ? 'Home' : A.profile.role==='board' ? 'Board' : 'Administration'}</button>
     <h2 class="title">All requests</h2>
     <div class="lead">${rows.length} request${rows.length===1?'':'s'} · ${counts.done||0} completed · ${(counts.done||0)*0.75} service hours logged</div>
-    <div class="chips" style="margin-bottom:8px">${['all','pending','accepted','done','declined','cancelled'].map(k=>`<button class="chip ${f===k?'dept':''}" style="${f===k?'background:var(--blue)':''}" onclick="S.adminReqFilter='${k}';render()">${k==='all'?'All':label[k]}${k!=='all'&&counts[k]?' · '+counts[k]:''}</button>`).join('')}</div>
+    <div class="row" style="margin-bottom:8px"><div class="tiny">${f==='all' ? 'Showing everything' : 'Showing '+label[f].toLowerCase()}</div>${filterBtn('reqFilters', f==='all'?0:1)}</div>
+    ${S.reqFilters ? `<div class="card" style="margin:0 0 10px;padding:10px 12px"><div class="tiny" style="margin-bottom:6px">Status</div>
+    <div class="chips">${['all','pending','accepted','done','declined','cancelled'].map(k=>`<button class="chip ${f===k?'dept':''}" style="${f===k?'background:var(--blue)':''}" onclick="S.adminReqFilter='${k}';render()">${k==='all'?'All':label[k]}${k!=='all'&&counts[k]?' · '+counts[k]:''}</button>`).join('')}</div>
+    </div>` : ''}
     ${shown.length ? shown.map(r=>`
       <div class="card row">
         <div class="avatar" style="background:${courseColor(r.course)}">${courseEmoji(r.course)}</div>
@@ -2981,17 +2986,22 @@ async function renderAdminTeam(c){
       ${bigBtn('students','🎓','Students', allStudents.length, counts.online+' online')}
     </div>
     ${view==='board' ? staffList('board') : view==='admin' ? staffList('admin') : `
-    <div class="chips" style="margin-bottom:8px">
-      <button class="chip ${gsel==='all'?'dept':''}" style="${gsel==='all'?'background:var(--blue)':''}" onclick="S.memGrade='all';S.memMore=false;render()">All grades · ${allStudents.length}</button>
-      ${gradeTabs.map(g=>`<button class="chip ${gsel===g?'dept':''}" style="${gsel===g?'background:var(--blue)':''}" onclick="S.memGrade=${g===null?'null':g};S.memMore=false;render()">${g===null?'No grade':'Grade '+g} · ${allStudents.filter(s=>gradeOf(s)===g).length}</button>`).join('')}
+    <div class="row" style="gap:8px;margin:0 0 10px">
+      <div class="search" style="flex:1;margin:0"><span class="mag">🔍</span><input placeholder="Search by name or email…" value="${esc(S.memberQuery||'')}" oninput="S.memberQuery=this.value; S.memMore=false; render()"></div>
+      ${filterBtn('memFilters', (gsel!=='all'?1:0)+(F.status!=='all'?1:0)+(F.sort!=='name'?1:0))}
     </div>
-    <div class="search" style="margin:0 0 8px"><span class="mag">🔍</span><input placeholder="Search by name or email…" value="${esc(S.memberQuery||'')}" oninput="S.memberQuery=this.value; S.memMore=false; render()"></div>
-    <div class="chips" style="margin-bottom:6px">
-      ${chip('status','all','Everyone')}${chip('status','online','● Online', counts.online)}${chip('status','joined','Signed up', counts.joined)}${chip('status','waiting','Not signed up', counts.waiting)}${chip('status','tutors','Tutors', counts.tutors)}
-    </div>
-    <div class="chips" style="margin-bottom:12px">
-      <span class="tiny" style="align-self:center;margin-right:4px">Sort</span>${chip('sort','name','A–Z')}${chip('sort','newest','Newest')}${chip('sort','seen','Last seen')}
-    </div>
+    ${S.memFilters ? `<div class="card" style="margin:0 0 12px;padding:10px 12px">
+      <div class="tiny" style="margin-bottom:6px">Grade</div>
+      <div class="chips">
+        <button class="chip ${gsel==='all'?'dept':''}" style="${gsel==='all'?'background:var(--blue)':''}" onclick="S.memGrade='all';S.memMore=false;render()">All · ${allStudents.length}</button>
+        ${gradeTabs.map(g=>`<button class="chip ${gsel===g?'dept':''}" style="${gsel===g?'background:var(--blue)':''}" onclick="S.memGrade=${g===null?'null':g};S.memMore=false;render()">${g===null?'No grade':'Grade '+g} · ${allStudents.filter(s=>gradeOf(s)===g).length}</button>`).join('')}
+      </div>
+      <div class="tiny" style="margin:10px 0 6px">Show</div>
+      <div class="chips">${chip('status','all','Everyone')}${chip('status','online','● Online', counts.online)}${chip('status','joined','Signed up', counts.joined)}${chip('status','waiting','Not signed up', counts.waiting)}${chip('status','tutors','Tutors', counts.tutors)}</div>
+      <div class="tiny" style="margin:10px 0 6px">Sort</div>
+      <div class="chips">${chip('sort','name','A–Z')}${chip('sort','newest','Newest')}${chip('sort','seen','Last seen')}</div>
+      ${(gsel!=='all'||F.status!=='all'||F.sort!=='name') ? `<div style="margin-top:10px"><button class="btn ghost sm" onclick="S.memGrade='all';S.memFilter={status:'all',sort:'name'};S.memMore=false;render()">Clear filters</button></div>` : ''}
+    </div>` : ''}
     <div class="tiny" style="margin-bottom:8px">${shownStudents.length} student${shownStudents.length===1?'':'s'}${gsel!=='all'?' in '+(gsel===null?'no grade':'Grade '+gsel):''}${q?' matching “'+esc(q)+'”':''}</div>
     <div id="memberlist">${page.map(row).join('') || `<div class="card tiny" style="text-align:center">${allStudents.length ? 'Nobody matches.' : 'No students yet. Press ＋ to add the first one.'}</div>`}
       ${page.length<shownStudents.length ? `<button class="btn gray sm" style="width:100%" onclick="S.memMore=true;render()">Show all ${shownStudents.length}</button>` : ''}</div>`}`;
