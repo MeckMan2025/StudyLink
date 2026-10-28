@@ -712,14 +712,46 @@ function renderAdminHome(c){
       <div style="flex:1"><div style="font-weight:800">${S.pendingGrades} grade check${S.pendingGrades===1?'':'s'} waiting</div><div class="tiny">Students can't tutor a class until its grade is verified.</div></div><div style="color:var(--muted)">›</div></div>` : ''}
     ${stale.length ? `<div class="card row" style="cursor:pointer" onclick="S.adminReqFilter='pending';go('admin-requests')"><div class="avatar" style="background:var(--blue-d)">⏳</div>
       <div style="flex:1"><div style="font-weight:800">${stale.length} request${stale.length===1?'':'s'} waiting more than two days</div><div class="tiny">Nobody has answered yet. Worth a nudge.</div></div><div style="color:var(--muted)">›</div></div>` : ''}
-    <div class="sectlabel">Where do students need help?</div>
-    <div class="card" style="padding:6px 14px">${needHeatHtml()}</div>
+    <div class="sectlabel">This week</div>
+    ${weekPulseHtml()}
+    <div class="sectlabel">Coming up</div>
+    ${upcomingHtml()}
     <div class="sectlabel">Latest in Community</div>
     ${posts.length ? posts.map(p=>`<div class="card row" style="cursor:pointer" onclick="openView({type:'board',course:'${esc(p.course)}'})">
         <div class="avatar" style="background:${courseColor(p.course)}">${courseEmoji(p.course)}</div>
         <div style="min-width:0;flex:1"><div style="font-weight:800">${esc(p.course)} <span class="tiny">· ${esc(p.author_alias||'')}</span></div>
           <div class="tiny" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.body||p.text||'')}</div></div>
         <div style="color:var(--muted)">›</div></div>`).join('') : '<div class="card tiny" style="text-align:center">Nothing posted yet.</div>'}`;
+}
+
+// The school's week in four numbers: sessions held, sessions booked, new
+// requests, new posts. Each opens the tab with the detail.
+function weekPulseHtml(){
+  const since = new Date(Date.now()-7*86400000).toISOString();
+  const all = S.allRequests||[];
+  const held = all.filter(r=>r.status==='done' && (r.done_at||r.created_at)>=since).length;
+  const booked = all.filter(r=>r.status==='accepted').length;
+  const asked = all.filter(r=>r.created_at>=since).length;
+  const posted = (S.posts||[]).filter(p=>p.created_at>=since).length;
+  const tile = (tab, n, label, color) => `<div class="stat" style="cursor:pointer" onclick="go('${tab}')"><div class="n" style="color:${color}">${n}</div><div class="l">${label}</div></div>`;
+  return `<div class="statgrid" style="grid-template-columns:repeat(4,1fr)">
+    ${tile('admin-requests', held, 'sessions held', 'var(--green)')}
+    ${tile('calendar', booked, 'booked ahead', 'var(--blue-d)')}
+    ${tile('admin-requests', asked, 'new requests', 'var(--purple)')}
+    ${tile('community', posted, 'new posts', 'var(--pink-d)')}
+  </div>`;
+}
+// The next few confirmed sessions anywhere in the school.
+function upcomingHtml(){
+  const today = ymd(new Date());
+  const next = (S.allRequests||[]).filter(r=>r.status==='accepted' && r.date && r.date>=today)
+    .sort((a,b)=>a.date.localeCompare(b.date) || (a.time||'').localeCompare(b.time||'')).slice(0,5);
+  if(!next.length) return '<div class="card tiny" style="text-align:center">No sessions booked yet.</div>';
+  return next.map(r=>`<div class="card row" style="cursor:pointer" onclick="go('calendar')">
+    <div class="avatar" style="background:${courseColor(r.course)}">${courseEmoji(r.course)}</div>
+    <div style="min-width:0;flex:1"><div style="font-weight:800">${esc(r.student_alias||'Student')} with ${esc(r.tutor_alias||'Tutor')}</div>
+      <div class="tiny">${esc(r.course)} · ${dayWord(r.date)}${r.time?' · '+esc(r.time):''}${r.location?' · '+esc(r.location):''}</div></div>
+    <div style="color:var(--muted)">›</div></div>`).join('');
 }
 
 // ---- helpers shared by both dashboards ----
@@ -1015,6 +1047,9 @@ function renderClasses(c){
     c.innerHTML = `
       <h2 class="title">Classes</h2>
       <div class="lead">Every class in the program. Open one for its tutors, the students taking it, materials and its board.</div>
+      <div class="sectlabel">Where do students need help?</div>
+      <div class="card" style="padding:6px 14px">${needHeatHtml()}</div>
+      <div class="sectlabel">All classes</div>
       ${DEPTS.map(d=>`<div class="sectlabel">${d.emoji} ${d.name}</div>${d.courses.map(course=>{
         const nT=tutorsFor(course).length, nS=S.roster.filter(r=>r.course===course).length, nP=postsFor(course).length;
         return `<div class="card row" style="cursor:pointer" onclick="openClass('${esc(course)}')">
