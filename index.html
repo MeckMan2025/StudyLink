@@ -664,7 +664,13 @@ function renderNav(){
       <button class="nitem ${S.tab==='classes' && (!ov || ov.type==='addClasses') ? 'on' : ''}" onclick="navClasses()">
         <span class="ic">📚</span>Classes<span class="chev ${S.classesOpen?'down':''}">▶</span>
       </button>
-      ${S.classesOpen ? `<div class="sub">
+      ${S.classesOpen && S.mode==='tutor' ? `<div class="sub">
+        ${DEPTS.filter(d=>d.courses.some(x=>S.tutorClasses.includes(x))).map(d=>`
+          <button class="nitem ${S.tab==='classes' && !ov && S.tutorDept===d.name ? 'on' : ''}" onclick="S.tutorDept='${esc(d.name)}'; go('classes')">
+            <span class="dot" style="background:${d.color}"></span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d.emoji} ${esc(d.name)}</span>
+          </button>`).join('')}
+        <button class="nitem add" onclick="S.tab='classes'; openView({type:'addClasses'}); toggleSide(false)"><span class="ic">＋</span>Add class</button>
+      </div>` : S.classesOpen ? `<div class="sub">
         ${S[classKey()].map(course=>`
           <button class="nitem ${ov?.type==='course' && ov.course===course ? 'on' : ''}" onclick="openClass('${esc(course)}')">
             <span class="dot" style="background:${courseColor(course)}"></span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(course)}</span>
@@ -1162,9 +1168,9 @@ function sessionColumn(role){
 }
 
 // Cards for my classes, plus one to add more. removable shows the × on each.
-function classGrid(removable, withAdd){
+function classGrid(removable, withAdd, courses){
   return `<div class="grid">
-    ${S[classKey()].map(course=>{
+    ${(courses||S[classKey()]).map(course=>{
       const n=tutorsFor(course).length;
       const next=calItems().filter(e=>e.course===course && e.date>=ymd(new Date())).sort(byWhen)[0];
       return `<div class="card classcard" style="--c:${courseColor(course)}" onclick="openClass('${esc(course)}')">
@@ -1216,6 +1222,21 @@ function renderClasses(c){
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0 16px">${DEPTS.map(deptBtn).join('')}</div>
       ${dept ? `<div class="sectlabel">${dept.emoji} ${esc(dept.name)} · ${dept.courses.length} class${dept.courses.length===1?'':'es'}</div>${dept.courses.map(classRow).join('')}`
              : `<div class="sectlabel">Where do students need help?</div><div class="card" style="padding:6px 14px">${needHeatHtml()}</div>`}`;
+    return;
+  }
+  if(S.mode==='tutor'){
+    const mine=S.tutorClasses;
+    const depts=DEPTS.filter(d=>d.courses.some(x=>mine.includes(x)));
+    const sel=depts.find(d=>d.name===S.tutorDept) || null;
+    c.innerHTML = `
+      <h2 class="title">Classes I tutor</h2>
+      <div class="lead">${mine.length ? 'By subject. Open one for its classes, then a class for the students taking it.' : 'Add the classes you tutor and they show up here by subject.'}</div>
+      ${depts.length ? `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:4px 0 14px">${depts.map(d=>{ const n=d.courses.filter(x=>mine.includes(x)).length, students=d.courses.filter(x=>mine.includes(x)).reduce((a,x)=>a+S.roster.filter(r=>r.course===x).length,0);
+        return `<button class="card" style="margin:0;text-align:left;cursor:pointer;font:inherit;color:inherit;border:2px solid ${sel===d?d.color:'transparent'};${sel===d?'background:#fff':''}" onclick="S.tutorDept=${sel===d?'null':`'${esc(d.name)}'`};render()">
+          <div style="font-size:22px">${d.emoji}</div><div style="font-weight:800;font-size:15px;margin-top:4px">${esc(d.name)}</div>
+          <div class="tiny">${n} class${n===1?'':'es'} · ${students} student${students===1?'':'s'}</div></button>`; }).join('')}</div>` : ''}
+      ${sel ? `<div class="sectlabel">${sel.emoji} ${esc(sel.name)}</div>${classGrid(true, false, sel.courses.filter(x=>mine.includes(x)))}` : ''}
+      <div style="margin-top:${sel?'14px':'0'}"><button class="card addcard" style="width:100%;min-height:56px" onclick="S.tab='classes'; openView({type:'addClasses'})">＋ Add a class I tutor</button></div>`;
     return;
   }
   c.innerHTML = `
@@ -2441,8 +2462,8 @@ function setupState(){
   return S.setup;
 }
 function renderSetup(c){
-  const st=setupState(), step=st.step, total=5;
-  const bar=`<div class="progress">${[1,2,3,4,5].map(i=>`<span class="${i<=step?'on':''}"></span>`).join('')}</div>`;
+  const st=setupState(), step=st.step, total=7;
+  const bar=`<div class="progress">${[1,2,3,4,5,6,7].map(i=>`<span class="${i<=step?'on':''}"></span>`).join('')}</div>`;
   const chipsFor = (sel, fn) => DEPTS.map(dep=>`<div class="sectlabel" style="margin-top:12px">${dep.emoji} ${dep.name}</div><div class="chips">
       ${dep.courses.map(course=>`<button class="chip ${sel(course)?'dept':''}" style="${sel(course)?'background:'+dep.color:''}" onclick="${fn}('${esc(course)}')">${sel(course)?'✓ ':''}${esc(course)}</button>`).join('')}
     </div>`).join('');
@@ -2478,29 +2499,38 @@ function renderSetup(c){
       <div class="lead">Tutoring can't be booked during class, only before or after school, at lunch, or in study hall.</div>
       <div style="text-align:left">${scheduleEditorHtml(S.schedDraft)}</div>
       ${nav(3, 'Next', 'setupScheduleNext()', false)}`;
-  } else {
+  } else if(step===5){
     const taken=Object.keys(st.taken);
     const wantsTutor = st.use==='tutor' || st.use==='both';
-    const opt=(v,em,title,sub,off)=>`<button class="bigopt ${st.use===v?'on':''}" ${off?'disabled style="opacity:.55"':''} onclick="S.setup.use='${v}';render()"><span class="em">${em}</span><span><b>${title}</b><br><span class="tiny">${sub}</span></span></button>`;
+    const opt=(v,em,title,sub,off)=>`<button class="bigopt ${st.use===v?'on':''}" ${off?'disabled style="opacity:.55"':''} onclick="S.setup.use='${v}';render()"><span class="em">${em}</span><span><b>${title}</b><small>${sub}</small></span></button>`;
     body = `<h2>How will you use SilverCircle?</h2>
       <div class="lead">You can change this any time.</div>
       ${opt('help','📖','Get help','Find tutors for the classes you are taking.')}
       ${opt('tutor','🎓','Help others','Tutor the classes you have taken and earn service hours.', !taken.length)}
       ${opt('both','🤝','Both','Get help in some classes, tutor in others.', !taken.length)}
       ${!taken.length ? `<div class="tiny" style="margin:4px 2px 0">Tutoring needs at least one class you have taken — go back a step to add some.</div>` : ''}
-      ${wantsTutor && taken.length ? `
-        <div class="sectlabel" style="margin-top:16px">Which of these will you tutor?</div>
-        <div class="chips">${taken.map(course=>`<button class="chip ${st.tutorPick.includes(course)?'dept':''}" style="${st.tutorPick.includes(course)?'background:'+courseColor(course):''}" onclick="setupTogglePick('${esc(course)}')">${esc(course)} · ${esc(st.taken[course].grade)}</button>`).join('')}</div>
+      ${wantsTutor && taken.length ? nav(hasGrade()?4:3, 'Next', 'S.setup.step=6;render()', false) : nav(hasGrade()?4:3, 'Finish', 'finishSetup(this)', false)}`;
+  } else if(step===6){
+    const taken=Object.keys(st.taken);
+    body = `<h2>Which of these will you tutor?</h2>
+      <div class="lead">The classes you have taken. Tap the ones you are happy to help with.</div>
+      <div class="chips" style="justify-content:center">${taken.map(course=>`<button class="chip ${st.tutorPick.includes(course)?'dept':''}" style="${st.tutorPick.includes(course)?'background:'+courseColor(course):''}" onclick="setupTogglePick('${esc(course)}')">${st.tutorPick.includes(course)?'✓ ':''}${esc(course)}</button>`).join('')}</div>
+      ${nav(5, st.tutorPick.length ? 'Next · '+st.tutorPick.length+' class'+(st.tutorPick.length===1?'':'es') : 'Pick at least one', 'S.setup.step=7;render()', !st.tutorPick.length)}`;
+  } else {
+    body = `<h2>When can you tutor?</h2>
+      <div class="lead">Students see this when they look for a tutor. You can change it any time.</div>
+      <div style="text-align:left">
         <div class="sectlabel">Which days</div>
-        <div class="chips">${AVAIL_DAYS.map(x=>`<button class="chip ${st.days.includes(x)?'dept':''}" style="${st.days.includes(x)?'background:var(--blue-d)':''}" onclick="setupPick('days','${x}')">${x}</button>`).join('')}</div>
+        <div class="chips">${AVAIL_DAYS.map(x=>`<button class="chip ${st.days.includes(x)?'dept':''}" style="${st.days.includes(x)?'background:var(--blue-d)':''}" onclick="setupPick('days','${x}')">${st.days.includes(x)?'✓ ':''}${x}</button>`).join('')}</div>
         <div class="sectlabel">Which times</div>
-        <div class="chips">${AVAIL_TIMES.map(x=>`<button class="chip ${st.times.includes(x)?'dept':''}" style="${st.times.includes(x)?'background:var(--purple)':''}" onclick="setupPick('times','${x}')">${x}</button>`).join('')}</div>
+        <div class="chips">${AVAIL_TIMES.map(x=>`<button class="chip ${st.times.includes(x)?'dept':''}" style="${st.times.includes(x)?'background:var(--purple)':''}" onclick="setupPick('times','${x}')">${st.times.includes(x)?'✓ ':''}${x}</button>`).join('')}</div>
         <div class="sectlabel">Format</div>
         <div class="seg">${['In person','Virtual','In person + Virtual'].map(f=>`<button class="${st.format===f?'on':''}" onclick="S.setup.format='${f}';render()">${f}</button>`).join('')}</div>
-        <div class="field" style="margin-top:12px"><label>A line about you (optional)</label><input id="su_bio" value="${esc(st.bio)}" maxlength="140" placeholder="e.g. Math clicked for me late, so I get where you're stuck." oninput="S.setup.bio=this.value"></div>
-      ` : ''}
-      ${nav(hasGrade()?4:3, 'Finish', 'finishSetup(this)', false)}`;
+        <div class="field" style="margin-top:12px"><label>A line about you (optional)</label><input id="su_bio" value="${esc(st.bio)}" maxlength="140" placeholder="e.g. Math clicked for me late, so I get where it's confusing." oninput="S.setup.bio=this.value"></div>
+      </div>
+      ${nav(6, 'Finish', 'finishSetup(this)', false)}`;
   }
+
   c.innerHTML = `<div class="auth-wrap"><div class="auth-card setup-card"><div class="auth-logo">S</div>${bar}${body}${A.setupMsg ? '<div class="auth-msg err">'+esc(A.setupMsg)+'</div>' : ''}</div></div>`;
   // Only a change of step jumps to the top; tapping a chip keeps your place.
   if(st.step !== S.setupShownStep){ S.setupShownStep = st.step; S._top = true; }
