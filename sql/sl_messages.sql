@@ -1,4 +1,4 @@
--- StudyLink: private chat between the two people on a tutoring request.
+-- SilverCircle: private chat between the two people on a tutoring request.
 -- Run once in the Supabase SQL editor (project ejmiqtizvuuilsztbafk).
 create table if not exists public.sl_messages (
   id uuid primary key default gen_random_uuid(),
