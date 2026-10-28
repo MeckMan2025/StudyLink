@@ -1109,20 +1109,28 @@ function sessionCard(s){
 /* -------- CLASSES -------- */
 function renderClasses(c){
   if(isAdmin()){
+    // A button per subject, then that subject's classes. Nothing picked shows
+    // the heat map and the subjects side by side.
+    const sel = S.classDept || null;
+    const stats = course => ({ t:tutorsFor(course).length, s:S.roster.filter(r=>r.course===course).length, p:postsFor(course).length });
+    const deptBtn = d => { const n=d.courses.length, gaps=d.courses.filter(cs=>{ const x=stats(cs); return x.s && !x.t; }).length;
+      return `<button class="card" style="margin:0;text-align:left;cursor:pointer;font:inherit;color:inherit;border:2px solid ${sel===d.name?'var(--blue-d)':'transparent'};${sel===d.name?'background:#eef3ff':''}" onclick="S.classDept=${sel===d.name?'null':`'${esc(d.name)}'`};render()">
+        <div style="font-size:22px">${d.emoji}</div><div style="font-weight:800;font-size:16px;margin-top:4px">${esc(d.name)}</div>
+        <div class="tiny">${n} class${n===1?'':'es'}${gaps?` · <span style="color:#c23b5e;font-weight:700">${gaps} with no tutor</span>`:''}</div></button>`; };
+    const dept = DEPTS.find(d=>d.name===sel);
+    const classRow = course => { const x=stats(course);
+      return `<div class="card row" style="cursor:pointer" onclick="openClass('${esc(course)}')">
+        <div class="avatar" style="background:${courseColor(course)}">${courseEmoji(course)}</div>
+        <div style="min-width:0;flex:1"><div style="font-weight:800">${esc(course)}</div>
+          <div class="tiny">${x.t} tutor${x.t===1?'':'s'} · ${x.s} student${x.s===1?'':'s'} · ${x.p} post${x.p===1?'':'s'}</div></div>
+        ${x.s && !x.t ? '<span class="pill" style="background:#fdecef;color:#c23b5e">No tutors</span>' : ''}
+        <div style="color:var(--muted)">›</div></div>`; };
     c.innerHTML = `
       <h2 class="title">Classes</h2>
-      <div class="lead">Every class in the program. Open one for its tutors, the students taking it, materials and its board.</div>
-      <div class="sectlabel">Where do students need help?</div>
-      <div class="card" style="padding:6px 14px">${needHeatHtml()}</div>
-      <div class="sectlabel">All classes</div>
-      ${DEPTS.map(d=>`<div class="sectlabel">${d.emoji} ${d.name}</div>${d.courses.map(course=>{
-        const nT=tutorsFor(course).length, nS=S.roster.filter(r=>r.course===course).length, nP=postsFor(course).length;
-        return `<div class="card row" style="cursor:pointer" onclick="openClass('${esc(course)}')">
-          <div class="avatar" style="background:${courseColor(course)}">${courseEmoji(course)}</div>
-          <div style="min-width:0;flex:1"><div style="font-weight:800">${esc(course)}</div>
-            <div class="tiny">${nT} tutor${nT===1?'':'s'} · ${nS} student${nS===1?'':'s'} · ${nP} post${nP===1?'':'s'}</div></div>
-          ${nS && !nT ? '<span class="pill" style="background:#fdecef;color:#c23b5e">No tutors</span>' : ''}
-          <div style="color:var(--muted)">›</div></div>`; }).join('')}`).join('')}`;
+      <div class="lead">Pick a subject. Open a class for its tutors, the students taking it, materials and its board.</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0 16px">${DEPTS.map(deptBtn).join('')}</div>
+      ${dept ? `<div class="sectlabel">${dept.emoji} ${esc(dept.name)} · ${dept.courses.length} class${dept.courses.length===1?'':'es'}</div>${dept.courses.map(classRow).join('')}`
+             : `<div class="sectlabel">Where do students need help?</div><div class="card" style="padding:6px 14px">${needHeatHtml()}</div>`}`;
     return;
   }
   c.innerHTML = `
