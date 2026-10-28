@@ -714,8 +714,8 @@ function renderAdminHome(c){
       <div style="flex:1"><div style="font-weight:800">${stale.length} request${stale.length===1?'':'s'} waiting more than two days</div><div class="tiny">Nobody has answered yet. Worth a nudge.</div></div><div style="color:var(--muted)">›</div></div>` : ''}
     <div class="sectlabel">This week</div>
     ${weekPulseHtml()}
-    <div class="sectlabel">Coming up</div>
-    ${upcomingHtml()}
+    <div class="sectlabel">This week's tutors <span class="tiny" style="font-weight:600;text-transform:none;letter-spacing:0">· how many have said they're free each day, and sessions booked</span></div>
+    ${adminWeekHtml()}
     <div class="sectlabel">Latest in Community</div>
     ${posts.length ? posts.map(p=>`<div class="card row" style="cursor:pointer" onclick="openView({type:'board',course:'${esc(p.course)}'})">
         <div class="avatar" style="background:${courseColor(p.course)}">${courseEmoji(p.course)}</div>
@@ -740,6 +740,27 @@ function weekPulseHtml(){
     ${tile('admin-requests', asked, 'new requests', 'var(--purple)')}
     ${tile('community', posted, 'new posts', 'var(--pink-d)')}
   </div>`;
+}
+// The week as seven squares: how many tutors have marked themselves free that
+// day, and how many sessions are booked. A square opens that day on the calendar.
+function adminWeekHtml(){
+  const now=new Date(), today=ymd(now);
+  const start=addDays(now, -now.getDay());
+  const tutors=(S.tutors||[]).filter(t=>!adminIds().has(t.id));
+  const sessions=(S.allRequests||[]).filter(r=>r.status==='accepted' && r.date);
+  let cells='';
+  for(let i=0;i<7;i++){
+    const d=addDays(start,i), k=ymd(d);
+    const free=tutors.filter(t=>{ const b=blocksOn(t.id,k); return b.some(x=>x.kind==='available') && !b.some(x=>x.kind==='unavailable' && x.start_min===0 && x.end_min===1440); }).length;
+    const booked=sessions.filter(r=>r.date===k).length;
+    cells += `<button class="wday ${k===today?'today':''} ${k<today?'past':''}" onclick="S.cal={y:${d.getFullYear()},m:${d.getMonth()},sel:'${k}'}; go('calendar')" title="${esc(fmtDate(k))}">
+      <span class="dn">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][i]}</span>
+      <span class="dd">${d.getDate()}</span>
+      <span class="wi free" style="--c:var(--green)">${free} tutor${free===1?'':'s'} free</span>
+      ${booked ? `<span class="wi sess" style="--c:var(--blue-d)">${booked} session${booked===1?'':'s'}</span>` : ''}
+    </button>`;
+  }
+  return `<div class="week">${cells}</div>`;
 }
 // The next few confirmed sessions anywhere in the school.
 function upcomingHtml(){
