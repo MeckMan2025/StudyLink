@@ -513,7 +513,7 @@ function renderInner(){
 }
 
 let menuOpen = false;
-const TAB_TITLES = { settings:'Settings', help:'Help', home:'Home Screen', classes:'Classes', calendar:'Calendar', tutoring:'Tutoring', community:'Community', profile:'Profile', 'admin-grades':'Grade checks', 'admin-requests':'All requests', 'admin-team':'Members', admin:'Administration' };
+const TAB_TITLES = { settings:'Settings', help:'Help', home:'Home Screen', classes:'Classes', calendar:'Calendar', tutoring:'Tutoring', community:'Community', profile:'Profile', 'admin-grades':'People to check', 'admin-requests':'All requests', 'admin-team':'Members', admin:'Administration' };
 const isStaff = () => !!(A.profile && (A.profile.role==='admin' || A.profile.role==='board'));
 const hasGrade = () => !!(A.profile && A.profile.role==='student');   // staff accounts carry no grade
 // Administrators run the program; they are neither tutors nor tutees. No
@@ -556,7 +556,7 @@ function renderNav(){
     ${isAdmin() ? `<nav>
       ${item('home','🏠','Home Screen')}
       <hr>
-      ${item('admin-grades','✅','Grade checks', S.pendingGrades ? `<span class="count">${S.pendingGrades}</span>` : '')}
+      ${item('admin-grades','✅','People to check', S.pendingGrades ? `<span class="count">${S.pendingGrades}</span>` : '')}
       <hr>
       ${item('admin-requests','📋','Requests', adminOpenRequests().length ? `<span class="count">${adminOpenRequests().length}</span>` : '')}
       <hr>
@@ -704,12 +704,12 @@ function renderAdminHome(c){
       <div class="lead">${new Date().toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'})}</div></div>
     </div>
     <div class="statgrid">
-      ${tile('admin-grades', S.pendingGrades||0, 'grade checks waiting', S.pendingGrades ? 'var(--pink-d)' : 'var(--green)')}
+      ${tile('admin-grades', S.pendingGrades||0, 'people to check', S.pendingGrades ? 'var(--pink-d)' : 'var(--green)')}
       ${tile('admin-requests', open.length, 'open requests', open.length ? 'var(--blue-d)' : 'var(--green)')}
       ${tile('admin-team', online, 'members online', 'var(--purple)')}
     </div>
     ${S.pendingGrades ? `<div class="card row" style="cursor:pointer" onclick="go('admin-grades')"><div class="avatar" style="background:var(--pink-d)">✅</div>
-      <div style="flex:1"><div style="font-weight:800">${S.pendingGrades} grade check${S.pendingGrades===1?'':'s'} waiting</div><div class="tiny">Students can't tutor a class until its grade is verified.</div></div><div style="color:var(--muted)">›</div></div>` : ''}
+      <div style="flex:1"><div style="font-weight:800">${S.pendingGrades} ${S.pendingGrades===1?'person':'people'} to check</div><div class="tiny">Students can't tutor a class until its grade is verified.</div></div><div style="color:var(--muted)">›</div></div>` : ''}
     ${stale.length ? `<div class="card row" style="cursor:pointer" onclick="S.adminReqFilter='pending';go('admin-requests')"><div class="avatar" style="background:var(--blue-d)">⏳</div>
       <div style="flex:1"><div style="font-weight:800">${stale.length} request${stale.length===1?'':'s'} waiting more than two days</div><div class="tiny">Nobody has answered yet. Worth a nudge.</div></div><div style="color:var(--muted)">›</div></div>` : ''}
     <div class="sectlabel">This week</div>
@@ -2557,7 +2557,7 @@ function renderAdminHub(c){
   c.innerHTML = `
     <h2 class="title">${A.profile.role==='board' ? 'Board' : 'Administration'}</h2>
     <div class="lead">Tools for ${A.profile.role==='board' ? 'the board and administrators' : 'administrators'}.</div>
-    ${tile('admin-grades','✅','Grade checks', S.pendingGrades ? S.pendingGrades+' waiting' : 'Nothing waiting', S.pendingGrades)}
+    ${tile('admin-grades','✅','People to check', S.pendingGrades ? S.pendingGrades+' waiting' : 'Nothing waiting', S.pendingGrades)}
     ${tile('admin-requests','📋','All requests','Every tutoring request in the school')}
     ${tile('admin-team','🛡️','Members','Approve people, join codes, levels')}
     <div class="sectlabel">Where do students need help?</div>
@@ -2585,10 +2585,10 @@ function adminButtonHtml(){
 // access to school records. Real names show here and nowhere else.
 async function renderAdminGrades(c){
   if(!isStaff()) return go('home');
-  if(c.dataset.page !== 'Grade checks') c.innerHTML = '<h2 class="title">Grade checks</h2><div class="lead">Loading…</div>';
+  if(c.dataset.page !== 'Grade checks') c.innerHTML = '<h2 class="title">People to check</h2><div class="lead">Loading…</div>';
   let rows;
   try { rows = await sbFetch('/rest/v1/sl_grades?select=*,who:sl_profiles!sl_grades_user_id_fkey(real_name,grade_level,student_alias,tutor_alias,last_seen_at)&order=created_at'); }
-  catch(e){ c.innerHTML = '<h2 class="title">Grade checks</h2><div class="auth-msg err">' + esc(e.message) + '</div>'; return; }
+  catch(e){ c.innerHTML = '<h2 class="title">People to check</h2><div class="auth-msg err">' + esc(e.message) + '</div>'; return; }
   if(S.tab!=='admin-grades') return;
   c.dataset.page = 'Grade checks'; const keepY = window.scrollY;
   // One entry per student, pending ones first.
@@ -2600,7 +2600,7 @@ async function renderAdminGrades(c){
   if(!sel){
     c.innerHTML = `
       <button class="back" onclick="go(isAdmin()?'home':'admin')">‹ ${isAdmin() ? 'Home' : A.profile.role==='board' ? 'Board' : 'Administration'}</button>
-      <h2 class="title">Grade checks</h2>
+      <h2 class="title">People to check</h2>
       <div class="lead">${totalPending ? totalPending+' grade'+(totalPending===1?'':'s')+' waiting. Tap a student to review theirs.' : 'Nothing waiting. New tutors show up here.'}</div>
       ${people.length ? people.map(pp=>`<div class="card row" style="cursor:pointer" onclick="S.gradeStudent='${pp.id}';render()">
         ${avatarDot(initials(pp.who.real_name||'?'), pp.who.last_seen_at, 'background:'+(pp.pending.length?'var(--orange)':'var(--green)'))}
@@ -3316,7 +3316,7 @@ async function loadData(){
     sbFetch('/rest/v1/sl_tutors?select=*'),
     sbFetch('/rest/v1/sl_posts?select=*&order=created_at.desc&limit=500'),
     sbFetch('/rest/v1/sl_grades?select=id,course,grade,year,status&user_id=eq.'+me),
-    isStaff() ? sbFetch('/rest/v1/sl_grades?select=id&status=eq.pending') : Promise.resolve([]),
+    isStaff() ? sbFetch('/rest/v1/sl_grades?select=user_id&status=eq.pending') : Promise.resolve([]),
     sbFetch('/rest/v1/sl_materials?select=*&order=created_at.desc&limit=500'),
     sbFetch('/rest/v1/sl_class_students?select=*'),
     sbFetch('/rest/v1/sl_request_presence?select=*'),
@@ -3328,7 +3328,7 @@ async function loadData(){
   S.tutorClasses = (tcourses||[]).map(r=>r.course);
   S.me.tutorCourses = (tcourses||[]).map(r=>{ const g=(myGrades||[]).find(x=>x.course===r.course); return { course:r.course, grade:r.grade||'', year:r.year||'', verify: g ? g.status : 'none' }; });
   S.taken = myGrades||[];   // classes I've taken, from setup; the only ones I may tutor
-  S.pendingGrades = (pendingGrades||[]).length;
+  S.pendingGrades = new Set((pendingGrades||[]).map(g=>g.user_id)).size;   // people waiting, not grades
   S.me.avail = ((tcourses||[]).find(r=>r.availability)||{}).availability || '';
   S.me.isTutor = !!(A.profile && A.profile.tutor_alias) && S.tutorClasses.length > 0;
   S.myRequests = (reqs||[]).filter(r=>r.student_id===me);
