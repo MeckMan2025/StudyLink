@@ -753,7 +753,7 @@ function adminWeekHtml(){
     const d=addDays(start,i), k=ymd(d);
     const free=tutors.filter(t=>{ const b=blocksOn(t.id,k); return b.some(x=>x.kind==='available') && !b.some(x=>x.kind==='unavailable' && x.start_min===0 && x.end_min===1440); }).length;
     const booked=sessions.filter(r=>r.date===k).length;
-    cells += `<button class="wday ${k===today?'today':''} ${k<today?'past':''}" onclick="S.cal={y:${d.getFullYear()},m:${d.getMonth()},sel:'${k}'}; go('calendar')" title="${esc(fmtDate(k))}">
+    cells += `<button class="wday ${k===today?'today':''} ${k<today?'past':''}" onclick="openView({type:'adminDay',date:'${k}'})" title="${esc(fmtDate(k))}">
       <span class="dn">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][i]}</span>
       <span class="dd">${d.getDate()}</span>
       <span class="wi free" style="--c:var(--green)">${free} tutor${free===1?'':'s'} free</span>
@@ -761,6 +761,50 @@ function adminWeekHtml(){
     </button>`;
   }
   return `<div class="week">${cells}</div>`;
+}
+// One day for an administrator: every tutor who is free and when, and every
+// session booked, each with a remove button.
+function renderAdminDay(c){
+  const k=S.overlay.date, today=ymd(new Date());
+  const tutors=(S.tutors||[]).filter(t=>!adminIds().has(t.id));
+  const free=tutors.map(t=>{ const b=blocksOn(t.id,k); const allDay=b.some(x=>x.kind==='unavailable' && x.start_min===0 && x.end_min===1440);
+      const slots=allDay ? [] : b.filter(x=>x.kind==='available').sort((a,b)=>a.start_min-b.start_min); return { t, slots, busy:b.filter(x=>x.kind==='unavailable') }; })
+    .filter(x=>x.slots.length).sort((a,b)=>a.slots[0].start_min-b.slots[0].start_min);
+  const sessions=(S.allRequests||[]).filter(r=>r.status==='accepted' && r.date===k).sort((a,b)=>(a.time||'').localeCompare(b.time||''));
+  const pending=(S.allRequests||[]).filter(r=>(r.status==='pending'||r.status==='offered') && r.date===k);
+  const span = x => x.start_min===0 && x.end_min===1440 ? 'All day' : minLabel(x.start_min)+' – '+minLabel(x.end_min);
+  c.innerHTML = `
+    <button class="back" onclick="closeView()">‹ Home</button>
+    <h2 class="title">${esc(fmtDate(k))}${k===today?' · Today':''}</h2>
+    <div class="lead">${free.length} tutor${free.length===1?'':'s'} free · ${sessions.length} session${sessions.length===1?'':'s'} booked${pending.length?' · '+pending.length+' waiting on an answer':''}</div>
+    <div class="sectlabel">Sessions</div>
+    ${sessions.length ? sessions.map(r=>`<div class="card row">
+      <div class="avatar" style="background:${courseColor(r.course)}">${courseEmoji(r.course)}</div>
+      <div style="min-width:0;flex:1"><div style="font-weight:800">${esc(r.student_alias||'Student')} with ${esc(r.tutor_alias||'Tutor')}</div>
+        <div class="tiny">${esc(r.course)}${r.time?' · '+esc(r.time):''}${r.location?' · '+esc(r.location):''}</div></div>
+      <button class="btn sm gray" onclick="adminRemoveSession('${r.id}')">Remove</button>
+    </div>`).join('') : '<div class="card tiny" style="text-align:center">No sessions booked for this day.</div>'}
+    ${pending.length ? `<div class="sectlabel">Waiting on an answer</div>${pending.map(r=>`<div class="card row">
+      <div class="avatar" style="background:${courseColor(r.course)}">${courseEmoji(r.course)}</div>
+      <div style="min-width:0;flex:1"><div style="font-weight:800">${esc(r.student_alias||'Student')} → ${esc(r.tutor_alias||'Tutor')}</div>
+        <div class="tiny">${esc(r.course)}${r.time?' · '+esc(r.time):''} · ${r.status==='offered'?'offered by the tutor':'requested by the student'}</div></div>
+      <button class="btn sm gray" onclick="adminRemoveSession('${r.id}')">Remove</button>
+    </div>`).join('')}` : ''}
+    <div class="sectlabel">Tutors free</div>
+    ${free.length ? free.map(({t,slots})=>`<div class="card row" style="cursor:pointer" onclick="openView({type:'tutor',id:'${t.id}'})">
+      ${avatarDot(initials(t.name), t.seen, 'background:'+t.color)}
+      <div style="min-width:0;flex:1"><div style="font-weight:800">${esc(t.name)} ${seenHtml(t.seen)}</div>
+        <div class="tiny">${slots.map(span).join(' · ')} · ${t.courses.map(x=>esc(x.course)).join(', ')}</div></div>
+      <div style="color:var(--muted)">›</div>
+    </div>`).join('') : '<div class="card tiny" style="text-align:center">No tutor has marked this day as free yet.</div>'}`;
+}
+// Taking a session off the calendar: it is cancelled, not deleted, so both
+// people still see what happened in Tutoring.
+function adminRemoveSession(id){
+  if(!confirm('Remove this session? Both people will see it as cancelled.')) return;
+  sbFetch('/rest/v1/sl_requests?id=eq.'+id, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ status:'cancelled' }) })
+    .then(function(){ const r=(S.allRequests||[]).find(x=>x.id===id); if(r) r.status='cancelled'; toast('Session removed'); render(); })
+    .catch(function(e){ toast(e.message); });
 }
 // The next few confirmed sessions anywhere in the school.
 function upcomingHtml(){
@@ -1503,7 +1547,7 @@ function renderTutorProfile(c){
       ${t.courses.map(cc=>`<div class="row" style="margin-bottom:6px">${cc.grade?`<span class="grade ${gradeClass(cc.grade)}">${esc(cc.grade)}</span>`:''}
         <span style="font-weight:700;font-size:14px">${esc(cc.course)}</span>${cc.verified ? '<span class="verified">✓ Verified</span>' : ''}<span class="tiny" style="margin-left:auto">${esc(cc.year||'')}</span></div>`).join('')}
     </div>
-    <div style="margin-top:12px"><button class="btn" onclick="openView({type:'request',id:'${t.id}',course:'${esc(S.overlay.course||t.courses[0].course)}'})">Request tutoring</button></div>
+    ${isAdmin() ? '' : `<div style="margin-top:12px"><button class="btn" onclick="openView({type:'request',id:'${t.id}',course:'${esc(S.overlay.course||t.courses[0].course)}'})">Request tutoring</button></div>`}
   `;
 }
 
@@ -2796,6 +2840,7 @@ function renderOverlay(c){
   if(o.type==='classSchedule') return renderClassSchedule(c);
   if(o.type==='retime') return renderRetime(c);
   if(o.type==='chat') return renderChat(c);
+  if(o.type==='adminDay') return renderAdminDay(c);
   S.overlay=null; return renderBody(c);   // an unknown overlay falls back to the page
 }
 
