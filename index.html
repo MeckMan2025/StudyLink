@@ -391,7 +391,10 @@ const gradeClass = g => g?.startsWith('A') ? 'g-A' : g?.startsWith('B') ? 'g-B' 
 
 // Tutors come from the sl_tutors view: alias, grade, bio and the classes they
 // tutor — never a real name. Grouped per tutor after loading.
-const tutorsFor = course => (S.tutors || []).filter(t => t.courses.some(c => c.course === course));
+const adminIds = () => new Set((S.people||[]).filter(p=>p.role==='admin').map(p=>p.user_id));
+const tutorsFor = course => (S.tutors || []).filter(t => t.courses.some(c => c.course === course) && !adminIds().has(t.id));
+// Requests an administrator should look at: waiting on somebody.
+const adminOpenRequests = () => (S.allRequests||[]).filter(r => r.status==='pending' || r.status==='offered');
 const findTutor = id => (S.tutors || []).find(t => t.id === id);
 const TUTOR_COLORS = ['#f28fb4','#7aa7f0','#a78be6','#63c39a','#f0a868','#e0679a','#4d7fd6'];
 const hashStr = str => Array.from(str || '').reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7);
@@ -500,7 +503,7 @@ function renderInner(){
       : '<div class="empty" style="padding-top:80px"><div class="em">📚</div>Loading your SilverCircle…</div>';
     return;
   }
-  if(!A.profile.onboarded_at || S.setupForce){
+  if((!A.profile.onboarded_at || S.setupForce) && !isAdmin()){
     document.getElementById('app').classList.add('auth');
     document.getElementById('head').innerHTML = ''; document.getElementById('nav').innerHTML = '';
     renderSetup(document.getElementById('scroll'));
@@ -513,6 +516,10 @@ let menuOpen = false;
 const TAB_TITLES = { settings:'Settings', help:'Help', home:'Home Screen', classes:'Classes', calendar:'Calendar', tutoring:'Tutoring', community:'Community', profile:'Profile', 'admin-grades':'Grade checks', 'admin-requests':'All requests', 'admin-team':'Members', admin:'Administration' };
 const isStaff = () => !!(A.profile && (A.profile.role==='admin' || A.profile.role==='board'));
 const hasGrade = () => !!(A.profile && A.profile.role==='student');   // staff accounts carry no grade
+// Administrators run the program; they are neither tutors nor tutees. No
+// survey, no tutor/tutee switch, and their work sits on the tabs. The board
+// keeps the student experience plus the hub button.
+const isAdmin = () => !!(A.profile && A.profile.role==='admin');
 const roleBadge = r => r==='admin' ? '<span class="rolebadge admin">Administrator</span>' : r==='board' ? '<span class="rolebadge board">Board</span>' : '';
 function renderHead(){
   const title = S.overlay?.type==='course' ? S.overlay.course : TAB_TITLES[S.tab] || 'SilverCircle';
@@ -546,6 +553,17 @@ function renderNav(){
         <button class="nitem" style="color:#d9534f" onclick="logOut()"><span class="ic">🚪</span>Log out</button>
       </div>` : ''}
     </div>
+    ${isAdmin() ? `<nav>
+      ${item('home','🏠','Home Screen')}
+      <hr>
+      ${item('admin-grades','✅','Grade checks', S.pendingGrades ? `<span class="count">${S.pendingGrades}</span>` : '')}
+      ${item('admin-requests','📋','Requests', adminOpenRequests().length ? `<span class="count">${adminOpenRequests().length}</span>` : '')}
+      ${item('admin-team','🛡️','Members')}
+      <hr>
+      ${item('classes','📚','Classes')}
+      ${item('community','💬','Community')}
+      ${item('calendar','📅','Calendar')}
+    </nav>` : `
     <div class="section" style="padding:12px 14px 0">I am a…</div>
     <div class="modes" style="margin-top:4px">
       <button class="${S.mode==='tutor'?'on':''}" onclick="setMode('tutor')">🎓 Tutor</button>
@@ -570,14 +588,15 @@ function renderNav(){
       ${item('tutoring','🤝','Tutoring', inc ? `<span class="count">${inc}</span>` : '')}
       <hr>
       ${item('community','💬','Community')}
-    </nav>
+    </nav>`}
 `;
 }
 
 function renderBody(){
   const c=$('scroll'); if(!['admin-grades','admin-requests','admin-team'].includes(S.tab) || S.overlay) c.dataset.page = '';
+  if(isAdmin() && (S.tab==='tutoring' || S.tab==='admin')) S.tab='home';
   if(S.overlay) return renderOverlay(c);
-  if(S.tab==='home') return renderHome(c);
+  if(S.tab==='home') return isAdmin() ? renderAdminHome(c) : renderHome(c);
   if(S.tab==='classes') return renderClasses(c);
   if(S.tab==='tutoring') return renderTutoring(c);
   if(S.tab==='community') return renderCommunity(c);
@@ -594,6 +613,17 @@ function renderBody(){
 
 /* -------- SETTINGS / HELP (from the ⋮ menu) -------- */
 function renderSettings(c){
+  if(isAdmin()){
+    c.innerHTML = `
+      <h2 class="title">Settings</h2>
+      <div class="sectlabel">Account</div>
+      <div class="card">
+        <div style="font-weight:800">${esc(A.profile.real_name || A.profile.student_alias)} ${roleBadge('admin')}</div>
+        <div class="tiny">${esc((A.user&&A.user.email)||'')}</div>
+        <div class="row" style="gap:8px;margin-top:12px"><button class="btn gray" style="flex:1" onclick="logOut()">Log out</button></div>
+      </div>`;
+    return;
+  }
   c.innerHTML = `
     <h2 class="title">Settings</h2>
     <div class="lead">Saved to your account.</div>
@@ -652,6 +682,40 @@ function renderHome(c){
       ${adminButtonHtml()}
     </div>`;
   c.innerHTML = head + scheduleNudgeHtml() + (S.mode==='tutor' && S.me.isTutor ? tutorDashboard() : studentDashboard());
+}
+
+// The administrator's home: what is waiting, where the gaps are, who is
+// around, what people are saying. Every tile opens the tab that deals with it.
+function renderAdminHome(c){
+  const hour = new Date().getHours();
+  const hi = hour<12 ? 'Good morning' : hour<17 ? 'Good afternoon' : 'Good evening';
+  const open = adminOpenRequests();
+  const stale = open.filter(r => (Date.now()-new Date(r.created_at).getTime()) > 2*86400000);
+  const online = (S.people||[]).filter(p => isOnline(p.last_seen_at)).length;
+  const posts = (S.posts||[]).filter(p=>!p.parent_id).slice(0,5);
+  const tile = (tab, n, label, color) => `<div class="stat" style="cursor:pointer" onclick="go('${tab}')"><div class="n" style="color:${color}">${n}</div><div class="l">${label}</div></div>`;
+  c.innerHTML = `
+    <div class="row" style="align-items:flex-start">
+      <div style="flex:1;min-width:0"><h2 class="title">${hi}, ${esc(currentAlias())} 👋</h2>
+      <div class="lead">${new Date().toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'})}</div></div>
+    </div>
+    <div class="statgrid">
+      ${tile('admin-grades', S.pendingGrades||0, 'grade checks waiting', S.pendingGrades ? 'var(--pink-d)' : 'var(--green)')}
+      ${tile('admin-requests', open.length, 'open requests', open.length ? 'var(--blue-d)' : 'var(--green)')}
+      ${tile('admin-team', online, 'members online', 'var(--purple)')}
+    </div>
+    ${S.pendingGrades ? `<div class="card row" style="cursor:pointer" onclick="go('admin-grades')"><div class="avatar" style="background:var(--pink-d)">✅</div>
+      <div style="flex:1"><div style="font-weight:800">${S.pendingGrades} grade check${S.pendingGrades===1?'':'s'} waiting</div><div class="tiny">Students can't tutor a class until its grade is verified.</div></div><div style="color:var(--muted)">›</div></div>` : ''}
+    ${stale.length ? `<div class="card row" style="cursor:pointer" onclick="S.adminReqFilter='pending';go('admin-requests')"><div class="avatar" style="background:var(--blue-d)">⏳</div>
+      <div style="flex:1"><div style="font-weight:800">${stale.length} request${stale.length===1?'':'s'} waiting more than two days</div><div class="tiny">Nobody has answered yet. Worth a nudge.</div></div><div style="color:var(--muted)">›</div></div>` : ''}
+    <div class="sectlabel">Where do students need help?</div>
+    <div class="card" style="padding:6px 14px">${needHeatHtml()}</div>
+    <div class="sectlabel">Latest in Community</div>
+    ${posts.length ? posts.map(p=>`<div class="card row" style="cursor:pointer" onclick="openView({type:'board',course:'${esc(p.course)}'})">
+        <div class="avatar" style="background:${courseColor(p.course)}">${courseEmoji(p.course)}</div>
+        <div style="min-width:0;flex:1"><div style="font-weight:800">${esc(p.course)} <span class="tiny">· ${esc(p.author_alias||'')}</span></div>
+          <div class="tiny" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.body||p.text||'')}</div></div>
+        <div style="color:var(--muted)">›</div></div>`).join('') : '<div class="card tiny" style="text-align:center">Nothing posted yet.</div>'}`;
 }
 
 // ---- helpers shared by both dashboards ----
@@ -943,6 +1007,20 @@ function sessionCard(s){
 
 /* -------- CLASSES -------- */
 function renderClasses(c){
+  if(isAdmin()){
+    c.innerHTML = `
+      <h2 class="title">Classes</h2>
+      <div class="lead">Every class in the program. Open one for its tutors, the students taking it, materials and its board.</div>
+      ${DEPTS.map(d=>`<div class="sectlabel">${d.emoji} ${d.name}</div>${d.courses.map(course=>{
+        const nT=tutorsFor(course).length, nS=S.roster.filter(r=>r.course===course).length, nP=postsFor(course).length;
+        return `<div class="card row" style="cursor:pointer" onclick="openClass('${esc(course)}')">
+          <div class="avatar" style="background:${courseColor(course)}">${courseEmoji(course)}</div>
+          <div style="min-width:0;flex:1"><div style="font-weight:800">${esc(course)}</div>
+            <div class="tiny">${nT} tutor${nT===1?'':'s'} · ${nS} student${nS===1?'':'s'} · ${nP} post${nP===1?'':'s'}</div></div>
+          ${nS && !nT ? '<span class="pill" style="background:#fdecef;color:#c23b5e">No tutors</span>' : ''}
+          <div style="color:var(--muted)">›</div></div>`; }).join('')}`).join('')}`;
+    return;
+  }
   c.innerHTML = `
     <h2 class="title">${S.mode==='tutor' ? 'Classes I tutor' : 'My classes'}</h2>
     <div class="lead">${S[classKey()].length ? 'Open a class for its tutors and community. To drop a class, untick it under Add class.' : (S.mode==='tutor' ? 'Add the classes you can tutor to get started.' : 'Add the classes you are taking to get started.')}</div>
@@ -1001,6 +1079,11 @@ function removeClass(course){
 const EVENT_KINDS = { test:'📝 Test', homework:'📚 Homework', study:'📖 Study', other:'📌 Other', session:'🤝 Tutoring', pending:'⏳ Waiting for an answer', offer:'📨 Offer · answer in Tutoring' };
 // Everything with a date: my own events, booked sessions, and requests still waiting.
 function calItems(){
+  // Administrators see every confirmed session in the school, not just their own.
+  if(isAdmin()) return [
+    ...S.events,
+    ...(S.allRequests||[]).filter(r=>r.date && r.status==='accepted').map(r=>({ id:r.id, date:r.date, time:r.time, course:r.course, kind:'session', title:(r.student_alias||'Student')+' with '+(r.tutor_alias||'Tutor'), color:courseColor(r.course) })),
+  ];
   return [
     ...S.events,
     ...sessionsList().filter(x=>x.date).map(x=>({ id:x.id, date:x.date, time:x.time, course:x.course, kind:'session', title:(x.role==='tutor'?'Tutoring ':'Session with ')+x.with, cancel:'session' })),
@@ -1071,7 +1154,7 @@ function dayModalHtml(k){
   const blocks=blocksOn(A.user.id, k);
   const canSchedule = S.me.isTutor && k>=ymd(new Date());
   const n=evs.length+blocks.length;
-  const choices=[['see','👀','See this day', n ? n+' thing'+(n===1?'':'s')+' on it' : 'Nothing on it yet'],['event','📝','Add an event','Test, homework, study time'],['avail','🕒','Set availability','When you are free or busy']].concat(canSchedule?[['tutor','🤝','Schedule tutoring','Book a session with a student']]:[]);
+  const choices=[['see','👀','See this day', n ? n+' thing'+(n===1?'':'s')+' on it' : 'Nothing on it yet'],['event','📝','Add an event',isAdmin()?'A reminder on your own calendar':'Test, homework, study time']].concat(isAdmin()?[]:[['avail','🕒','Set availability','When you are free or busy']]).concat(canSchedule?[['tutor','🤝','Schedule tutoring','Book a session with a student']]:[]);
   const t=S.cal.tab;
   let body='';
   if(t==='pick'){
@@ -1185,21 +1268,22 @@ function renderCourseDetail(c, course){
   const peopleLabel = tutorSide ? 'Tutees' : 'Tutors';
   const nTutors = tutorsFor(course).length, nTutees = S.roster.filter(r=>r.course===course).length;
   const nMat = S.materials.filter(m=>m.course===course).length, nPosts = postsFor(course).length;
+  if(isAdmin() && o.sec==='people') o.sec='tutors';
   const tab = (id, label, n) => `<button class="${o.sec===id?'on':''}" onclick="S.overlay.sec='${id}';render()">${label}${n?` <span class="tiny" style="font-weight:800">${n}</span>`:''}</button>`;
   c.innerHTML = `
     <button class="back" onclick="closeView()">‹ Back</button>
-    ${S[classKey()].includes(course) ? '' : `<button class="btn sm green" style="float:right" onclick="toggleClass('${esc(course)}'); toast('Added to your classes')">＋ Add to my classes</button>`}
+    ${S[classKey()].includes(course) || isAdmin() ? '' : `<button class="btn sm green" style="float:right" onclick="toggleClass('${esc(course)}'); toast('Added to your classes')">＋ Add to my classes</button>`}
     <div class="row" style="margin:2px 0 4px">
       <div class="avatar" style="background:${courseColor(course)};width:52px;height:52px;font-size:22px">${courseEmoji(course)}</div>
       <div><h2 class="title" style="margin:0">${esc(course)}</h2>
       <div class="tiny">${nTutors} tutor${nTutors===1?'':'s'} · ${nTutees} student${nTutees===1?'':'s'} taking it · ${nPosts} post${nPosts===1?'':'s'}</div></div>
     </div>
     <div class="sections">
-      ${tab('people', peopleLabel, tutorSide ? nTutees : nTutors)}
+      ${isAdmin() ? tab('tutors', 'Tutors', nTutors) + tab('tutees', 'Students', nTutees) : tab('people', peopleLabel, tutorSide ? nTutees : nTutors)}
       ${tab('materials', 'Materials', nMat)}
       ${tab('community', 'Community', nPosts)}
     </div>
-    ${o.sec==='materials' ? materialsHtml(course) : o.sec==='community' ? boardHtml(course) : tutorSide ? tuteesHtml(course) : tutorsHtml(course)}
+    ${o.sec==='materials' ? materialsHtml(course) : o.sec==='community' ? boardHtml(course) : o.sec==='tutors' ? tutorsHtml(course) : o.sec==='tutees' ? tuteesHtml(course) : tutorSide ? tuteesHtml(course) : tutorsHtml(course)}
   `;
 }
 
@@ -1235,11 +1319,11 @@ function tutorsHtml(course){
 
 // Tutor side: the students taking this class, and a way to offer them help.
 function tuteesHtml(course){
-  const me=A.user.id, canOffer = S.me.isTutor && S.tutorClasses.includes(course);
+  const me=A.user.id, canOffer = !isAdmin() && S.me.isTutor && S.tutorClasses.includes(course);
   const students = S.roster.filter(r=>r.course===course).sort((a,b)=>a.student_alias.localeCompare(b.student_alias, undefined, {numeric:true}));
   const stateFor = sid => S.incoming.find(r=>r.student_id===sid && r.course===course && ['offered','pending','accepted'].includes(r.status));
   return `
-    ${canOffer ? '' : `<div class="card tiny" style="margin-top:10px">To offer help here, add ${esc(course)} to the classes you tutor first.${S.me.isTutor ? '' : ' <button class="btn ghost sm" style="margin-left:6px" onclick="openView({type:\'becomeTutor\'})">Become a tutor</button>'}</div>`}
+    ${canOffer || isAdmin() ? '' : `<div class="card tiny" style="margin-top:10px">To offer help here, add ${esc(course)} to the classes you tutor first.${S.me.isTutor ? '' : ' <button class="btn ghost sm" style="margin-left:6px" onclick="openView({type:\'becomeTutor\'})">Become a tutor</button>'}</div>`}
     <div class="sectlabel">${students.length} student${students.length===1?'':'s'} taking ${esc(course)}</div>
     ${students.length ? students.map(st=>{ const r=stateFor(st.user_id); return `<div class="card row">
       ${avatarDot(initials(st.student_alias), st.last_seen_at, 'background:'+courseColor(course))}
@@ -1338,7 +1422,7 @@ function tutorCard(t, course){
     </div>
     <div style="margin-top:10px" class="row">
       <button class="btn ghost sm" onclick="openView({type:'tutor',id:'${t.id}',course:'${esc(course)}'})">View profile</button>
-      <button class="btn sm" style="margin-left:auto" onclick="openView({type:'request',id:'${t.id}',course:'${esc(course)}'})">Request tutoring</button>
+      ${isAdmin() ? '' : `<button class="btn sm" style="margin-left:auto" onclick="openView({type:'request',id:'${t.id}',course:'${esc(course)}'})">Request tutoring</button>`}
     </div>
   </div>`;
 }
@@ -1952,8 +2036,8 @@ function renderCommunity(c){
   // The boards follow the side you are on: classes you take on the Tutee
   // side, classes you tutor on the Tutor side.
   const tutorSide = S.mode==='tutor';
-  const mine = ALL_COURSES.filter(x => S[classKey()].includes(x));
   const withPosts = (S.posts||[]).map(p=>p.course);
+  const mine = isAdmin() ? ALL_COURSES.filter(x => withPosts.includes(x)) : ALL_COURSES.filter(x => S[classKey()].includes(x));
   const others = ALL_COURSES.filter(x => !mine.includes(x) && withPosts.includes(x));
   const row = course => {
     const posts=postsFor(course), n=tutorsFor(course).length;
@@ -1967,9 +2051,9 @@ function renderCommunity(c){
   };
   c.innerHTML=`
     <h2 class="title">Community</h2>
-    <div class="lead">${tutorSide ? 'The boards for the classes you tutor. Answer questions, spot who needs help.' : 'The boards for the classes you take. Ask a question — someone in your class can help.'}</div>
-    ${mine.length ? mine.map(row).join('') : `<div class="empty"><div class="em">💬</div>${tutorSide ? 'No tutoring classes yet. Add the classes you tutor and their boards show up here.' : 'No classes yet. Add the classes you are taking and their boards show up here.'}<div style="margin-top:12px"><button class="btn sm" onclick="S.tab='classes'; openView({type:'addClasses'})">＋ Add classes</button></div></div>`}
-    ${mine.length ? `<button class="card addcard" style="width:100%;min-height:56px;margin-top:10px" onclick="S.tab='classes'; openView({type:'addClasses'})">＋ Add a class to join its board</button>` : ''}
+    <div class="lead">${isAdmin() ? 'Every class board with a conversation. Read along, answer, or remove anything that should not be there.' : tutorSide ? 'The boards for the classes you tutor. Answer questions, spot who needs help.' : 'The boards for the classes you take. Ask a question — someone in your class can help.'}</div>
+    ${mine.length ? mine.map(row).join('') : isAdmin() ? `<div class="empty"><div class="em">💬</div>Nothing posted anywhere yet.</div>` : `<div class="empty"><div class="em">💬</div>${tutorSide ? 'No tutoring classes yet. Add the classes you tutor and their boards show up here.' : 'No classes yet. Add the classes you are taking and their boards show up here.'}<div style="margin-top:12px"><button class="btn sm" onclick="S.tab='classes'; openView({type:'addClasses'})">＋ Add classes</button></div></div>`}
+    ${mine.length && !isAdmin() ? `<button class="card addcard" style="width:100%;min-height:56px;margin-top:10px" onclick="S.tab='classes'; openView({type:'addClasses'})">＋ Add a class to join its board</button>` : ''}
     ${others.length ? `<div class="sectlabel">${tutorSide ? 'Other classes with conversations' : 'Other classes with conversations'}</div>${others.map(row).join('')}` : ''}
   `;
 }
@@ -1999,6 +2083,18 @@ function deletePost(id){
 /* -------- PROFILE -------- */
 function renderProfile(c){
   const me=S.me;
+  if(isAdmin()){
+    c.innerHTML=`
+      <h2 class="title">Profile</h2>
+      <div class="card">
+        <div class="row"><div class="avatar" style="width:54px;height:54px;font-size:20px;background:var(--blue-d)">🛡️</div>
+          <div style="flex:1"><div style="font-weight:800;font-size:17px">${esc(A.profile.real_name || A.profile.student_alias)}</div>
+          <div class="tiny">Administrator · ${esc((A.user&&A.user.email)||'')}</div></div></div>
+      </div>
+      <div class="sectlabel">What you do here</div>
+      <div class="card tiny">Check students' grades so they can tutor, keep an eye on requests, and manage who has a seat. Administrators don't tutor or take tutoring, so there's no survey and no classes to pick.</div>`;
+    return;
+  }
   c.innerHTML=`
     <h2 class="title">Profile</h2>
     <div class="card">
@@ -2370,7 +2466,7 @@ function needHeatHtml(){
 }
 // A compact button to the hub, used on the home screen and profile.
 function adminButtonHtml(){
-  if(!isStaff()) return '';
+  if(!isStaff() || isAdmin()) return '';
   return `<button class="btn ghost sm" onclick="go('admin')">🛡️ ${A.profile.role==='board' ? 'Board' : 'Admin'}${S.pendingGrades ? ' · '+S.pendingGrades+' to check' : ''}</button>`;
 }
 // Grade checks: every grade a tutor has claimed, waiting on someone with
@@ -2391,7 +2487,7 @@ async function renderAdminGrades(c){
 
   if(!sel){
     c.innerHTML = `
-      <button class="back" onclick="go('admin')">‹ ${A.profile.role==='board' ? 'Board' : 'Administration'}</button>
+      <button class="back" onclick="go(isAdmin()?'home':'admin')">‹ ${isAdmin() ? 'Home' : A.profile.role==='board' ? 'Board' : 'Administration'}</button>
       <h2 class="title">Grade checks</h2>
       <div class="lead">${totalPending ? totalPending+' grade'+(totalPending===1?'':'s')+' waiting. Tap a student to review theirs.' : 'Nothing waiting. New tutors show up here.'}</div>
       ${people.length ? people.map(pp=>`<div class="card row" style="cursor:pointer" onclick="S.gradeStudent='${pp.id}';render()">
@@ -2459,7 +2555,7 @@ async function renderAdminRequests(c){
   const style = { accepted:'background:#e4f6ec;color:#2e9b6a', done:'background:#eef0f6;color:#5b6077', declined:'background:#fdecef;color:#c23b5e', cancelled:'background:#fdecef;color:#c23b5e' };
   const counts = {}; rows.forEach(r=>{ counts[r.status]=(counts[r.status]||0)+1; });
   c.innerHTML = `
-    <button class="back" onclick="go('admin')">‹ ${A.profile.role==='board' ? 'Board' : 'Administration'}</button>
+    <button class="back" onclick="go(isAdmin()?'home':'admin')">‹ ${isAdmin() ? 'Home' : A.profile.role==='board' ? 'Board' : 'Administration'}</button>
     <h2 class="title">All requests</h2>
     <div class="lead">${rows.length} request${rows.length===1?'':'s'} · ${counts.done||0} completed · ${(counts.done||0)*0.75} service hours logged</div>
     <div class="chips" style="margin-bottom:8px">${['all','pending','accepted','done','declined','cancelled'].map(k=>`<button class="chip ${f===k?'dept':''}" style="${f===k?'background:var(--blue)':''}" onclick="S.adminReqFilter='${k}';render()">${k==='all'?'All':label[k]}${k!=='all'&&counts[k]?' · '+counts[k]:''}</button>`).join('')}</div>
@@ -2531,7 +2627,7 @@ async function renderAdminTeam(c){
     <div class="sectlabel">${title} (${list.filter(s=>s.role===role).length})</div>
     ${list.filter(s=>s.role===role).map(row).join('') || '<div class="card tiny" style="text-align:center">Nobody yet.</div>'}`;
   c.innerHTML = `
-    <button class="back" onclick="go('admin')">‹ ${A.profile.role==='board' ? 'Board' : 'Administration'}</button>
+    <button class="back" onclick="go(isAdmin()?'home':'admin')">‹ ${isAdmin() ? 'Home' : A.profile.role==='board' ? 'Board' : 'Administration'}</button>
     <div class="row" style="align-items:center">
       <div style="flex:1"><h2 class="title" style="margin-bottom:0">Members</h2><div class="lead" style="margin-bottom:0">${list.length} member${list.length===1?'':'s'} · <span class="seen on">● ${online} online</span></div></div>
       <button class="btn sm ${S.membersEdit?'':'gray'}" style="width:auto;padding:10px 14px;font-size:16px;line-height:1;margin-right:6px" title="${S.membersEdit?'Done editing':'Edit members'}" onclick="S.membersEdit=!S.membersEdit;render()">${S.membersEdit?'Done':'✎'}</button>
@@ -3066,7 +3162,7 @@ async function loadData(){
   if(!A.user) return;
   const me = A.user.id;
   if(dataLoaded) { try { await loadProfile(); } catch(e) {} }   // background refreshes pick up profile changes too
-  const [classes, tcourses, reqs, events, tutors, posts, myGrades, pendingGrades, materials, roster, presence, people, avail] = await Promise.all([
+  const [classes, tcourses, reqs, events, tutors, posts, myGrades, pendingGrades, materials, roster, presence, people, allReqs, avail] = await Promise.all([
     sbFetch('/rest/v1/sl_student_classes?select=course&user_id=eq.'+me+'&order=created_at'),
     sbFetch('/rest/v1/sl_tutor_courses?select=course,grade,year,availability&user_id=eq.'+me+'&order=created_at'),
     sbFetch('/rest/v1/sl_requests?select=*&or=(student_id.eq.'+me+',tutor_id.eq.'+me+')&order=created_at.desc'),
@@ -3079,6 +3175,7 @@ async function loadData(){
     sbFetch('/rest/v1/sl_class_students?select=*'),
     sbFetch('/rest/v1/sl_request_presence?select=*'),
     sbFetch('/rest/v1/sl_people?select=*'),
+    isAdmin() ? sbFetch('/rest/v1/sl_requests?select=*&order=created_at.desc&limit=500') : Promise.resolve([]),
     sbFetch('/rest/v1/sl_availability?select=*&order=recurring.desc,weekday,date,start_min'),
   ]);
   S.myClasses = (classes||[]).map(r=>r.course);
@@ -3093,9 +3190,10 @@ async function loadData(){
   S.events = events||[];
   S.posts = posts||[];
   S.materials = materials||[];
-  S.roster = (roster||[]).filter(r => r.user_id !== me);
+  S.roster = (roster||[]).filter(r => r.user_id !== me && !(people||[]).some(p => p.user_id===r.user_id && p.role==='admin'));
   S.presence = {}; (presence||[]).forEach(function(x){ S.presence[x.request_id] = x.other_seen_at; });
   S.people = (people||[]).filter(x => x.user_id !== me);
+  S.allRequests = allReqs||[];
   S.availability = avail||[];
   S.tutors = buildTutors(tutors||[], me);
   S.helped = S.incoming.filter(r=>r.status==='done').length;
