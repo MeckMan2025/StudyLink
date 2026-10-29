@@ -484,9 +484,10 @@ function toggleSide(v){ $('app').classList.toggle('open', v); }
 function openView(ov){ S.overlay=ov; S._top=true; render(); }
 function closeView(){ S.overlay=null; S._top=true; render(); }
 // Top-level posts for a class, each with its replies, oldest reply first.
-function postsFor(course){
+function postsFor(course, groupId){
   const all = S.posts || [], me = A.user ? A.user.id : null;
-  return all.filter(p => p.course===course && !p.parent_id).map(p => ({
+  const inGroup = p => groupId===undefined ? true : groupId===null ? !p.group_id : p.group_id===groupId;
+  return all.filter(p => p.course===course && !p.parent_id && inGroup(p)).map(p => ({
     id:p.id, who:p.author_alias, txt:p.body, mine:p.author_id===me, urgent:!!p.urgent,
     replies: all.filter(r => r.parent_id===p.id).sort((a,b)=>a.created_at.localeCompare(b.created_at)).map(r => ({ who:r.author_alias, txt:r.body })),
   }));
@@ -546,7 +547,7 @@ function renderInner(){
 }
 
 let menuOpen = false;
-const TAB_TITLES = { settings:'Settings', help:'Help', home:'Home Screen', classes:'Classes', calendar:'Calendar', tutoring:'Tutoring', community:'Community', profile:'Profile', 'admin-grades':'People to check', 'admin-requests':'All requests', 'admin-team':'Members', admin:'Administration' };
+const TAB_TITLES = { settings:'Settings', help:'Help', home:'Home Screen', classes:'Classes', calendar:'Calendar', tutoring:'Tutoring', community:'Community', profile:'Profile', 'admin-grades':'People to check', 'admin-requests':'All requests', 'admin-team':'Members', 'admin-times':'Session times', admin:'Administration' };
 const isStaff = () => !!(A.profile && (A.profile.role==='admin' || A.profile.role==='board'));
 const hasGrade = () => !!(A.profile && A.profile.role==='student');   // staff accounts carry no grade
 // Administrators run the program; they are neither tutors nor tutees. No
@@ -592,6 +593,11 @@ function notifItems(){
   // Chat messages to me
   (S.inbox||[]).filter(m=>m.sender_id!==me && m.created_at>cut).forEach(m=>{ const r=findReq(m.request_id); if(!r) return;
     out.push({ key:'msg:'+m.id, at:m.created_at, ic:'✉️', t:'Message from '+otherSide(r).alias, s:(m.body||'').slice(0,80), go:()=>openView({type:'chat', id:r.id}) }); });
+  // Study groups waiting on me, or opened for me
+  (S.groups||[]).forEach(g=>{
+    if(g.status==='pending' && g.tutor_id===me) out.push({ key:'group:'+g.id+':ask', at:g.created_at, ic:'📚', t:(g.creator_alias||'A student')+' wants you to supervise a study group', s:g.name+' · '+g.course, go:()=>openView({type:'board',course:g.course,group:g.id}) });
+    if(g.status==='active' && g.created_by===me && g.tutor_id!==me) out.push({ key:'group:'+g.id+':open', at:g.created_at, ic:'📚', t:(g.tutor_alias||'The tutor')+' opened your study group', s:g.name+' · '+g.course, go:()=>openView({type:'board',course:g.course,group:g.id}) });
+  });
   // My grade checks
   (S.taken||[]).forEach(g=>{
     if(g.status==='verified') out.push({ key:'grade:'+g.id+':verified', at:g.reviewed_at||g.created_at||'', ic:'🎓', t:g.course+' verified — you can tutor it', s:'Grade '+(g.grade||''), go:()=>go('profile') });
@@ -650,6 +656,8 @@ function renderNav(){
       <hr>
       ${item('admin-team','🛡️','Members')}
       <hr>
+      ${item('admin-times','🕒','Session times')}
+      <hr>
       ${item('classes','📚','Classes')}
       <hr>
       ${item('community','💬','Community')}
@@ -706,6 +714,7 @@ function renderBody(){
   if(S.tab==='admin-grades') return renderAdminGrades(c);
   if(S.tab==='admin-requests') return renderAdminRequests(c);
   if(S.tab==='admin-team') return renderAdminTeam(c);
+  if(S.tab==='admin-times') return renderAdminTimes(c);
   S.tab='home'; return renderHome(c);   // an unknown tab never shows an empty page
 }
 
@@ -1605,14 +1614,87 @@ function deleteMaterial(id){
 }
 
 // The class board, embedded in the Community section of the class page.
+// ---- Study groups ----
+// Every class has one main group: everyone taking it plus its tutors. Anyone
+// can start another, picking a tutor to supervise it; the group opens once
+// that tutor accepts. The tutor and the person who started it are in it from
+// the start, anyone in the class can join.
+const groupsFor = course => (S.groups||[]).filter(g=>g.course===course && g.status!=='closed');
+const groupMembers = gid => (S.groupMembers||[]).filter(m=>m.group_id===gid);
+const inGroup = (g, uid) => g.tutor_id===uid || g.created_by===uid || groupMembers(g.id).some(m=>m.user_id===uid);
+function mainGroupCount(course){
+  const me=A.user.id;
+  const students=new Set(S.roster.filter(r=>r.course===course).map(r=>r.user_id)); if(S.myClasses.includes(course)) students.add(me);
+  const tutors=new Set(tutorsFor(course).map(t=>t.id)); if(S.tutorClasses.includes(course)) tutors.add(me);
+  return { students:students.size, tutors:tutors.size };
+}
+function groupsHtml(course){
+  const me=A.user.id, sel=S.overlay.group||null, mc=mainGroupCount(course);
+  const list=groupsFor(course);
+  const chip=(id,on,label,sub)=>`<button class="card" style="margin:0;text-align:left;cursor:pointer;font:inherit;color:inherit;padding:10px 12px;border:2px solid ${on?'var(--blue-d)':'transparent'};${on?'background:#eef3ff':''}" onclick="S.overlay.group=${id===null?'null':`'${id}'`};S.groupForm=false;render()">
+      <div style="font-weight:800;font-size:14px">${label}</div><div class="tiny">${sub}</div></button>`;
+  const g = sel ? list.find(x=>x.id===sel) : null;
+  const form = S.groupForm ? `<div class="card" style="margin-top:10px;border-color:var(--blue)">
+      <div style="font-weight:800;margin-bottom:8px">Start a study group</div>
+      <div class="field"><label>Name</label><input id="gp_name" placeholder="e.g. Tuesday unit circle crew" maxlength="60"></div>
+      <div class="field" style="margin-bottom:0"><label>Which tutor will supervise it?</label>
+        <select id="gp_tutor">${tutorsFor(course).filter(t=>t.id!==me).map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('') || '<option value="">No tutors for this class yet</option>'}</select>
+        <div class="tiny" style="margin-top:6px">The group opens once the tutor accepts. They're in it from the start.</div></div>
+      <div class="row" style="gap:8px;margin-top:12px"><button class="btn gray" style="flex:1" onclick="S.groupForm=false;render()">Cancel</button><button class="btn" style="flex:2" ${tutorsFor(course).some(t=>t.id!==me)?'':'disabled'} onclick="createGroup('${esc(course)}',this)">Ask the tutor</button></div>
+    </div>` : '';
+  const members = g ? groupMembers(g.id) : [];
+  const header = g ? `<div class="card" style="margin-top:10px">
+      <div class="row" style="align-items:flex-start"><div style="flex:1;min-width:0"><div style="font-weight:800">${esc(g.name)}</div>
+        <div class="tiny">Supervised by ${esc(g.tutor_alias||'a tutor')} · started by ${esc(g.creator_alias||'a student')} · ${members.length+ (members.some(m=>m.user_id===g.tutor_id)?0:1)} in it${g.status==='pending'?' · <b style="color:#c98b34">waiting for the tutor</b>':''}</div></div>
+        ${g.status==='pending' && g.tutor_id===me ? `<button class="btn sm green" onclick="superviseGroup('${g.id}',true)">Supervise</button><button class="btn sm gray" style="margin-left:6px" onclick="superviseGroup('${g.id}',false)">No thanks</button>`
+          : inGroup(g,me) ? (g.tutor_id===me||g.created_by===me ? `<button class="btn sm gray" onclick="closeGroup('${g.id}')">Close group</button>` : `<button class="btn sm gray" onclick="leaveGroup('${g.id}')">Leave</button>`)
+          : g.status==='active' ? `<button class="btn sm" onclick="joinGroup('${g.id}')">Join</button>` : ''}
+      </div>
+      ${members.length ? `<div class="tiny" style="margin-top:8px">${members.map(m=>esc(m.alias||'?')).join(' · ')}</div>` : ''}
+    </div>` : '';
+  return `<div class="sectlabel">Groups</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px">
+      ${chip(null, sel===null, '👥 Everyone in '+esc(course), mc.students+' student'+(mc.students===1?'':'s')+' · '+mc.tutors+' tutor'+(mc.tutors===1?'':'s'))}
+      ${list.map(x=>chip(x.id, sel===x.id, '📚 '+esc(x.name), (x.status==='pending'?'⏳ waiting for '+esc(x.tutor_alias||'the tutor'):'with '+esc(x.tutor_alias||'a tutor'))+(inGroup(x,me)?' · you\'re in':''))).join('')}
+      ${S.groupsReady ? `<button class="card addcard" style="margin:0;min-height:56px" onclick="S.groupForm=!S.groupForm;render()">＋ Start a study group</button>` : ''}
+    </div>${form}${header}`;
+}
+async function createGroup(course, btn){
+  const name=($('gp_name').value||'').trim(), tid=$('gp_tutor').value; if(!name){ $('gp_name').focus(); return; } if(!tid) return;
+  const t=findTutor(tid); btn.disabled=true; btn.textContent='Asking…';
+  try{
+    const rows=await sbFetch('/rest/v1/sl_groups', { method:'POST', headers:{ Prefer:'return=representation' }, body:JSON.stringify({ course, name, created_by:A.user.id, creator_alias:currentAlias(), tutor_id:tid, tutor_alias:t?t.name:'' }) });
+    const g=rows&&rows[0];
+    if(g) await sbFetch('/rest/v1/sl_group_members', { method:'POST', headers:{ Prefer:'return=minimal,resolution=ignore-duplicates' }, body:JSON.stringify([{ group_id:g.id, user_id:A.user.id, alias:currentAlias() }]) });
+    await loadData(); S.groupForm=false; if(g) S.overlay.group=g.id; render(); toast('Asked '+(t?t.name:'the tutor')+' to supervise — the group opens when they accept');
+  }catch(e){ toast(/sl_groups/.test(e.message) ? 'Study groups are not set up yet — run sql/sl_settings_and_groups.sql.' : e.message); btn.disabled=false; btn.textContent='Ask the tutor'; }
+}
+function superviseGroup(id, yes){
+  const g=(S.groups||[]).find(x=>x.id===id); if(!g) return;
+  const p = yes
+    ? sbFetch('/rest/v1/sl_groups?id=eq.'+id, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ status:'active', tutor_alias:currentAlias() }) })
+        .then(()=>sbFetch('/rest/v1/sl_group_members', { method:'POST', headers:{ Prefer:'return=minimal,resolution=ignore-duplicates' }, body:JSON.stringify({ group_id:id, user_id:A.user.id, alias:currentAlias() }) }))
+    : sbFetch('/rest/v1/sl_groups?id=eq.'+id, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ status:'closed' }) });
+  p.then(loadData).then(()=>{ render(); toast(yes ? 'You now supervise '+g.name : 'Declined'); }).catch(e=>toast(e.message));
+}
+function joinGroup(id){ sbFetch('/rest/v1/sl_group_members', { method:'POST', headers:{ Prefer:'return=minimal,resolution=ignore-duplicates' }, body:JSON.stringify({ group_id:id, user_id:A.user.id, alias:currentAlias() }) }).then(loadData).then(()=>{ render(); toast('Joined'); }).catch(e=>toast(e.message)); }
+function leaveGroup(id){ sbFetch('/rest/v1/sl_group_members?group_id=eq.'+id+'&user_id=eq.'+A.user.id, { method:'DELETE', headers:{ Prefer:'return=minimal' } }).then(loadData).then(()=>{ if(S.overlay) S.overlay.group=null; render(); }).catch(e=>toast(e.message)); }
+function closeGroup(id){ if(!confirm('Close this study group? Its posts stay, but nobody can post any more.')) return; sbFetch('/rest/v1/sl_groups?id=eq.'+id, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ status:'closed' }) }).then(loadData).then(()=>{ if(S.overlay) S.overlay.group=null; render(); }).catch(e=>toast(e.message)); }
+
 function boardHtml(course){
-  const posts=postsFor(course);
-  return `
-    <div class="composer">
-      <input id="post_in" placeholder="Ask the class a question…" onkeydown="if(event.key==='Enter')addPost('${esc(course)}')">
+  const me=A.user.id, sel=S.overlay.group||null, g=sel ? groupsFor(course).find(x=>x.id===sel) : null;
+  if(sel && !g){ S.overlay.group=null; return boardHtml(course); }
+  const canPost = !g || (g.status==='active' && (inGroup(g,me) || isStaff()));
+  const canRead = !g || inGroup(g,me) || isStaff();
+  const posts = canRead ? postsFor(course, sel) : [];
+  const hint = g ? (g.status==='pending' ? 'This group opens once '+(g.tutor_alias||'the tutor')+' accepts.' : !inGroup(g,me) && !isStaff() ? 'Join the group to read and post.' : '') : '';
+  return `${groupsHtml(course)}
+    <div class="sectlabel">${g ? esc(g.name) : 'Everyone in '+esc(course)}</div>
+    ${canPost ? `<div class="composer">
+      <input id="post_in" placeholder="${g ? 'Say something to the group…' : 'Ask the class a question…'}" onkeydown="if(event.key==='Enter')addPost('${esc(course)}')">
       <button class="btn sm" onclick="addPost('${esc(course)}')">Post</button>
     </div>
-    <p class="tiny" style="margin:8px 2px">🛡️ Posting as ${esc(currentAlias())}. Class boards are moderated — be kind and keep it school-appropriate.</p>
+    <p class="tiny" style="margin:8px 2px">🛡️ Posting as ${esc(currentAlias())}. ${g ? 'Supervised by '+esc(g.tutor_alias||'a tutor')+'.' : 'Tutors of this class see this board too.'} Be kind and keep it school-appropriate.</p>` : `<div class="card tiny" style="margin-top:8px">${esc(hint)}</div>`}
     <div class="card" style="margin-top:6px">
       ${posts.length ? posts.map(p=>`
         <div class="post">
@@ -1769,15 +1851,25 @@ function minLabel(min){ if(min>=1440) return '12:00 AM'; const h=Math.floor(min/
 // the school; the hour-long after-school slots are off campus, so nothing
 // over 45 minutes is ever in the building. A student may tick several times
 // and places (or none) and the tutor picks when they accept.
-const SESSION_SLOTS = [
-  { group:'Before school', label:'7:30–8:00 AM', start:450, end:480, school:true },
-  { group:'8th period',    label:'2:45–3:30 PM', start:885, end:930, school:true },
-  ...[[930,990],[960,1020],[990,1050],[1020,1080],[1050,1110],[1080,1140],[1110,1170],[1140,1200]].map(([a,b])=>({ group:'After school', label:minLabel(a).replace(/ (AM|PM)$/,'')+'–'+minLabel(b), start:a, end:b, school:false })),
-];
-const slotByLabel = l => SESSION_SLOTS.find(x=>x.label===l);
 const SLOT_GROUPS = ['Before school','8th period','After school'];
-const SCHOOL_PLACES = ['Library','Cafeteria','Commons','Other'];
-const OFF_CAMPUS_PLACES = ['Bettendorf Public Library','Vibrant Coffeehouse and Kitchen','Other'];
+const IN_SCHOOL_GROUPS = ['Before school','8th period'];
+const slotLabel = (a,b) => minLabel(a).replace(/ (AM|PM)$/,'')+'–'+minLabel(b);
+const mkSlot = (group,a,b) => ({ group, label:slotLabel(a,b), start:a, end:b, school:IN_SCHOOL_GROUPS.includes(group) });
+const DEFAULT_SESSIONS = {
+  slots: [['Before school',450,480],['8th period',885,930], ...[[930,990],[960,1020],[990,1050],[1020,1080],[1050,1110],[1080,1140],[1110,1170],[1140,1200]].map(([a,b])=>['After school',a,b])],
+  schoolPlaces: ['Library','Cafeteria','Commons','Other'],
+  offCampusPlaces: ['Bettendorf Public Library','Vibrant Coffeehouse and Kitchen','Other'],
+};
+// Editable by an administrator (Session times); defaults until sl_settings has a row.
+let SESSION_SLOTS = [], SCHOOL_PLACES = [], OFF_CAMPUS_PLACES = [];
+function applySessionSettings(v){
+  const c = v && Array.isArray(v.slots) && v.slots.length ? v : DEFAULT_SESSIONS;
+  SESSION_SLOTS = c.slots.map(([g,a,b])=>mkSlot(g,+a,+b)).sort((x,y)=>SLOT_GROUPS.indexOf(x.group)-SLOT_GROUPS.indexOf(y.group) || x.start-y.start);
+  SCHOOL_PLACES = (c.schoolPlaces||DEFAULT_SESSIONS.schoolPlaces).slice(); if(!SCHOOL_PLACES.includes('Other')) SCHOOL_PLACES.push('Other');
+  OFF_CAMPUS_PLACES = (c.offCampusPlaces||DEFAULT_SESSIONS.offCampusPlaces).slice(); if(!OFF_CAMPUS_PLACES.includes('Other')) OFF_CAMPUS_PLACES.push('Other');
+}
+applySessionSettings(null);
+const slotByLabel = l => SESSION_SLOTS.find(x=>x.label===l);
 const VIBRANT = 'Vibrant Coffeehouse and Kitchen', VIBRANT_CLOSE = 18*60, VIBRANT_BOOK_URL = 'https://cal.com/vibrant-qc';
 const MAX_SCHOOL_MINUTES = 45;
 const OPTION_SEP = ' / ';
@@ -2355,7 +2447,7 @@ function renderCommunity(c){
     return `<div class="card row" style="cursor:pointer" onclick="openView({type:'board',course:'${esc(course)}'})">
       <div class="avatar" style="background:${courseColor(course)}">${courseEmoji(course)}</div>
       <div style="min-width:0"><div style="font-weight:800">${esc(course)}</div>
-        <div class="tiny" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${posts.length} post${posts.length===1?'':'s'} · ${n} tutor${n===1?'':'s'}${latest ? ' · latest: ' + esc(latest.author_alias) + ': ' + esc(latest.body.slice(0,60)) : ''}</div></div>
+        <div class="tiny" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${groupsFor(course).length ? groupsFor(course).length+' study group'+(groupsFor(course).length===1?'':'s')+' · ' : ''}${posts.length} post${posts.length===1?'':'s'} · ${n} tutor${n===1?'':'s'}${latest ? ' · latest: ' + esc(latest.author_alias) + ': ' + esc(latest.body.slice(0,60)) : ''}</div></div>
       <div style="margin-left:auto;color:var(--muted)">›</div>
     </div>`;
   };
@@ -2368,7 +2460,7 @@ function renderCommunity(c){
   `;
 }
 function renderBoard(c){
-  S.overlay = { type:'course', course:S.overlay.course, sec:'community' };
+  S.overlay = { type:'course', course:S.overlay.course, sec:'community', group:S.overlay.group||null };
   return renderCourseDetail(c, S.overlay.course);
 }
 function addPost(course){
@@ -2382,7 +2474,8 @@ function addReply(postId, course){
   sendPost(course, txt, postId);
 }
 function sendPost(course, body, parent_id){
-  return sbFetch('/rest/v1/sl_posts', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ course, body, parent_id, author_id:A.user.id, author_alias:currentAlias() }) })
+  const group_id = S.overlay && S.overlay.group ? S.overlay.group : null;
+  return sbFetch('/rest/v1/sl_posts', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ course, body, parent_id, author_id:A.user.id, author_alias:currentAlias(), ...(group_id ? { group_id } : {}) }) })
     .then(loadData).then(render).catch(function(e){ toast(e.message); });
 }
 function deletePost(id){
@@ -2767,6 +2860,7 @@ function renderAdminHub(c){
     ${tile('admin-grades','✅','People to check', S.pendingGrades ? S.pendingGrades+' waiting' : 'Nothing waiting', S.pendingGrades)}
     ${tile('admin-requests','📋','All requests','Every tutoring request in the school')}
     ${tile('admin-team','🛡️','Members','Approve people, join codes, levels')}
+    ${tile('admin-times','🕒','Session times','When tutoring can happen, and where')}
     <div class="sectlabel">Where do students need help?</div>
     <div class="card" style="padding:6px 14px">${needHeatHtml()}</div>`;
 }
@@ -2894,6 +2988,55 @@ async function renderAdminRequests(c){
 function adminCancel(id){
   sbFetch('/rest/v1/sl_requests?id=eq.'+id, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ status:'cancelled' }) })
     .then(function(){ toast('Request cancelled'); render(); }).catch(function(e){ toast(e.message); });
+}
+
+// Session times: the slots students can tick and the places that go with
+// them, edited here and saved for everyone.
+function renderAdminTimes(c){
+  if(!isStaff()) return go('home');
+  const cur = S.settings && S.settings.sessions && S.settings.sessions.slots ? S.settings.sessions : DEFAULT_SESSIONS;
+  const d = S.timesDraft = S.timesDraft || { slots: cur.slots.map(x=>x.slice()), schoolPlaces:(cur.schoolPlaces||[]).filter(x=>x!=='Other').join(', '), offCampusPlaces:(cur.offCampusPlaces||[]).filter(x=>x!=='Other').join(', ') };
+  const inp='padding:9px 10px;border:1.5px solid #e5e2f0;border-radius:10px;font:inherit;font-size:14px;background:#fff';
+  const t2v = m => (Math.floor(m/60)+'').padStart(2,'0')+':'+(m%60+'').padStart(2,'0');
+  const row = (sl,i) => `<div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:8px">
+      <select style="flex:1 1 140px;${inp}" onchange="S.timesDraft.slots[${i}][0]=this.value;render()">${SLOT_GROUPS.map(g=>`<option ${sl[0]===g?'selected':''}>${g}</option>`).join('')}</select>
+      <input type="time" value="${t2v(sl[1])}" step="300" style="flex:0 0 118px;${inp}" onchange="S.timesDraft.slots[${i}][1]=timeToMin(this.value);render()">
+      <span class="tiny">to</span>
+      <input type="time" value="${t2v(sl[2])}" step="300" style="flex:0 0 118px;${inp}" onchange="S.timesDraft.slots[${i}][2]=timeToMin(this.value);render()">
+      <span class="tiny" style="flex:0 0 60px">${sl[2]>sl[1] ? (sl[2]-sl[1])+' min' : '<b style="color:#c23b5e">ends first</b>'}</span>
+      <button class="mini danger" onclick="S.timesDraft.slots.splice(${i},1);render()">Remove</button>
+    </div>`;
+  const bad = d.slots.some(sl=>sl[2]<=sl[1]) || d.slots.some(sl=>IN_SCHOOL_GROUPS.includes(sl[0]) && sl[2]-sl[1]>MAX_SCHOOL_MINUTES);
+  c.innerHTML = `
+    <button class="back" onclick="go(isAdmin()?'home':'admin')">‹ ${isAdmin() ? 'Home' : A.profile.role==='board' ? 'Board' : 'Administration'}</button>
+    <h2 class="title">Session times</h2>
+    <div class="lead">The times a student can tick when they ask for tutoring, and the places that go with them. Before school and 8th period are inside the school, so they can't be longer than ${MAX_SCHOOL_MINUTES} minutes; after-school sessions are off campus.</div>
+    ${S.groupsReady===false && !(S.settings&&S.settings.sessions) ? '' : ''}
+    ${SLOT_GROUPS.map(g=>`<div class="sectlabel">${g}</div><div class="card" style="padding:12px 14px 4px">
+      ${d.slots.map((sl,i)=>sl[0]===g?row(sl,i):'').join('') || '<div class="tiny" style="margin-bottom:8px">No times yet.</div>'}
+      <div style="margin-bottom:8px"><button class="btn ghost sm" onclick="S.timesDraft.slots.push(['${g}',${g==='Before school'?'450,480':g==='8th period'?'885,930':'930,990'}]);render()">＋ Add a time</button></div>
+    </div>`).join('')}
+    <div class="sectlabel">Places inside the school</div>
+    <div class="card"><input value="${esc(d.schoolPlaces)}" placeholder="Library, Cafeteria, Commons" style="width:100%;${inp}" oninput="S.timesDraft.schoolPlaces=this.value"><div class="tiny" style="margin-top:6px">Separate with commas. "Other" with a type-in box is always offered.</div></div>
+    <div class="sectlabel">Places off campus</div>
+    <div class="card"><input value="${esc(d.offCampusPlaces)}" placeholder="Bettendorf Public Library, Vibrant Coffeehouse and Kitchen" style="width:100%;${inp}" oninput="S.timesDraft.offCampusPlaces=this.value"><div class="tiny" style="margin-top:6px">Vibrant is only offered for sessions that end by 6 PM, and shows a reserve-ahead note.</div></div>
+    <div class="row" style="gap:8px;margin-top:16px">
+      <button class="btn gray" style="flex:1" onclick="S.timesDraft=null;render()">Reset</button>
+      <button class="btn" style="flex:2" ${bad?'disabled':''} onclick="saveSessionTimes(this)">Save for everyone</button>
+    </div>
+    ${bad ? '<div class="tiny" style="margin-top:8px;color:#c23b5e">Every time needs to end after it starts, and in-school times can be at most '+MAX_SCHOOL_MINUTES+' minutes.</div>' : ''}`;
+}
+const timeToMin = v => { const m=/^(\d+):(\d+)/.exec(v||''); return m ? (+m[1])*60 + (+m[2]) : 0; };
+async function saveSessionTimes(btn){
+  const d=S.timesDraft; if(!d) return;
+  const value = { slots: d.slots.map(sl=>[sl[0],+sl[1],+sl[2]]).sort((x,y)=>SLOT_GROUPS.indexOf(x[0])-SLOT_GROUPS.indexOf(y[0]) || x[1]-y[1]),
+    schoolPlaces: d.schoolPlaces.split(',').map(x=>x.trim()).filter(Boolean), offCampusPlaces: d.offCampusPlaces.split(',').map(x=>x.trim()).filter(Boolean) };
+  btn.disabled=true; btn.textContent='Saving…';
+  try{
+    await sbFetch('/rest/v1/sl_settings', { method:'POST', headers:{ Prefer:'return=minimal,resolution=merge-duplicates' }, body:JSON.stringify({ key:'sessions', value, updated_at:new Date().toISOString(), updated_by:A.user.id }) });
+    S.settings = S.settings||{}; S.settings.sessions=value; applySessionSettings(value); S.timesDraft=null;
+    toast('Session times saved'); render();
+  }catch(e){ toast(/sl_settings/.test(e.message) ? 'The settings table is not set up yet — run sql/sl_settings_and_groups.sql.' : e.message); btn.disabled=false; btn.textContent='Save for everyone'; }
 }
 
 // Who runs SilverCircle. A seat is granted by email, so it applies the moment
@@ -3523,7 +3666,7 @@ async function loadData(){
   if(!A.user) return;
   const me = A.user.id;
   if(dataLoaded) { try { await loadProfile(); } catch(e) {} }   // background refreshes pick up profile changes too
-  let [classes, tcourses, reqs, events, tutors, posts, myGrades, pendingGrades, materials, roster, presence, people, allReqs, inbox, avail] = await Promise.all([
+  let [classes, tcourses, reqs, events, tutors, posts, myGrades, pendingGrades, materials, roster, presence, people, allReqs, inbox, settings, groups, groupMembers, avail] = await Promise.all([
     sbFetch('/rest/v1/sl_student_classes?select=course&user_id=eq.'+me+'&order=created_at'),
     sbFetch('/rest/v1/sl_tutor_courses?select=course,grade,year,availability&user_id=eq.'+me+'&order=created_at'),
     sbFetch('/rest/v1/sl_requests?select=*&or=(student_id.eq.'+me+',tutor_id.eq.'+me+')&order=created_at.desc'),
@@ -3538,6 +3681,9 @@ async function loadData(){
     sbFetch('/rest/v1/sl_people?select=*'),
     isAdmin() ? sbFetch('/rest/v1/sl_requests?select=*&order=created_at.desc&limit=500') : Promise.resolve([]),
     sbFetch('/rest/v1/sl_messages?select=id,request_id,sender_id,body,created_at&sender_id=neq.'+me+'&order=created_at.desc&limit=60').catch(()=>[]),
+    sbFetch('/rest/v1/sl_settings?select=key,value').catch(()=>[]),
+    sbFetch('/rest/v1/sl_groups?select=*&order=created_at').catch(()=>null),
+    sbFetch('/rest/v1/sl_group_members?select=*').catch(()=>[]),
     sbFetch('/rest/v1/sl_availability?select=*&order=recurring.desc,weekday,date,start_min'),
   ]);
   const fixC = rows => (rows||[]).map(r => r && r.course ? { ...r, course: canon(r.course) } : r);
@@ -3560,6 +3706,11 @@ async function loadData(){
   S.allRequests = allReqs||[];
   S.availability = avail||[];
   S.inbox = inbox||[];
+  S.settings = {}; (settings||[]).forEach(r=>{ S.settings[r.key]=r.value; });
+  applySessionSettings(S.settings.sessions);
+  S.groupsReady = Array.isArray(groups);      // null means the tables aren't there yet
+  S.groups = fixC(groups||[]);
+  S.groupMembers = groupMembers||[];
   S.tutors = buildTutors(tutors||[], me);
   S.helped = S.incoming.filter(r=>r.status==='done').length;
   S.hours = Math.round(S.helped*0.75*100)/100;
