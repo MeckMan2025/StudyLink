@@ -1029,15 +1029,7 @@ function tutorDashboard(){
       <div class="p"><div class="n">${S.hours}</div><div class="l">service hours earned</div></div>
     </div>
 
-    ${inc.length ? `<div class="sectlabel">New requests — your call (${inc.length})</div>
-      ${inc.map(r=>`<div class="card">
-        <div class="row"><div class="avatar" style="background:${courseColor(r.course)}">${initials(r.student_alias)}</div>
-          <div style="min-width:0;flex:1"><div style="font-weight:800">${esc(r.student_alias)} <span class="tiny">· ${esc(r.course)}</span></div>
-          <div class="tiny">${esc(r.topic)} · ${esc(dayWord(r.date))} ${esc(r.time||'')} · ${esc(r.format)}${r.location?' · 📍 '+esc(r.location):''}</div></div></div>
-        <div class="row" style="gap:8px;margin-top:10px">
-          <button class="btn sm gray" style="flex:1" onclick="respondRequest('${r.id}',false)">Decline</button>
-          <button class="btn sm green" style="flex:1" onclick="respondRequest('${r.id}',true)">Accept</button>
-        </div></div>`).join('')}` : ''}
+    ${inc.length ? `<div class="sectlabel">New requests — your call (${inc.length})</div>${homeRequestsHtml(inc)}` : ''}
 
     ${urgent.length ? `<div class="sectlabel">🆘 Help needed now</div><div class="card">${urgent.map(p=>`<div class="listrow urgent" style="padding-left:8px" onclick="openView({type:'course',course:'${esc(p.course)}',sec:'community'})"><span class="t" style="font-weight:700">${esc(p.author_alias)}: “${esc(p.body.length>80?p.body.slice(0,80)+'…':p.body)}”</span><span class="r">${esc(p.course)} · reply ›</span></div>`).join('')}</div>` : ''}
 
@@ -2419,6 +2411,37 @@ async function sendChat(){
 /* -------- TUTORING -------- */
 const SERIES_TOPIC = 'Ongoing sessions';
 // Pending requests, with each many-sessions request folded into one group.
+// Home shows one card per student: how many they asked for, and Accept all /
+// Decline all. Opening the card lists each request with its own buttons, so
+// nine requests from one person take one card, not nine.
+function homeRequestsHtml(inc){
+  const by={}; inc.forEach(r=>{ (by[r.student_id]=by[r.student_id]||[]).push(r); });
+  return Object.values(by).map(rows=>{
+    rows.sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+    const r=rows[0], ids=rows.map(x=>x.id).join(','), open=S.homeReqOpen===r.student_id, n=rows.length;
+    const courses=[...new Set(rows.map(x=>x.course))];
+    if(n===1) return `<div class="card">
+        <div class="row"><div class="avatar" style="background:${courseColor(r.course)}">${initials(r.student_alias)}</div>
+          <div style="min-width:0;flex:1"><div style="font-weight:800">${esc(r.student_alias)} <span class="tiny">· ${esc(r.course)}</span></div>
+          <div class="tiny">${esc(r.topic)} · ${esc(dayWord(r.date))} ${esc(r.time||'')}${r.location?' · 📍 '+esc(r.location):''}</div></div></div>
+        <div class="row" style="gap:8px;margin-top:10px">
+          <button class="btn sm gray" style="flex:1" onclick="respondRequest('${r.id}',false)">Decline</button>
+          <button class="btn sm green" style="flex:1" onclick="respondRequest('${r.id}',true)">Accept</button>
+        </div></div>`;
+    return `<div class="card">
+      <div class="row" style="cursor:pointer" onclick="S.homeReqOpen=${open?'null':`'${r.student_id}'`};render()"><div class="avatar" style="background:${courseColor(r.course)}">${initials(r.student_alias)}</div>
+        <div style="min-width:0;flex:1"><div style="font-weight:800">${esc(r.student_alias)} <span class="tiny">· ${n} requests</span></div>
+        <div class="tiny">${courses.map(esc).join(', ')} · ${esc(fmtDate(rows[0].date))}${n>1?' → '+esc(fmtDate(rows[n-1].date)):''}</div></div>
+        <span class="chev ${open?'down':''}">▶</span></div>
+      ${open ? `<div style="margin-top:10px;border-top:1px solid var(--line);padding-top:8px">${rows.map(x=>`<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line)">
+          <div style="min-width:0;flex:1"><div style="font-weight:700;font-size:13px">${esc(x.course)} <span class="tiny">· ${esc(x.topic||'')}</span></div><div class="tiny">${esc(dayWord(x.date))} ${esc(x.time||'')}${x.location?' · 📍 '+esc(x.location):''}</div></div>
+          <button class="btn sm gray" onclick="respondRequest('${x.id}',false)">✕</button><button class="btn sm green" style="margin-left:6px" onclick="respondRequest('${x.id}',true)">✓</button></div>`).join('')}</div>` : ''}
+      <div class="row" style="gap:8px;margin-top:10px">
+        <button class="btn sm gray" style="flex:1" onclick="respondSeries('${ids}',false)">Decline all</button>
+        <button class="btn sm green" style="flex:1" onclick="respondSeries('${ids}',true)">Accept all ${n}</button>
+      </div></div>`;
+  }).join('');
+}
 function requestGroups(rows){
   const groups=[], by={};
   rows.forEach(r=>{
@@ -2443,9 +2466,14 @@ function seriesCard(g){
   </div>`;
 }
 function respondSeries(ids, accept){
-  sbFetch('/rest/v1/sl_requests?id=in.('+ids+')', { method:'PATCH', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ status: accept ? 'accepted' : 'declined' }) })
-    .then(loadData).then(function(){ render(); toast(accept ? ids.split(',').length+' sessions booked ✅' : 'Sessions declined'); })
-    .catch(function(e){ toast(e.message); });
+  const all=ids.split(','), reqs=all.map(findReq).filter(Boolean);
+  // Requests that left the time or place open need a pick each; the rest are settled in one go.
+  const clear = accept ? reqs.filter(r=>!needsPick(r)) : reqs, open = accept ? reqs.filter(needsPick) : [];
+  const p = clear.length ? sbFetch('/rest/v1/sl_requests?id=in.('+clear.map(r=>r.id).join(',')+')', { method:'PATCH', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ status: accept ? 'accepted' : 'declined' }) }) : Promise.resolve();
+  p.then(loadData).then(function(){
+      if(open.length){ openView({type:'pickSlot', id:open[0].id}); toast((clear.length?clear.length+' booked · ':'')+open.length+' need'+(open.length===1?'s':'')+' a time and place — pick for each'); }
+      else { render(); toast(accept ? clear.length+' session'+(clear.length===1?'':'s')+' booked ✅' : 'Sessions declined'); }
+    }).catch(function(e){ toast(e.message); });
 }
 function renderTutoring(c){
   const inc = S.incoming.filter(r=>r.status==='pending');
