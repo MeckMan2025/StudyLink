@@ -1668,7 +1668,7 @@ function groupsHtml(course){
         <div class="tiny" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${mc.students} student${mc.students===1?'':'s'} · ${mc.tutors} tutor${mc.tutors===1?'':'s'}${mainLast ? ' · '+esc(mainLast.author_alias||'')+': '+esc(mainLast.body||'') : ' · no messages yet'}</div></div>
       <div style="color:var(--muted)">›</div></div>`;
   return `${mainRow}${list.map(row).join('')}
-    ${S.groupsReady ? `<button class="card addcard" style="width:100%;min-height:56px;margin-top:10px" onclick="S.groupForm=!S.groupForm;render()">＋ Start a study group</button>` : ''}${form}`;
+    ${S.groupsReady ? `<button class="card addcard" style="width:100%;min-height:56px;margin-top:10px" onclick="S.groupForm=!S.groupForm;S.groupSelf=canSelfSupervise('${esc(course)}');render()">＋ Start a study group</button>` : ''}${form}`;
 }
 // A study group's chat: its own screen, bubbles like the session chat.
 let groupTimer=null;
