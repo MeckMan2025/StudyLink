@@ -2471,7 +2471,7 @@ function respondSeries(ids, accept){
   const clear = accept ? reqs.filter(r=>!needsPick(r)) : reqs, open = accept ? reqs.filter(needsPick) : [];
   const p = clear.length ? sbFetch('/rest/v1/sl_requests?id=in.('+clear.map(r=>r.id).join(',')+')', { method:'PATCH', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ status: accept ? 'accepted' : 'declined' }) }) : Promise.resolve();
   p.then(loadData).then(function(){
-      if(open.length){ openView({type:'pickSlot', id:open[0].id}); toast((clear.length?clear.length+' booked · ':'')+open.length+' need'+(open.length===1?'s':'')+' a time and place — pick for each'); }
+      if(open.length){ openView({type:'pickSlot', id:open[0].id, ids:open.map(r=>r.id)}); toast((clear.length?clear.length+' booked · ':'')+'pick a time and place for the other '+open.length); }
       else { render(); toast(accept ? clear.length+' session'+(clear.length===1?'':'s')+' booked ✅' : 'Sessions declined'); }
     }).catch(function(e){ toast(e.message); });
 }
@@ -2597,10 +2597,11 @@ function renderPickSlot(c){
   const offered = splitOptions(r.location);
   const places = (offered.length ? offered : placesFor([slot])).filter(pl=>placeFits(pl, slot));
   if(!places.includes(st.place)) st.place = places[0] || '';
+  const batch=(S.overlay.ids||[]).map(findReq).filter(Boolean);
   c.innerHTML=`
     <button class="back" onclick="closeView()">‹ Back</button>
     <h2 class="title">Pick a time and place</h2>
-    <div class="lead">${esc(r.student_alias)} · ${esc(r.course)} · ${esc(fmtDate(r.date))}${anyTime ? ' · they left the time to you' : ' · they ticked '+times.length+' time'+(times.length===1?'':'s')}</div>
+    <div class="lead">${esc(r.student_alias)} · ${esc(r.course)} · ${batch.length>1 ? batch.length+' sessions, '+esc(fmtDate(batch[0].date))+' → '+esc(fmtDate(batch[batch.length-1].date)) : esc(fmtDate(r.date))}${anyTime ? ' · they left the time to you' : ' · they ticked '+times.length+' time'+(times.length===1?'':'s')}${batch.length>1?' · your pick applies to all of them':''}</div>
     <div class="card">
       <div class="field"><label>Time</label><div class="chips">${slots.map(x=>{ const ok=bothFree(r.student_id, r.date, x.label);
         return `<button class="chip ${st.time===x.label?'dept':''}" style="${st.time===x.label?'background:var(--blue)':''}" onclick="S.overlay.pickSlot.time='${x.label}';render()">${x.group} · ${x.label}${ok?'':' <span style=\"color:#c23b5e\">busy</span>'}</button>`; }).join('')}</div></div>
@@ -2608,15 +2609,19 @@ function renderPickSlot(c){
         ${st.place==='Other' ? `<input id="ps_other" placeholder="Where exactly?" style="margin-top:8px">` : ''}
         ${st.place.startsWith(VIBRANT) ? vibrantNote() : ''}</div>
     </div>
-    <div style="margin-top:14px"><button class="btn" ${st.time && st.place ? '' : 'disabled'} onclick="confirmPick('${r.id}')">Confirm session</button></div>`;
+    <div style="margin-top:14px"><button class="btn" ${st.time && st.place ? '' : 'disabled'} onclick="confirmPick('${r.id}')">Confirm ${batch.length>1 ? 'all '+batch.length+' sessions' : 'session'}</button></div>`;
 }
 function confirmPick(id){
   const r=findReq(id), st=S.overlay.pickSlot; if(!r||!st) return;
-  if(!bothFree(r.student_id, r.date, st.time)){ toast('One of you is busy then.'); return; }
   const other=($('ps_other')?.value||'').trim();
   const place = st.place==='Other' && other ? 'Other · '+other : st.place;
+  const batch=(S.overlay.ids||[id]).map(findReq).filter(Boolean);
+  const ok=batch.filter(x=>bothFree(x.student_id, x.date, st.time)), busy=batch.length-ok.length;
+  if(!ok.length){ toast('One of you is busy then.'); return; }
   closeView();
-  patchRequest(id, { status:'accepted', time:st.time, location:place, minutes:slotMinutes(st.time) }, 'Session confirmed with '+r.student_alias+' ✅');
+  sbFetch('/rest/v1/sl_requests?id=in.('+ok.map(x=>x.id).join(',')+')', { method:'PATCH', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ status:'accepted', time:st.time, location:place, minutes:slotMinutes(st.time) }) })
+    .then(loadData).then(()=>{ render(); toast(ok.length+' session'+(ok.length===1?'':'s')+' confirmed with '+r.student_alias+' ✅'+(busy?' · '+busy+' skipped (busy then)':'')); })
+    .catch(e=>toast(e.message));
 }
 // ---- Ratings ----
 // A tutee's done sessions that haven't been rated. Optional: dismissed ones
