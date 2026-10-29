@@ -1650,27 +1650,36 @@ function groupsHtml(course){
       <div style="font-weight:800;margin-bottom:8px">Start a study group</div>
       <div class="field"><label>Name</label><input id="gp_name" placeholder="e.g. Tuesday unit circle crew" maxlength="60"></div>
       <div class="field" style="margin-bottom:0"><label>Which tutor will supervise it?</label>
-        <select id="gp_tutor">${tutorsFor(course).filter(t=>t.id!==me).map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('') || '<option value="">No tutors for this class yet</option>'}</select>
-        <div class="tiny" style="margin-top:6px">The group opens once the tutor accepts. They're in it from the start.</div></div>
-      <div class="row" style="gap:8px;margin-top:12px"><button class="btn gray" style="flex:1" onclick="S.groupForm=false;render()">Cancel</button><button class="btn" style="flex:2" ${tutorsFor(course).some(t=>t.id!==me)?'':'disabled'} onclick="createGroup('${esc(course)}',this)">Ask the tutor</button></div>
+        <select id="gp_tutor" onchange="S.groupSelf=this.value==='me';render()">${(S.tutorClasses.includes(course) && A.profile.tutor_alias ? `<option value="me" ${S.groupSelf?'selected':''}>Me — I'll supervise it</option>` : '')}${tutorsFor(course).filter(t=>t.id!==me).map(t=>`<option value="${t.id}" ${!S.groupSelf&&false?'':''}>${esc(t.name)}</option>`).join('') || (S.tutorClasses.includes(course) ? '' : '<option value="">No tutors for this class yet</option>')}</select>
+        <div class="tiny" style="margin-top:6px">${S.groupSelf || (S.tutorClasses.includes(course) && A.profile.tutor_alias && !tutorsFor(course).some(t=>t.id!==me)) ? 'You tutor this class, so the group opens right away.' : 'The group opens once the tutor accepts. They\'re in it from the start.'}</div></div>
+      <div class="row" style="gap:8px;margin-top:12px"><button class="btn gray" style="flex:1" onclick="S.groupForm=false;render()">Cancel</button><button class="btn" style="flex:2" ${tutorsFor(course).some(t=>t.id!==me) || (S.tutorClasses.includes(course) && A.profile.tutor_alias) ? '' : 'disabled'} onclick="createGroup('${esc(course)}',this)">${S.groupSelf ? 'Start the group' : 'Ask the tutor'}</button></div>
     </div>` : '';
-  return `${list.length ? list.map(row).join('') : `<div class="empty"><div class="em">💬</div>No study groups for ${esc(course)} yet. Start one and pick a tutor to supervise it.</div>`}
+  const mc=mainGroupCount(course), mainLast=(S.posts||[]).filter(p=>p.course===course && !p.group_id && !p.parent_id).sort((a,b)=>b.created_at.localeCompare(a.created_at))[0];
+  const mainRow = `<div class="card row" style="cursor:pointer" onclick="openView({type:'groupChat', id:'main:${esc(course)}'})">
+      <div class="avatar" style="background:${courseColor(course)}">👥</div>
+      <div style="min-width:0;flex:1"><div style="font-weight:800">Everyone in ${esc(course)}</div>
+        <div class="tiny" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${mc.students} student${mc.students===1?'':'s'} · ${mc.tutors} tutor${mc.tutors===1?'':'s'}${mainLast ? ' · '+esc(mainLast.author_alias||'')+': '+esc(mainLast.body||'') : ' · no messages yet'}</div></div>
+      <div style="color:var(--muted)">›</div></div>`;
+  return `${mainRow}${list.map(row).join('')}
     ${S.groupsReady ? `<button class="card addcard" style="width:100%;min-height:56px;margin-top:10px" onclick="S.groupForm=!S.groupForm;render()">＋ Start a study group</button>` : ''}${form}`;
 }
 // A study group's chat: its own screen, bubbles like the session chat.
 let groupTimer=null;
 function renderGroupChat(c){
-  const g=(S.groups||[]).find(x=>x.id===S.overlay.id); if(!g){ closeView(); return; }
-  const me=A.user.id, members=groupMembers(g.id), mine=inGroup(g,me);
+  const id=S.overlay.id, isMain=String(id).startsWith('main:');
+  const g = isMain ? { id, course:id.slice(5), name:'Everyone in '+id.slice(5), status:'active', main:true } : (S.groups||[]).find(x=>x.id===id);
+  if(!g){ closeView(); return; }
+  const me=A.user.id, members=isMain ? [] : groupMembers(g.id), mine=isMain ? true : inGroup(g,me);
   const canPost = g.status==='active' && (mine || isStaff()), canRead = mine || isStaff();
-  const msgs = canRead ? (S.posts||[]).filter(p=>p.group_id===g.id).sort((a,b)=>a.created_at.localeCompare(b.created_at)) : [];
+  const msgs = canRead ? (S.posts||[]).filter(p=>p.course===g.course && (isMain ? !p.group_id : p.group_id===g.id)).sort((a,b)=>a.created_at.localeCompare(b.created_at)) : [];
+  const mc = isMain ? mainGroupCount(g.course) : null;
   c.innerHTML=`
     <button class="back" onclick="S.tab='classes'; openView({type:'board', course:'${esc(g.course)}'})">‹ ${esc(g.course)}</button>
     <div class="row" style="margin-bottom:10px;align-items:flex-start">
-      <div class="avatar" style="background:${courseColor(g.course)};width:44px;height:44px;font-size:18px">${g.status==='pending'?'⏳':'📚'}</div>
+      <div class="avatar" style="background:${courseColor(g.course)};width:44px;height:44px;font-size:18px">${isMain?'👥':g.status==='pending'?'⏳':'📚'}</div>
       <div style="flex:1;min-width:0"><h2 class="title" style="margin:0">${esc(g.name)}</h2>
-        <div class="tiny">${g.status==='pending' ? 'Waiting for '+esc(g.tutor_alias||'the tutor')+' to accept' : 'Supervised by '+esc(g.tutor_alias||'a tutor')} · ${members.map(m=>esc(m.alias||'?')).join(', ')||'nobody yet'}</div></div>
-      ${g.status==='pending' && g.tutor_id===me ? `<button class="btn sm green" onclick="superviseGroup('${g.id}',true)">Supervise</button><button class="btn sm gray" style="margin-left:6px" onclick="superviseGroup('${g.id}',false)">No</button>`
+        <div class="tiny">${isMain ? mc.students+' student'+(mc.students===1?'':'s')+' · '+mc.tutors+' tutor'+(mc.tutors===1?'':'s')+' · everyone taking the class and its tutors' : (g.status==='pending' ? 'Waiting for '+esc(g.tutor_alias||'the tutor')+' to accept' : 'Supervised by '+esc(g.tutor_alias||'a tutor'))+' · '+(members.map(m=>esc(m.alias||'?')).join(', ')||'nobody yet')}</div></div>
+      ${isMain ? '' : g.status==='pending' && g.tutor_id===me ? `<button class="btn sm green" onclick="superviseGroup('${g.id}',true)">Supervise</button><button class="btn sm gray" style="margin-left:6px" onclick="superviseGroup('${g.id}',false)">No</button>`
         : mine ? (g.tutor_id===me||g.created_by===me ? `<button class="btn sm gray" onclick="closeGroup('${g.id}')">Close</button>` : `<button class="btn sm gray" onclick="leaveGroup('${g.id}')">Leave</button>`)
         : g.status==='active' ? `<button class="btn sm" onclick="joinGroup('${g.id}')">Join</button>` : ''}
     </div>
@@ -1683,24 +1692,27 @@ function renderGroupChat(c){
       <input id="gchat_in" maxlength="1000" placeholder="Message the group…" onkeydown="if(event.key==='Enter')sendGroupMsg('${g.id}','${esc(g.course)}')">
       <button class="btn sm" onclick="sendGroupMsg('${g.id}','${esc(g.course)}')">Send</button>
     </div>
-    <p class="tiny" style="margin:8px 2px">🛡️ Posting as ${esc(currentAlias())}. ${esc(g.tutor_alias||'A tutor')} supervises this group. Keep it to schoolwork; no phone numbers or socials.</p>` : ''}`;
+    <p class="tiny" style="margin:8px 2px">🛡️ Posting as ${esc(currentAlias())}. ${isMain ? 'Tutors of this class see this chat too.' : esc(g.tutor_alias||'A tutor')+' supervises this group.'} Keep it to schoolwork; no phone numbers or socials.</p>` : ''}`;
   const box=$('gchat'); if(box) box.scrollTop=box.scrollHeight;
   clearInterval(groupTimer);
   groupTimer=setInterval(()=>{ if(S.overlay && S.overlay.type==='groupChat' && S.overlay.id===g.id && !document.hidden) refreshGroup(g.id); else clearInterval(groupTimer); }, 5000);
 }
 async function refreshGroup(gid){
-  try{ const rows=await sbFetch('/rest/v1/sl_posts?select=*&group_id=eq.'+gid+'&order=created_at');
-    const before=(S.posts||[]).filter(p=>p.group_id===gid).length;
-    S.posts=[...(S.posts||[]).filter(p=>p.group_id!==gid), ...rows];
+  const isMain=String(gid).startsWith('main:'), course=isMain?gid.slice(5):null;
+  const match = p => isMain ? (p.course===course && !p.group_id) : p.group_id===gid;
+  try{ const rows=await sbFetch(isMain ? '/rest/v1/sl_posts?select=*&course=eq.'+encodeURIComponent(course)+'&group_id=is.null&order=created_at' : '/rest/v1/sl_posts?select=*&group_id=eq.'+gid+'&order=created_at');
+    const before=(S.posts||[]).filter(match).length;
+    S.posts=[...(S.posts||[]).filter(p=>!match(p)), ...rows];
     if(rows.length!==before && S.overlay && S.overlay.type==='groupChat'){ const inp=$('gchat_in'), v=inp?inp.value:''; render(); const i2=$('gchat_in'); if(i2) i2.value=v; }
   }catch(e){}
 }
 async function sendGroupMsg(gid, course){
   const inp=$('gchat_in'), body=(inp.value||'').trim(); if(!body) return;
   inp.value='';
-  S.posts.push({ id:'tmp'+Date.now(), course, group_id:gid, author_id:A.user.id, author_alias:currentAlias(), body, created_at:new Date().toISOString(), parent_id:null });
+  const isMain=String(gid).startsWith('main:'), group_id = isMain ? null : gid;
+  S.posts.push({ id:'tmp'+Date.now(), course, group_id, author_id:A.user.id, author_alias:currentAlias(), body, created_at:new Date().toISOString(), parent_id:null });
   render();
-  try{ await sbFetch('/rest/v1/sl_posts', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ course, body, parent_id:null, author_id:A.user.id, author_alias:currentAlias(), group_id:gid }) }); await refreshGroup(gid); }
+  try{ await sbFetch('/rest/v1/sl_posts', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ course, body, parent_id:null, author_id:A.user.id, author_alias:currentAlias(), ...(group_id?{group_id}:{}) }) }); await refreshGroup(gid); }
   catch(e){ toast(e.message); await refreshGroup(gid); }
 }
 function groupHeaderHtml(g){
@@ -1716,13 +1728,14 @@ function groupHeaderHtml(g){
     </div>`;
 }
 async function createGroup(course, btn){
-  const name=($('gp_name').value||'').trim(), tid=$('gp_tutor').value; if(!name){ $('gp_name').focus(); return; } if(!tid) return;
-  const t=findTutor(tid); btn.disabled=true; btn.textContent='Asking…';
+  const name=($('gp_name').value||'').trim(); let tid=$('gp_tutor').value; if(!name){ $('gp_name').focus(); return; } if(!tid) return;
+  const self = tid==='me'; if(self) tid=A.user.id;
+  const t=self ? null : findTutor(tid); btn.disabled=true; btn.textContent=self?'Starting…':'Asking…';
   try{
-    const rows=await sbFetch('/rest/v1/sl_groups', { method:'POST', headers:{ Prefer:'return=representation' }, body:JSON.stringify({ course, name, created_by:A.user.id, creator_alias:currentAlias(), tutor_id:tid, tutor_alias:t?t.name:'' }) });
+    const rows=await sbFetch('/rest/v1/sl_groups', { method:'POST', headers:{ Prefer:'return=representation' }, body:JSON.stringify({ course, name, created_by:A.user.id, creator_alias:currentAlias(), tutor_id:tid, tutor_alias: self ? (A.profile.tutor_alias||currentAlias()) : (t?t.name:''), status: self ? 'active' : 'pending' }) });
     const g=rows&&rows[0];
     if(g) await sbFetch('/rest/v1/sl_group_members', { method:'POST', headers:{ Prefer:'return=minimal,resolution=ignore-duplicates' }, body:JSON.stringify([{ group_id:g.id, user_id:A.user.id, alias:currentAlias() }]) });
-    await loadData(); S.groupForm=false; if(g) S.overlay.group=g.id; render(); toast('Asked '+(t?t.name:'the tutor')+' to supervise — the group opens when they accept');
+    await loadData(); S.groupForm=false; S.groupSelf=false; render(); if(g) openView({type:'groupChat', id:g.id}); toast(self ? 'Your group is open' : 'Asked '+(t?t.name:'the tutor')+' to supervise — the group opens when they accept');
   }catch(e){ toast(/sl_groups/.test(e.message) ? 'Study groups are not set up yet — run sql/sl_settings_and_groups.sql.' : e.message); btn.disabled=false; btn.textContent='Ask the tutor'; }
 }
 function superviseGroup(id, yes){
@@ -2604,7 +2617,7 @@ function renderCommunity(c){
     return `<div class="card row" style="cursor:pointer" onclick="openView({type:'board',course:'${esc(course)}'})">
       <div class="avatar" style="background:${courseColor(course)}">${courseEmoji(course)}</div>
       <div style="min-width:0"><div style="font-weight:800">${esc(course)}</div>
-        <div class="tiny" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${groupsFor(course).length} study group${groupsFor(course).length===1?'':'s'} · ${n} tutor${n===1?'':'s'}${latest ? ' · latest: ' + esc(latest.author_alias) + ': ' + esc(latest.body.slice(0,60)) : ''}</div></div>
+        <div class="tiny" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${1+groupsFor(course).length} chat${groupsFor(course).length?'s':''} · ${posts.length} post${posts.length===1?'':'s'} · ${n} tutor${n===1?'':'s'}${latest ? ' · latest: ' + esc(latest.author_alias) + ': ' + esc(latest.body.slice(0,60)) : ''}</div></div>
       <div style="margin-left:auto;color:var(--muted)">›</div>
     </div>`;
   };
