@@ -593,6 +593,8 @@ function notifItems(){
   // Chat messages to me
   (S.inbox||[]).filter(m=>m.sender_id!==me && m.created_at>cut).forEach(m=>{ const r=findReq(m.request_id); if(!r) return;
     out.push({ key:'msg:'+m.id, at:m.created_at, ic:'✉️', t:'Message from '+otherSide(r).alias, s:(m.body||'').slice(0,80), go:()=>openView({type:'chat', id:r.id}) }); });
+  // Sessions to rate
+  if(!isAdmin()) unratedSessions().slice(0,3).forEach(r=>out.push({ key:'rate:'+r.id, at:r.done_at||r.created_at, ic:'⭐', t:'Rate your '+r.course+' session with '+(r.tutor_alias||'your tutor'), s:'Optional · only administrators see it', go:()=>openView({type:'rate', id:r.id}) }));
   // Study groups waiting on me, or opened for me
   (S.groups||[]).forEach(g=>{
     if(g.status==='pending' && g.tutor_id===me) out.push({ key:'group:'+g.id+':ask', at:g.created_at, ic:'📚', t:(g.creator_alias||'A student')+' wants you to supervise a study group', s:g.name+' · '+g.course, go:()=>openView({type:'board',course:g.course,group:g.id}) });
@@ -737,11 +739,17 @@ function renderSettings(c){
     <div class="card">
       ${hasGrade() ? `<div class="field"><label>Grade</label>
         <select onchange="setGrade(+this.value)">${[6,7,8,9,10,11,12].map(g=>`<option ${S.me.grade===g?'selected':''}>${g}</option>`).join('')}</select></div>` : ''}
-      <div class="field" style="margin-bottom:0"><label>Open the sidebar on</label>
+      <div class="field"><label>Open the sidebar on</label>
         <div class="seg">
           <button class="${S.mode==='tutor'?'on':''}" onclick="setMode('tutor')">🎓 Tutor</button>
           <button class="${S.mode==='tutee'?'on':''}" onclick="setMode('tutee')">📖 Tutee</button>
         </div></div>
+      <div class="field" style="margin-bottom:0"><label>Session reminders</label>
+        <div class="seg">
+          <button class="${remindOn()?'on':''}" onclick="setRemind(true)">🔔 5 minutes before</button>
+          <button class="${remindOn()?'':'on'}" onclick="setRemind(false)">Off</button>
+        </div>
+        <div class="tiny" style="margin-top:6px">Says where to go, five minutes before a confirmed session. Works while SilverCircle is open — on a phone, add it to your home screen.</div></div>
     </div>
     <div class="sectlabel">Account</div>
     <div class="card">
@@ -788,7 +796,7 @@ function renderHome(c){
       <div class="lead">${new Date().toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'})}</div></div>
       ${adminButtonHtml()}
     </div>`;
-  c.innerHTML = head + scheduleNudgeHtml() + (S.mode==='tutor' && S.me.isTutor ? tutorDashboard() : studentDashboard());
+  c.innerHTML = head + scheduleNudgeHtml() + ratePromptHtml() + (S.mode==='tutor' && S.me.isTutor ? tutorDashboard() : studentDashboard());
 }
 
 // The administrator's home: what is waiting, where the gaps are, who is
@@ -2160,8 +2168,8 @@ function otherSide(r){
 }
 function actsHtml(r){
   return `<div class="acts">
-    <button onclick="openView({type:'retime', id:'${r.id}'})">🕒 Suggest another time</button>
-    <button onclick="openView({type:'chat', id:'${r.id}'})">💬 Chat with ${esc(otherSide(r).alias)}</button></div>`;
+    <button onclick="openView({type:'chat', id:'${r.id}'})">💬 Chat with ${esc(otherSide(r).alias)}${r.plan?' · 📝 plan':''}</button>
+    <button onclick="openView({type:'retime', id:'${r.id}'})">🕒 Suggest another time</button></div>`;
 }
 function renderRetime(c){
   const r=findReq(S.overlay.id); if(!r){ closeView(); return; }
@@ -2224,17 +2232,67 @@ function renderChat(c){
     <button class="back" onclick="closeView()">‹ Back</button>
     <div class="row" style="margin-bottom:10px">${avatarDot(initials(o.alias), S.presence && S.presence[r.id], 'background:'+courseColor(r.course))}
       <div><h2 class="title" style="margin:0">${esc(o.alias)}</h2><div class="tiny">${esc(r.course)} · ${esc(fmtDate(r.date))} ${esc(r.time||'')}</div></div></div>
+    ${sessionPlanHtml(r)}
     <div class="card"><div class="chat" id="chatbox"><div class="tiny" style="text-align:center;padding:10px">Loading…</div></div></div>
     <div class="composer">
       <input id="chat_in" maxlength="1000" placeholder="Message ${esc(o.alias)}…" onkeydown="if(event.key==='Enter')sendChat()">
       <button class="btn sm" onclick="sendChat()">Send</button>
     </div>
-    <div class="acts"><button onclick="openView({type:'retime', id:'${r.id}'})">🕒 Suggest another time</button></div>
+    <div class="acts">
+      ${r.status==='pending' && o.iAmTutor ? `<button onclick="respondRequest('${r.id}',true)">✅ Accept</button>` : r.status==='offered' && !o.iAmTutor ? `<button onclick="respondOffer('${r.id}',true)">✅ Accept</button>` : ''}
+      <button onclick="openView({type:'retime', id:'${r.id}'})">🕒 Suggest another time</button>
+      ${r.status!=='done' && r.status!=='cancelled' ? `<button onclick="S.overlay.place=!S.overlay.place;render()">📍 Change place</button>` : ''}
+      <button onclick="S.overlay.planEdit=!S.overlay.planEdit;render()">📝 ${r.plan ? 'Edit the plan' : 'Add a plan'}</button>
+    </div>
+    ${S.overlay.place ? placePickHtml(r) : ''}
     <p class="tiny" style="margin:8px 2px">🔒 Keep it to scheduling and schoolwork. Don't share phone numbers, social media or where you live.</p>`;
   if(S.chat && S.chat.id===r.id) drawChat();
   loadChat(r.id);
   clearInterval(chatTimer);
   chatTimer=setInterval(()=>{ if(S.overlay && S.overlay.type==='chat' && S.overlay.id===r.id) loadChat(r.id); else clearInterval(chatTimer); }, 5000);
+}
+// What the session is about: the topic and note from the request, and a
+// plan either person can write (what to bring, what to cover). Edits leave a
+// line in the chat so the other person sees them.
+function sessionPlanHtml(r){
+  const o=otherSide(r);
+  const status = { pending:'⏳ Waiting on '+(o.iAmTutor?'you':o.alias), offered:'⏳ Waiting on '+(o.iAmTutor?o.alias:'you'), accepted:'✅ Confirmed', done:'Done', declined:'Declined', cancelled:'Cancelled' }[r.status]||r.status;
+  return `<div class="card" style="margin-bottom:10px">
+    <div class="row" style="align-items:flex-start"><div style="flex:1;min-width:0">
+      <div style="font-weight:800">${esc(r.topic||'Tutoring session')}</div>
+      <div class="tiny">${esc(fmtDate(r.date))} · ${esc(r.time||'time TBD')}${r.location?' · 📍 '+esc(r.location):' · place TBD'}${r.minutes?' · '+r.minutes+' min':''}</div>
+      ${r.note ? `<div class="tiny" style="margin-top:4px">“${esc(r.note)}”</div>` : ''}</div>
+      <span class="pill">${status}</span></div>
+    ${S.overlay.planEdit ? `<div class="field" style="margin:10px 0 0"><label>What we'll cover</label>
+        <textarea id="plan_in" rows="3" maxlength="600" placeholder="e.g. Unit 3 review — bring the practice test. We'll do #4–9 together.">${esc(r.plan||'')}</textarea>
+        <div class="row" style="gap:8px;margin-top:8px"><button class="btn gray sm" onclick="S.overlay.planEdit=false;render()">Cancel</button><button class="btn sm" onclick="savePlan('${r.id}')">Save plan</button></div></div>`
+      : r.plan ? `<div style="margin-top:8px;padding:8px 10px;background:#f6f4fb;border-radius:10px;font-size:13px;white-space:pre-wrap"><b class="tiny">📝 Plan</b><br>${esc(r.plan)}</div>` : `<div class="tiny" style="margin-top:8px">No plan yet. Either of you can add what to bring and what to cover.</div>`}
+  </div>`;
+}
+async function savePlan(id){
+  const r=findReq(id), plan=($('plan_in')?.value||'').trim(); if(!r) return;
+  try{
+    await sbFetch('/rest/v1/sl_requests?id=eq.'+id, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ plan: plan||null }) });
+    r.plan=plan; S.overlay.planEdit=false;
+    sendMessage(id, '📝 Plan updated: '+(plan||'(cleared)')).catch(()=>{});
+    await loadData(); render();
+  }catch(e){ toast(/plan/.test(e.message) ? 'Plans are not set up yet — run sql/sl_settings_and_groups.sql.' : e.message); }
+}
+function placePickHtml(r){
+  const slot=slotByLabel(splitOptions(r.time)[0]);
+  const places=placesFor(slot ? [slot] : SESSION_SLOTS);
+  return `<div class="card" style="margin-top:8px"><div class="tiny" style="margin-bottom:6px">Change the place</div>
+    <div class="chips">${places.map(pl=>`<button class="chip ${r.location===pl?'dept':''}" style="${r.location===pl?'background:var(--blue)':''}" onclick="changePlace('${r.id}','${esc(pl)}')">${esc(pl)}</button>`).join('')}</div>
+    ${places.includes(VIBRANT) ? '' : '<div class="tiny" style="margin-top:6px">Vibrant is only for sessions ending by 6 PM.</div>'}</div>`;
+}
+async function changePlace(id, place){
+  const r=findReq(id); if(!r) return;
+  let loc=place; if(place==='Other'){ const t=prompt('Where exactly?'); if(!t) return; loc='Other · '+t.trim(); }
+  try{
+    await sbFetch('/rest/v1/sl_requests?id=eq.'+id, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ location:loc }) });
+    sendMessage(id, '📍 Moved to '+loc).catch(()=>{});
+    S.overlay.place=false; await loadData(); render(); toast('Place changed');
+  }catch(e){ toast(e.message); }
 }
 function drawChat(){
   const box=$('chatbox'); if(!box || !S.chat) return;
@@ -2242,7 +2300,7 @@ function drawChat(){
   if(S.chat.err){ box.innerHTML='<div class="tiny" style="text-align:center;padding:12px;color:#c23b5e">'+esc(S.chat.err)+'</div>'; return; }
   const near = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
   box.innerHTML = S.chat.rows.length ? S.chat.rows.map(m=>{
-    const mine=m.sender_id===A.user.id, sys=m.body.startsWith('🕒 Suggested');
+    const mine=m.sender_id===A.user.id, sys=/^(🕒 Suggested|📝 Plan|📍 Moved)/.test(m.body);
     const when=new Date(m.created_at).toLocaleString([], {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
     return sys ? `<div class="msg sys">${mine?'You':esc(otherSide(findReq(S.chat.id)).alias)}: ${esc(m.body)}<div class="t">${when}</div></div>`
       : `<div class="msg ${mine?'me':''}">${esc(m.body)}<div class="t">${when}</div></div>`;
@@ -2299,6 +2357,7 @@ function renderTutoring(c){
   c.innerHTML=`
     <h2 class="title">Tutoring</h2>
     <div class="lead">Your requests and sessions.</div>
+    ${ratePromptHtml()}
     ${S.me.isTutor ? `<button class="btn" style="margin-bottom:6px" onclick="openView({type:'schedule'})">📅 Schedule a session with a student</button>` : ''}
 
     ${S.incoming.filter(r=>r.status==='offered').length ? `<div class="sectlabel">Waiting on the student</div>
@@ -2428,6 +2487,56 @@ function confirmPick(id){
   const place = st.place==='Other' && other ? 'Other · '+other : st.place;
   closeView();
   patchRequest(id, { status:'accepted', time:st.time, location:place, minutes:slotMinutes(st.time) }, 'Session confirmed with '+r.student_alias+' ✅');
+}
+// ---- Ratings ----
+// A tutee's done sessions that haven't been rated. Optional: dismissed ones
+// are remembered on this device.
+const RATED_SKIP='sc-rate-skip';
+function skippedRatings(){ try { return JSON.parse(localStorage.getItem(RATED_SKIP)||'[]'); } catch { return []; } }
+function unratedSessions(){
+  const me=A.user.id, rated=new Set((S.ratings||[]).map(r=>r.request_id)), skip=new Set(skippedRatings());
+  return (S.myRequests||[]).filter(r=>r.status==='done' && !rated.has(r.id) && !skip.has(r.id)).sort((a,b)=>(b.done_at||'').localeCompare(a.done_at||''));
+}
+function ratePromptHtml(){
+  const u=unratedSessions(); if(!u.length || isAdmin()) return '';
+  const r=u[0];
+  return `<div class="card row" style="border-color:var(--pink);cursor:pointer" onclick="openView({type:'rate', id:'${r.id}'})">
+    <div class="avatar" style="background:var(--pink-d)">⭐</div>
+    <div style="flex:1;min-width:0"><div style="font-weight:800">How was ${esc(r.course)} with ${esc(r.tutor_alias||'your tutor')}?</div>
+      <div class="tiny">${esc(fmtDate(r.date))} · a quick rating helps the program. Optional.</div></div>
+    <button class="btn sm ghost" onclick="event.stopPropagation(); skipRating('${r.id}')">Skip</button>
+  </div>`;
+}
+function skipRating(id){ const a=skippedRatings(); a.push(id); try { localStorage.setItem(RATED_SKIP, JSON.stringify(a.slice(-50))); } catch {} render(); }
+function renderRate(c){
+  const r=findReq(S.overlay.id); if(!r){ closeView(); return; }
+  const d=S.overlay.rate = S.overlay.rate || { stars:0, on_time:null, prepared:null, understood:0, again:null, comment:'' };
+  const yn=(k)=>`<div class="seg">${[[true,'Yes'],[false,'No']].map(([v,l])=>`<button class="${d[k]===v?'on':''}" onclick="S.overlay.rate.${k}=${v};render()">${l}</button>`).join('')}</div>`;
+  const stars=(k)=>`<div class="row" style="gap:4px">${[1,2,3,4,5].map(n=>`<button style="border:none;background:none;font-size:30px;cursor:pointer;padding:2px;filter:${d[k]>=n?'none':'grayscale(1) opacity(.35)'}" onclick="S.overlay.rate.${k}=${n};render()">⭐</button>`).join('')}</div>`;
+  c.innerHTML=`
+    <button class="back" onclick="closeView()">‹ Back</button>
+    <h2 class="title">Rate the session</h2>
+    <div class="lead">${esc(r.course)} with ${esc(r.tutor_alias||'your tutor')} · ${esc(fmtDate(r.date))}. Only the program's administrators see this — never the tutor.</div>
+    <div class="card">
+      <div class="field"><label>Overall</label>${stars('stars')}</div>
+      <div class="field"><label>Did they show up on time?</label>${yn('on_time')}</div>
+      <div class="field"><label>Were they prepared?</label>${yn('prepared')}</div>
+      <div class="field"><label>Do you understand the material better now?</label>${stars('understood')}<div class="tiny">1 = not really · 5 = a lot</div></div>
+      <div class="field"><label>Would you book them again?</label>${yn('again')}</div>
+      <div class="field" style="margin-bottom:0"><label>Anything else? (optional)</label><textarea rows="2" maxlength="500" placeholder="What went well, what didn't…" oninput="S.overlay.rate.comment=this.value">${esc(d.comment)}</textarea></div>
+    </div>
+    <div class="row" style="gap:8px;margin-top:14px">
+      <button class="btn gray" style="flex:1" onclick="skipRating('${r.id}');closeView()">Skip</button>
+      <button class="btn" style="flex:2" ${d.stars?'':'disabled'} onclick="submitRating('${r.id}',this)">Send rating</button>
+    </div>`;
+}
+async function submitRating(id, btn){
+  const r=findReq(id), d=S.overlay.rate; if(!r||!d||!d.stars) return;
+  btn.disabled=true; btn.textContent='Sending…';
+  try{
+    await sbFetch('/rest/v1/sl_ratings', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ request_id:id, rater_id:A.user.id, tutor_id:r.tutor_id, course:r.course, stars:d.stars, on_time:d.on_time, prepared:d.prepared, understood:d.understood||null, again:d.again, comment:(d.comment||'').trim()||null }) });
+    await loadData(); closeView(); toast('Thanks — that helps 🙏');
+  }catch(e){ toast(/sl_ratings/.test(e.message) ? 'Ratings are not set up yet — run sql/sl_settings_and_groups.sql.' : e.message); btn.disabled=false; btn.textContent='Send rating'; }
 }
 function completeSession(id){
   patchRequest(id, { status:'done', done_at:new Date().toISOString() }, 'Logged 0.75 service hours 🎉');
@@ -2990,6 +3099,52 @@ function adminCancel(id){
     .then(function(){ toast('Request cancelled'); render(); }).catch(function(e){ toast(e.message); });
 }
 
+// One person, for staff: who they are, what they take and tutor, how their
+// sessions went, and what tutees said about them.
+function renderMemberDetail(c){
+  if(!isStaff()) { closeView(); return; }
+  const email=S.overlay.email, s=(A.memberRows||[]).find(x=>x.email===email);
+  if(!s){ c.innerHTML='<button class="back" onclick="closeView()">‹ Back</button><div class="card tiny">Open Members first.</div>'; return; }
+  const uid=s.user_id, all=S.allRequests||[];
+  const asTutor=all.filter(r=>r.tutor_id===uid), asStudent=all.filter(r=>r.student_id===uid);
+  const done=asTutor.filter(r=>r.status==='done'), cancelledT=asTutor.filter(r=>r.status==='cancelled'), declined=asTutor.filter(r=>r.status==='declined');
+  const taking=(S.roster||[]).filter(r=>r.user_id===uid).map(r=>r.course);
+  const tutoring=(S.tutors||[]).find(t=>t.id===uid), grades=(S.allGrades||[]).filter(g=>g.user_id===uid);
+  const ratings=(S.ratings||[]).filter(r=>r.tutor_id===uid).sort((a,b)=>b.created_at.localeCompare(a.created_at));
+  const avg=k=>{ const v=ratings.map(r=>r[k]).filter(x=>typeof x==='number'); return v.length ? (v.reduce((a,b)=>a+b,0)/v.length).toFixed(1) : '—'; };
+  const pct=k=>{ const v=ratings.map(r=>r[k]).filter(x=>typeof x==='boolean'); return v.length ? Math.round(100*v.filter(Boolean).length/v.length)+'%' : '—'; };
+  const stat=(n,l,col)=>`<div class="stat"><div class="n" style="color:${col||'var(--blue-d)'}">${n}</div><div class="l">${l}</div></div>`;
+  const alias=(S.people||[]).find(p=>p.user_id===uid);
+  c.innerHTML=`
+    <button class="back" onclick="closeView()">‹ Members</button>
+    <div class="card">
+      <div class="row">${s.joined ? avatarDot(initials(s.real_name||s.email), s.seen, 'width:54px;height:54px;font-size:20px;background:'+(s.role==='board'?'var(--purple)':s.role==='admin'?'var(--blue-d)':courseColor(''))) : '<div class="avatar" style="width:54px;height:54px;font-size:20px;background:#d9d6e6">?</div>'}
+        <div style="flex:1;min-width:0"><div style="font-weight:800;font-size:17px">${esc(s.real_name||s.email)} ${roleBadge(s.role)}</div>
+          <div class="tiny">${esc(s.email)}${s.grade_level?' · Grade '+s.grade_level:''}${alias?' · known as '+esc(alias.student_alias)+(tutoring?' / '+esc(tutoring.name):''):''}</div>
+          <div class="tiny">${s.joined ? 'Signed up '+esc(new Date(s.joined).toLocaleDateString())+' · '+esc(seenLabel(s.seen)) : 'Not signed up yet · join code <b>'+esc(s.join_code||'—')+'</b>'}</div></div></div>
+    </div>
+    ${s.role==='student' ? `
+    <div class="sectlabel">As a tutor</div>
+    <div class="statgrid" style="grid-template-columns:repeat(4,1fr)">
+      ${stat(done.length,'sessions done','var(--green)')}${stat((done.length*0.75).toFixed(2).replace(/\.?0+$/,''),'service hours')}${stat(new Set(done.map(r=>r.student_id)).size,'students helped','var(--purple)')}${stat(declined.length+cancelledT.length,'declined / cancelled',declined.length+cancelledT.length?'var(--pink-d)':'var(--muted)')}
+    </div>
+    ${tutoring ? `<div class="card"><div style="font-weight:800;margin-bottom:4px">Tutors</div>${tutoring.courses.map(x=>`<div class="tiny">${esc(x.course)}${x.grade?' · '+esc(x.grade):''}${x.verified?' · <span style="color:#2e9b6a;font-weight:700">verified</span>':' · <span style="color:#c98b34;font-weight:700">not verified</span>'}</div>`).join('')}<div class="tiny" style="margin-top:6px">🗓️ ${esc(tutoring.avail||'availability not set')} · ${esc(tutoring.format||'')}</div></div>` : '<div class="card tiny">Not a tutor.</div>'}
+    ${grades.length ? `<div class="card"><div style="font-weight:800;margin-bottom:4px">Grade checks</div>${grades.map(g=>`<div class="tiny">${esc(g.course)} · ${esc(g.grade||'')} · ${esc(g.year||'')} · ${g.status==='verified'?'<span style="color:#2e9b6a;font-weight:700">verified</span>':g.status==='pending'?'<span style="color:#c98b34;font-weight:700">waiting</span>':esc(g.status)}</div>`).join('')}</div>` : ''}
+    <div class="sectlabel">What tutees said ${ratings.length?`· ${ratings.length} rating${ratings.length===1?'':'s'}`:''}</div>
+    ${ratings.length ? `<div class="statgrid" style="grid-template-columns:repeat(4,1fr)">
+      ${stat(avg('stars')+' ★','overall','var(--pink-d)')}${stat(pct('on_time'),'on time')}${stat(avg('understood'),'understood better','var(--purple)')}${stat(pct('again'),'would book again','var(--green)')}
+    </div>
+    ${ratings.map(r=>`<div class="card"><div class="row"><b>${'⭐'.repeat(r.stars)}</b><span class="tiny" style="margin-left:8px">${esc(r.course||'')} · ${esc(new Date(r.created_at).toLocaleDateString())}</span></div>
+      <div class="tiny" style="margin-top:4px">${r.on_time===false?'late · ':''}${r.prepared===false?'not prepared · ':''}${r.again===false?'would not book again · ':''}${r.understood?'understood: '+r.understood+'/5':''}</div>
+      ${r.comment?`<div style="font-size:13px;margin-top:6px">“${esc(r.comment)}”</div>`:''}</div>`).join('')}` : '<div class="card tiny">No ratings yet. Tutees are asked after each session; it is optional.</div>'}
+    <div class="sectlabel">As a student</div>
+    <div class="statgrid">
+      ${stat(asStudent.filter(r=>r.status==='done').length,'sessions had','var(--green)')}${stat(asStudent.filter(r=>r.status==='pending'||r.status==='offered'||r.status==='accepted').length,'open requests')}${stat((S.ratings||[]).filter(r=>r.rater_id===uid).length,'ratings given','var(--purple)')}
+    </div>
+    ${taking.length ? `<div class="card"><div style="font-weight:800;margin-bottom:4px">Taking</div><div class="tiny">${taking.map(esc).join(' · ')}</div></div>` : ''}
+    ` : ''}`;
+}
+
 // Session times: the slots students can tick and the places that go with
 // them, edited here and saved for everyone.
 function renderAdminTimes(c){
@@ -3062,7 +3217,7 @@ async function renderAdminTeam(c){
   const row = s => {
     const me = s.email.toLowerCase()===myEmail;
     const open = !!S.membersEdit;
-    return `<div class="card mrow" data-email="${esc(s.email)}">
+    return `<div class="card mrow" data-email="${esc(s.email)}" style="${open?'':'cursor:pointer'}" ${open?'':`onclick="openView({type:'member', email:'${esc(s.email)}'})"`}>
       ${s.joined ? avatarDot(initials(s.real_name || s.email), s.seen, 'background:'+(s.role==='board'?'var(--purple)':s.role==='admin'?'var(--blue-d)':courseColor(''))) : `<div class="avatar" style="background:${s.role==='board'?'var(--purple)':s.role==='admin'?'var(--blue-d)':courseColor('')}">${initials(s.real_name || s.email)}</div>`}
       <div class="info">
         <div style="font-weight:800">${esc(s.real_name || s.email)}${me?' <span class="tiny">(you)</span>':''} ${roleBadge(s.role)} ${s.joined ? seenHtml(s.seen) : ''}</div>
@@ -3241,6 +3396,8 @@ function renderOverlay(c){
   if(o.type==='chat') return renderChat(c);
   if(o.type==='adminDay') return renderAdminDay(c);
   if(o.type==='pickSlot') return renderPickSlot(c);
+  if(o.type==='rate') return renderRate(c);
+  if(o.type==='member') return renderMemberDetail(c);
   S.overlay=null; return renderBody(c);   // an unknown overlay falls back to the page
 }
 
@@ -3666,7 +3823,7 @@ async function loadData(){
   if(!A.user) return;
   const me = A.user.id;
   if(dataLoaded) { try { await loadProfile(); } catch(e) {} }   // background refreshes pick up profile changes too
-  let [classes, tcourses, reqs, events, tutors, posts, myGrades, pendingGrades, materials, roster, presence, people, allReqs, inbox, settings, groups, groupMembers, avail] = await Promise.all([
+  let [classes, tcourses, reqs, events, tutors, posts, myGrades, pendingGrades, materials, roster, presence, people, allReqs, inbox, settings, groups, groupMembers, ratings, allGrades, avail] = await Promise.all([
     sbFetch('/rest/v1/sl_student_classes?select=course&user_id=eq.'+me+'&order=created_at'),
     sbFetch('/rest/v1/sl_tutor_courses?select=course,grade,year,availability&user_id=eq.'+me+'&order=created_at'),
     sbFetch('/rest/v1/sl_requests?select=*&or=(student_id.eq.'+me+',tutor_id.eq.'+me+')&order=created_at.desc'),
@@ -3684,6 +3841,8 @@ async function loadData(){
     sbFetch('/rest/v1/sl_settings?select=key,value').catch(()=>[]),
     sbFetch('/rest/v1/sl_groups?select=*&order=created_at').catch(()=>null),
     sbFetch('/rest/v1/sl_group_members?select=*').catch(()=>[]),
+    sbFetch('/rest/v1/sl_ratings?select=*'+(isStaff()?'':'&rater_id=eq.'+me)).catch(()=>[]),
+    isStaff() ? sbFetch('/rest/v1/sl_grades?select=*').catch(()=>[]) : Promise.resolve([]),
     sbFetch('/rest/v1/sl_availability?select=*&order=recurring.desc,weekday,date,start_min'),
   ]);
   const fixC = rows => (rows||[]).map(r => r && r.course ? { ...r, course: canon(r.course) } : r);
@@ -3711,6 +3870,8 @@ async function loadData(){
   S.groupsReady = Array.isArray(groups);      // null means the tables aren't there yet
   S.groups = fixC(groups||[]);
   S.groupMembers = groupMembers||[];
+  S.ratings = fixC(ratings||[]);
+  S.allGrades = fixC(allGrades||[]);
   S.tutors = buildTutors(tutors||[], me);
   S.helped = S.incoming.filter(r=>r.status==='done').length;
   S.hours = Math.round(S.helped*0.75*100)/100;
@@ -3758,6 +3919,37 @@ document.addEventListener('visibilitychange', function(){ if(!document.hidden) h
 // Pick up what other people did while this tab was in the background.
 document.addEventListener('visibilitychange', function(){ if(!document.hidden && A.profile && dataLoaded) loadData().then(function(){ if(!S.overlay) render(); }).catch(function(){}); });
 setInterval(function(){ if(!document.hidden && A.profile && dataLoaded) loadData().then(function(){ if(!S.overlay) render(); }).catch(function(){}); }, 60000);
+
+// ---- Reminders ----
+// Five minutes before a confirmed session, a notification says where to go.
+// Browser notifications only fire while the app is open (a tab, or the icon
+// on a phone's home screen); a toast shows as well. Off until switched on in
+// Settings, which asks the browser for permission.
+const REMIND_LS='sc-remind', REMINDED_LS='sc-reminded';
+const remindOn = () => { try { return localStorage.getItem(REMIND_LS)==='1'; } catch { return false; } };
+async function setRemind(on){
+  if(on && 'Notification' in window && Notification.permission!=='granted'){ const p=await Notification.requestPermission(); if(p!=='granted'){ toast('Notifications are blocked in the browser settings.'); on=false; } }
+  try { localStorage.setItem(REMIND_LS, on?'1':'0'); } catch {}
+  render(); if(on) checkReminders();
+}
+function checkReminders(){
+  if(!remindOn() || !A.user) return;
+  const now=new Date(), today=ymd(now), nowMin=now.getHours()*60+now.getMinutes();
+  let seen; try { seen=JSON.parse(localStorage.getItem(REMINDED_LS)||'{}'); } catch { seen={}; }
+  [...(S.myRequests||[]), ...(S.incoming||[])].filter(r=>r.status==='accepted' && r.date===today).forEach(r=>{
+    const start=slotMin(splitOptions(r.time)[0]); if(start===null) return;
+    const lead=start-nowMin; if(lead>5 || lead<-2 || seen[r.id]) return;
+    seen[r.id]=Date.now();
+    const o=otherSide(r), title='SilverCircle · '+(r.course)+' in '+Math.max(lead,0)+' min';
+    const body=(r.location ? 'Head to '+r.location : 'Place not set')+' · with '+(o.alias||'')+' at '+(r.time||'');
+    toast('⏰ '+title+' — '+body);
+    if('Notification' in window && Notification.permission==='granted'){ try { new Notification(title, { body, icon:'img/logo-icon.png', tag:'sc-'+r.id }); } catch {} }
+  });
+  const cut=Date.now()-86400000; Object.keys(seen).forEach(k=>{ if(seen[k]<cut) delete seen[k]; });
+  try { localStorage.setItem(REMINDED_LS, JSON.stringify(seen)); } catch {}
+}
+setInterval(checkReminders, 30000);
+document.addEventListener('visibilitychange', function(){ if(!document.hidden) checkReminders(); });
 
 /* ============================= INIT ============================= */
 load();

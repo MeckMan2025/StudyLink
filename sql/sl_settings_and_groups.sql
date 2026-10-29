@@ -54,3 +54,29 @@ create policy sl_group_members_insert on public.sl_group_members for insert with
 drop policy if exists sl_group_members_delete on public.sl_group_members;
 create policy sl_group_members_delete on public.sl_group_members for delete using (user_id = auth.uid() or sl_is_admin()
   or exists (select 1 from public.sl_groups g where g.id = group_id and (g.tutor_id = auth.uid() or g.created_by = auth.uid())));
+
+-- 3. Ratings a tutee leaves after a session. Seen by the rater and staff only;
+--    the tutor never sees them.
+create table if not exists public.sl_ratings (
+  id          uuid primary key default gen_random_uuid(),
+  request_id  uuid not null unique references public.sl_requests(id) on delete cascade,
+  rater_id    uuid not null,
+  tutor_id    uuid not null,
+  course      text,
+  stars       integer not null check (stars between 1 and 5),
+  on_time     boolean,
+  prepared    boolean,
+  understood  integer check (understood between 1 and 5),   -- "I understand it better now"
+  again       boolean,
+  comment     text,
+  created_at  timestamptz not null default now()
+);
+alter table public.sl_ratings enable row level security;
+drop policy if exists sl_ratings_read on public.sl_ratings;
+create policy sl_ratings_read on public.sl_ratings for select using (rater_id = auth.uid() or sl_is_admin());
+drop policy if exists sl_ratings_insert on public.sl_ratings;
+create policy sl_ratings_insert on public.sl_ratings for insert with check (rater_id = auth.uid()
+  and exists (select 1 from public.sl_requests r where r.id = request_id and r.student_id = auth.uid() and r.tutor_id = tutor_id and r.status = 'done'));
+
+-- 4. What a session will cover, agreed in the chat.
+alter table public.sl_requests add column if not exists plan text;
