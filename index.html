@@ -1636,6 +1636,8 @@ function mainGroupCount(course){
   const tutors=new Set(tutorsFor(course).map(t=>t.id)); if(S.tutorClasses.includes(course)) tutors.add(me);
   return { students:students.size, tutors:tutors.size };
 }
+// You can supervise a group yourself if you've taken the class (or already tutor it).
+const canSelfSupervise = course => S.tutorClasses.includes(course) || (S.taken||[]).some(g=>g.course===course);
 function groupsHtml(course){
   const me=A.user.id, list=groupsFor(course);
   const latest = gid => (S.posts||[]).filter(p=>p.group_id===gid).sort((a,b)=>b.created_at.localeCompare(a.created_at))[0];
@@ -1650,9 +1652,9 @@ function groupsHtml(course){
       <div style="font-weight:800;margin-bottom:8px">Start a study group</div>
       <div class="field"><label>Name</label><input id="gp_name" placeholder="e.g. Tuesday unit circle crew" maxlength="60"></div>
       <div class="field" style="margin-bottom:0"><label>Which tutor will supervise it?</label>
-        <select id="gp_tutor" onchange="S.groupSelf=this.value==='me';render()">${(S.tutorClasses.includes(course) && A.profile.tutor_alias ? `<option value="me" ${S.groupSelf?'selected':''}>Me — I'll supervise it</option>` : '')}${tutorsFor(course).filter(t=>t.id!==me).map(t=>`<option value="${t.id}" ${!S.groupSelf&&false?'':''}>${esc(t.name)}</option>`).join('') || (S.tutorClasses.includes(course) ? '' : '<option value="">No tutors for this class yet</option>')}</select>
-        <div class="tiny" style="margin-top:6px">${S.groupSelf || (S.tutorClasses.includes(course) && A.profile.tutor_alias && !tutorsFor(course).some(t=>t.id!==me)) ? 'You tutor this class, so the group opens right away.' : 'The group opens once the tutor accepts. They\'re in it from the start.'}</div></div>
-      <div class="row" style="gap:8px;margin-top:12px"><button class="btn gray" style="flex:1" onclick="S.groupForm=false;render()">Cancel</button><button class="btn" style="flex:2" ${tutorsFor(course).some(t=>t.id!==me) || (S.tutorClasses.includes(course) && A.profile.tutor_alias) ? '' : 'disabled'} onclick="createGroup('${esc(course)}',this)">${S.groupSelf ? 'Start the group' : 'Ask the tutor'}</button></div>
+        <select id="gp_tutor" onchange="S.groupSelf=this.value==='me';render()">${(canSelfSupervise(course) ? `<option value="me" ${S.groupSelf?'selected':''}>Me — I'll supervise it</option>` : '')}${tutorsFor(course).filter(t=>t.id!==me).map(t=>`<option value="${t.id}" ${!S.groupSelf&&false?'':''}>${esc(t.name)}</option>`).join('') || (S.tutorClasses.includes(course) ? '' : '<option value="">No tutors for this class yet</option>')}</select>
+        <div class="tiny" style="margin-top:6px">${S.groupSelf || (canSelfSupervise(course) && !tutorsFor(course).some(t=>t.id!==me)) ? 'You\'ve taken this class, so you can supervise it and it opens right away.' : 'The group opens once the tutor accepts. They\'re in it from the start.'}</div></div>
+      <div class="row" style="gap:8px;margin-top:12px"><button class="btn gray" style="flex:1" onclick="S.groupForm=false;render()">Cancel</button><button class="btn" style="flex:2" ${tutorsFor(course).some(t=>t.id!==me) || (canSelfSupervise(course)) ? '' : 'disabled'} onclick="createGroup('${esc(course)}',this)">${S.groupSelf ? 'Start the group' : 'Ask the tutor'}</button></div>
     </div>` : '';
   const mc=mainGroupCount(course), mainLast=(S.posts||[]).filter(p=>p.course===course && !p.group_id && !p.parent_id).sort((a,b)=>b.created_at.localeCompare(a.created_at))[0];
   const mainRow = `<div class="card row" style="cursor:pointer" onclick="openView({type:'groupChat', id:'main:${esc(course)}'})">
