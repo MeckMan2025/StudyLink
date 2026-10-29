@@ -598,6 +598,8 @@ function notifItems(){
   // Study groups waiting on me, or opened for me
   (S.groups||[]).forEach(g=>{
     if(g.status==='pending' && g.tutor_id===me) out.push({ key:'group:'+g.id+':ask', at:g.created_at, ic:'📚', t:(g.creator_alias||'A student')+' wants you to supervise a study group', s:g.name+' · '+g.course, go:()=>openView({type:'groupChat', id:g.id}) });
+    if(canApprove(g,me)) groupAsks(g.id).forEach(m=>out.push({ key:'group:'+g.id+':ask:'+m.user_id, at:m.joined_at, ic:'🙋', t:(m.alias||'Someone')+' asked to join '+g.name, s:g.course+' · approve or decline', go:()=>openView({type:'groupChat', id:g.id}) }));
+    if(g.status==='active' && groupMembers(g.id).some(m=>m.user_id===me && m.user_id!==g.created_by)) out.push({ key:'group:'+g.id+':in', at:(groupMembers(g.id).find(m=>m.user_id===me)||{}).joined_at||g.created_at, ic:'📚', t:'You\'re in '+g.name, s:g.course+' · supervised by '+(g.tutor_alias||'a tutor'), go:()=>openView({type:'groupChat', id:g.id}) });
     if(g.status==='active' && g.created_by===me && g.tutor_id!==me) out.push({ key:'group:'+g.id+':open', at:g.created_at, ic:'📚', t:(g.tutor_alias||'The tutor')+' opened your study group', s:g.name+' · '+g.course, go:()=>openView({type:'groupChat', id:g.id}) });
   });
   // My grade checks
@@ -1628,8 +1630,11 @@ function deleteMaterial(id){
 // that tutor accepts. The tutor and the person who started it are in it from
 // the start, anyone in the class can join.
 const groupsFor = course => (S.groups||[]).filter(g=>g.course===course && g.status!=='closed');
-const groupMembers = gid => (S.groupMembers||[]).filter(m=>m.group_id===gid);
+const groupMembers = gid => (S.groupMembers||[]).filter(m=>m.group_id===gid && (m.status||'member')==='member');
+const groupAsks = gid => (S.groupMembers||[]).filter(m=>m.group_id===gid && m.status==='requested');
 const inGroup = (g, uid) => g.tutor_id===uid || g.created_by===uid || groupMembers(g.id).some(m=>m.user_id===uid);
+const askedToJoin = (g, uid) => groupAsks(g.id).some(m=>m.user_id===uid);
+const canApprove = (g, uid) => g.tutor_id===uid || g.created_by===uid || isStaff();
 function mainGroupCount(course){
   const me=A.user.id;
   const students=new Set(S.roster.filter(r=>r.course===course).map(r=>r.user_id)); if(S.myClasses.includes(course)) students.add(me);
@@ -1646,7 +1651,7 @@ function groupsHtml(course){
       <div class="avatar" style="background:${courseColor(course)}">${g.status==='pending'?'⏳':'📚'}</div>
       <div style="min-width:0;flex:1"><div style="font-weight:800">${esc(g.name)} ${mine?'<span class="tiny">· you\'re in</span>':''}</div>
         <div class="tiny" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${g.status==='pending' ? 'Waiting for '+esc(g.tutor_alias||'the tutor')+' to accept' : 'Supervised by '+esc(g.tutor_alias||'a tutor')+' · '+n+' in it'+(last ? ' · '+esc(last.author_alias||'')+': '+esc(last.body||'') : ' · no messages yet')}</div></div>
-      ${g.status==='pending' && g.tutor_id===me ? '<span class="pill" style="background:#fbf1e2;color:#c98b34">Your call</span>' : ''}
+      ${g.status==='pending' && g.tutor_id===me ? '<span class="pill" style="background:#fbf1e2;color:#c98b34">Your call</span>' : canApprove(g,me) && groupAsks(g.id).length ? `<span class="pill" style="background:#fbf1e2;color:#c98b34">${groupAsks(g.id).length} asking to join</span>` : askedToJoin(g,me) ? '<span class="pill">Asked to join</span>' : ''}
       <div style="color:var(--muted)">›</div></div>`; };
   const form = S.groupForm ? `<div class="card" style="margin-top:10px;border-color:var(--blue)">
       <div style="font-weight:800;margin-bottom:8px">Start a study group</div>
@@ -1683,13 +1688,16 @@ function renderGroupChat(c){
         <div class="tiny">${isMain ? mc.students+' student'+(mc.students===1?'':'s')+' · '+mc.tutors+' tutor'+(mc.tutors===1?'':'s')+' · everyone taking the class and its tutors' : (g.status==='pending' ? 'Waiting for '+esc(g.tutor_alias||'the tutor')+' to accept' : 'Supervised by '+esc(g.tutor_alias||'a tutor'))+' · '+(members.map(m=>esc(m.alias||'?')).join(', ')||'nobody yet')}</div></div>
       ${isMain ? '' : g.status==='pending' && g.tutor_id===me ? `<button class="btn sm green" onclick="superviseGroup('${g.id}',true)">Supervise</button><button class="btn sm gray" style="margin-left:6px" onclick="superviseGroup('${g.id}',false)">No</button>`
         : mine ? (g.tutor_id===me||g.created_by===me ? `<button class="btn sm gray" onclick="closeGroup('${g.id}')">Close</button>` : `<button class="btn sm gray" onclick="leaveGroup('${g.id}')">Leave</button>`)
-        : g.status==='active' ? `<button class="btn sm" onclick="joinGroup('${g.id}')">Join</button>` : ''}
+        : askedToJoin(g,me) ? `<span class="pill">Asked to join</span>`
+        : g.status==='active' ? `<button class="btn sm" onclick="joinGroup('${g.id}')">Ask to join</button>` : ''}
     </div>
+    ${!isMain && canApprove(g,me) && groupAsks(g.id).length ? `<div class="card" style="border-color:var(--pink);margin-bottom:10px"><div style="font-weight:800;margin-bottom:6px">Asking to join</div>
+      ${groupAsks(g.id).map(m=>`<div class="row" style="margin-bottom:6px"><span style="flex:1">${esc(m.alias||'?')}</span><button class="btn sm green" onclick="answerJoin('${g.id}','${m.user_id}',true)">Approve</button><button class="btn sm gray" style="margin-left:6px" onclick="answerJoin('${g.id}','${m.user_id}',false)">Decline</button></div>`).join('')}</div>` : ''}
     <div class="card"><div class="chat" id="gchat">${canRead ? (msgs.length ? msgs.map(m=>{ const own=m.author_id===me;
         const when=new Date(m.created_at).toLocaleString([], {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
         return `<div class="msg ${own?'me':''}">${own?'':'<b class="tiny">'+esc(m.author_alias||'')+'</b><br>'}${esc(m.body)}<div class="t">${when}${(own||isStaff())?` · <span style="cursor:pointer" onclick="deletePost('${m.id}')">delete</span>`:''}</div></div>`; }).join('')
         : '<div class="tiny" style="text-align:center;padding:12px">No messages yet. Say hi!</div>')
-      : '<div class="tiny" style="text-align:center;padding:12px">'+(g.status==='pending' ? 'This group opens once '+esc(g.tutor_alias||'the tutor')+' accepts.' : 'Join the group to read and post.')+'</div>'}</div></div>
+      : '<div class="tiny" style="text-align:center;padding:12px">'+(g.status==='pending' ? 'This group opens once '+esc(g.tutor_alias||'the tutor')+' accepts.' : askedToJoin(g,me) ? 'You\'ve asked to join. '+esc(g.tutor_alias||'The tutor')+' will approve it.' : 'Ask to join and the tutor will let you in.')+'</div>'}</div></div>
     ${canPost ? `<div class="composer">
       <input id="gchat_in" maxlength="1000" placeholder="Message the group…" onkeydown="if(event.key==='Enter')sendGroupMsg('${g.id}','${esc(g.course)}')">
       <button class="btn sm" onclick="sendGroupMsg('${g.id}','${esc(g.course)}')">Send</button>
@@ -1748,7 +1756,17 @@ function superviseGroup(id, yes){
     : sbFetch('/rest/v1/sl_groups?id=eq.'+id, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ status:'closed' }) });
   p.then(loadData).then(()=>{ render(); toast(yes ? 'You now supervise '+g.name : 'Declined'); }).catch(e=>toast(e.message));
 }
-function joinGroup(id){ sbFetch('/rest/v1/sl_group_members', { method:'POST', headers:{ Prefer:'return=minimal,resolution=ignore-duplicates' }, body:JSON.stringify({ group_id:id, user_id:A.user.id, alias:currentAlias() }) }).then(loadData).then(()=>{ render(); toast('Joined'); }).catch(e=>toast(e.message)); }
+function joinGroup(id){
+  const g=(S.groups||[]).find(x=>x.id===id);
+  sbFetch('/rest/v1/sl_group_members', { method:'POST', headers:{ Prefer:'return=minimal,resolution=ignore-duplicates' }, body:JSON.stringify({ group_id:id, user_id:A.user.id, alias:currentAlias(), status:'requested' }) })
+    .then(loadData).then(()=>{ render(); toast('Asked to join — '+((g&&g.tutor_alias)||'the tutor')+' will approve it'); })
+    .catch(e=>toast(/status/.test(e.message) ? 'Join requests are not set up yet — run sql/sl_group_join_requests.sql.' : e.message));
+}
+function answerJoin(gid, uid, yes){
+  const p = yes ? sbFetch('/rest/v1/sl_group_members?group_id=eq.'+gid+'&user_id=eq.'+uid, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ status:'member' }) })
+                : sbFetch('/rest/v1/sl_group_members?group_id=eq.'+gid+'&user_id=eq.'+uid, { method:'DELETE', headers:{ Prefer:'return=minimal' } });
+  p.then(loadData).then(()=>{ render(); toast(yes ? 'Added to the group' : 'Declined'); }).catch(e=>toast(e.message));
+}
 function leaveGroup(id){ sbFetch('/rest/v1/sl_group_members?group_id=eq.'+id+'&user_id=eq.'+A.user.id, { method:'DELETE', headers:{ Prefer:'return=minimal' } }).then(loadData).then(()=>{ if(S.overlay) S.overlay.group=null; render(); }).catch(e=>toast(e.message)); }
 function closeGroup(id){ if(!confirm('Close this study group? Its posts stay, but nobody can post any more.')) return; sbFetch('/rest/v1/sl_groups?id=eq.'+id, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ status:'closed' }) }).then(loadData).then(()=>{ if(S.overlay) S.overlay.group=null; render(); }).catch(e=>toast(e.message)); }
 
