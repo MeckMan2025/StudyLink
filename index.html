@@ -123,7 +123,12 @@
   .periodrow input{padding:8px 9px; border:1.5px solid #e5e2f0; border-radius:9px; font:inherit; font-size:14px; color:var(--ink); background:#fff}
   .periodrow input:first-child{flex:1; min-width:110px; font-weight:700}
   .periodrow .del{border:none; background:none; color:var(--muted); cursor:pointer; font-size:16px; margin-left:auto}
-  .chat{display:flex; flex-direction:column; gap:6px; max-height:52vh; overflow-y:auto; padding:4px 2px}
+  .chat{display:flex; flex-direction:column; gap:6px; height:52vh; min-height:280px; overflow-y:auto; padding:4px 2px}
+  .chatwrap{display:flex; flex-direction:column; height:calc(100vh - 230px); min-height:360px}
+  .chatwrap .card.chatcard{flex:1; min-height:0; display:flex; flex-direction:column; margin-bottom:0}
+  .chatwrap .chat{flex:1; height:auto; min-height:0}
+  .chatwrap .composer{margin-top:10px}
+  .msg .rep{font-size:10px; color:var(--muted); cursor:pointer; margin-left:6px} .msg .rep:hover{color:#c23b5e}
   .msg{max-width:78%; padding:8px 12px; border-radius:14px; font-size:14px; line-height:1.4; background:#fff; border:1px solid var(--line); align-self:flex-start}
   .msg.me{align-self:flex-end; background:#e3ecfd; border-color:#d3e0fb}
   .msg .t{font-size:10.5px; color:var(--muted); font-weight:700; margin-top:2px}
@@ -608,6 +613,7 @@ function notifItems(){
     if(g.status==='rejected') out.push({ key:'grade:'+g.id+':rejected', at:g.reviewed_at||g.created_at||'', ic:'⚠️', t:g.course+' grade wasn\'t verified', s:'Check it on your profile', go:()=>go('profile') });
   });
   // Staff: people waiting on a grade check
+  if(isStaff()) (S.reports||[]).filter(r=>r.status==='open').forEach(r=>out.push({ key:'report:'+r.id, at:r.created_at, ic:'🚩', t:'A message was reported', s:(r.snapshot||'').slice(0,80), go:()=>go('home') }));
   if(isStaff() && S.pendingGrades) out.push({ key:'admin:pending:'+S.pendingGrades, at:new Date().toISOString(), ic:'✅', t:S.pendingGrades+' '+(S.pendingGrades===1?'person':'people')+' waiting on a grade check', s:'Tap to review', go:()=>go('admin-grades') });
   const seen=notifSeen();
   out.forEach(n=>{ n.unread=!seen[n.key]; });
@@ -825,6 +831,7 @@ function renderAdminHome(c){
       <div style="flex:1"><div style="font-weight:800">${S.pendingGrades} ${S.pendingGrades===1?'person':'people'} to check</div><div class="tiny">Students can't tutor a class until its grade is verified.</div></div><div style="color:var(--muted)">›</div></div>` : ''}
     ${stale.length ? `<div class="card row" style="cursor:pointer" onclick="S.adminReqFilter='pending';go('admin-requests')"><div class="avatar" style="background:var(--blue-d)">⏳</div>
       <div style="flex:1"><div style="font-weight:800">${stale.length} request${stale.length===1?'':'s'} waiting more than two days</div><div class="tiny">Nobody has answered yet. Worth a nudge.</div></div><div style="color:var(--muted)">›</div></div>` : ''}
+    ${reportsHtml()}
     <div class="sectlabel">This week</div>
     ${weekPulseHtml()}
     <div class="sectlabel">This week's tutors <span class="tiny" style="font-weight:600;text-transform:none;letter-spacing:0">· how many have said they're free each day, and sessions booked</span></div>
@@ -1255,11 +1262,9 @@ function renderClasses(c){
     c.innerHTML = `
       <h2 class="title">Classes I tutor</h2>
       <div class="lead">${mine.length ? 'By subject. Open one for its classes, then a class for the students taking it.' : S.tutorClasses.length ? 'None of your classes has a student in it yet. They show up here as soon as someone adds one.' : 'Add the classes you tutor and they show up here by subject.'}</div>
-      ${depts.length ? `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:4px 0 14px">${depts.map(d=>{ const n=d.courses.filter(x=>mine.includes(x)).length, students=d.courses.filter(x=>mine.includes(x)).reduce((a,x)=>a+S.roster.filter(r=>r.course===x).length,0);
-        return `<button class="card" style="margin:0;text-align:left;cursor:pointer;font:inherit;color:inherit;border:2px solid ${sel===d?d.color:'transparent'};${sel===d?'background:#fff':''}" onclick="S.tutorDept=${sel===d?'null':`'${esc(d.name)}'`};render()">
-          <div style="font-size:22px">${d.emoji}</div><div style="font-weight:800;font-size:15px;margin-top:4px">${esc(d.name)}</div>
-          <div class="tiny">${n} class${n===1?'':'es'} · ${students} student${students===1?'':'s'}</div></button>`; }).join('')}</div>` : ''}
-      ${sel ? `<div class="sectlabel">${sel.emoji} ${esc(sel.name)}</div>${classGrid(true, false, sel.courses.filter(x=>mine.includes(x)))}` : ''}
+      ${depts.length ? `<div class="sectlabel">Subjects</div><div class="chips" style="gap:8px;margin:0 0 16px">${depts.map(d=>{ const n=d.courses.filter(x=>mine.includes(x)).length, students=d.courses.filter(x=>mine.includes(x)).reduce((a,x)=>a+S.roster.filter(r=>r.course===x).length,0);
+        return `<button class="chip" style="padding:10px 16px;font-size:14px;border-radius:999px;border:2px solid ${d.color};${sel===d?'background:'+d.color+';color:#fff':'background:#fff;color:var(--ink)'}" onclick="S.tutorDept=${sel===d?'null':`'${esc(d.name)}'`};render()">${d.emoji} ${esc(d.name)} <span style="opacity:.75;font-weight:600">· ${n} class${n===1?'':'es'}${students?' · '+students+' student'+(students===1?'':'s'):''}</span></button>`; }).join('')}</div>` : ''}
+      ${sel ? `<div class="sectlabel">Classes in ${esc(sel.name)}</div>${classGrid(true, false, sel.courses.filter(x=>mine.includes(x)))}` : depts.length ? '<div class="card tiny" style="text-align:center">Pick a subject above to see its classes.</div>' : ''}
       ${quiet && mine.length ? `<div class="tiny" style="margin:4px 2px 10px">${quiet} more class${quiet===1?'':'es'} you tutor ${quiet===1?'has':'have'} no students yet, so ${quiet===1?'it is':'they are'} hidden here.</div>` : ''}
       <div style="margin-top:${sel?'14px':'0'}"><button class="card addcard" style="width:100%;min-height:56px" onclick="S.tab='classes'; openView({type:'addClasses'})">＋ Add a class I tutor</button></div>`;
     return;
@@ -1645,7 +1650,8 @@ function mainGroupCount(course){
 const canSelfSupervise = course => S.tutorClasses.includes(course) || (S.taken||[]).some(g=>g.course===course);
 function groupsHtml(course){
   const me=A.user.id, list=groupsFor(course);
-  const latest = gid => (S.posts||[]).filter(p=>p.group_id===gid).sort((a,b)=>b.created_at.localeCompare(a.created_at))[0];
+  const todayK=ymd(new Date());
+  const latest = gid => (S.posts||[]).filter(p=>p.group_id===gid && ymd(new Date(p.created_at))===todayK).sort((a,b)=>b.created_at.localeCompare(a.created_at))[0];
   const row = g => { const m=groupMembers(g.id), n=m.length+(m.some(x=>x.user_id===g.tutor_id)?0:1), last=latest(g.id), mine=inGroup(g,me);
     return `<div class="card row" style="cursor:pointer" onclick="openView({type:'groupChat', id:'${g.id}'})">
       <div class="avatar" style="background:${courseColor(course)}">${g.status==='pending'?'⏳':'📚'}</div>
@@ -1661,7 +1667,7 @@ function groupsHtml(course){
         <div class="tiny" style="margin-top:6px">${S.groupSelf || (canSelfSupervise(course) && !tutorsFor(course).some(t=>t.id!==me)) ? 'You\'ve taken this class, so you can supervise it and it opens right away.' : 'The group opens once the tutor accepts. They\'re in it from the start.'}</div></div>
       <div class="row" style="gap:8px;margin-top:12px"><button class="btn gray" style="flex:1" onclick="S.groupForm=false;render()">Cancel</button><button class="btn" style="flex:2" ${tutorsFor(course).some(t=>t.id!==me) || (canSelfSupervise(course)) ? '' : 'disabled'} onclick="createGroup('${esc(course)}',this)">${S.groupSelf ? 'Start the group' : 'Ask the tutor'}</button></div>
     </div>` : '';
-  const mc=mainGroupCount(course), mainLast=(S.posts||[]).filter(p=>p.course===course && !p.group_id && !p.parent_id).sort((a,b)=>b.created_at.localeCompare(a.created_at))[0];
+  const mc=mainGroupCount(course), mainLast=(S.posts||[]).filter(p=>p.course===course && !p.group_id && !p.parent_id && ymd(new Date(p.created_at))===todayK).sort((a,b)=>b.created_at.localeCompare(a.created_at))[0];
   const mainRow = `<div class="card row" style="cursor:pointer" onclick="openView({type:'groupChat', id:'main:${esc(course)}'})">
       <div class="avatar" style="background:${courseColor(course)}">👥</div>
       <div style="min-width:0;flex:1"><div style="font-weight:800">Everyone in ${esc(course)}</div>
@@ -1688,7 +1694,8 @@ function renderGroupChat(c){
   if(!g){ closeView(); return; }
   const me=A.user.id, members=isMain ? [] : groupMembers(g.id), mine=isMain ? true : inGroup(g,me);
   const canPost = g.status==='active' && (mine || isStaff()), canRead = mine || isStaff();
-  const msgs = canRead ? (S.posts||[]).filter(p=>p.course===g.course && (isMain ? !p.group_id : p.group_id===g.id)).sort((a,b)=>a.created_at.localeCompare(b.created_at)) : [];
+  const today=ymd(new Date());
+  const msgs = canRead ? (S.posts||[]).filter(p=>p.course===g.course && (isMain ? !p.group_id : p.group_id===g.id) && ymd(new Date(p.created_at))===today).sort((a,b)=>a.created_at.localeCompare(b.created_at)) : [];
   const mc = isMain ? mainGroupCount(g.course) : null;
   c.innerHTML=`
     <button class="back" onclick="S.tab='classes'; openView({type:'board', course:'${esc(g.course)}'})">‹ ${esc(g.course)}</button>
@@ -1703,16 +1710,16 @@ function renderGroupChat(c){
     </div>
     ${!isMain && canApprove(g,me) && groupAsks(g.id).length ? `<div class="card" style="border-color:var(--pink);margin-bottom:10px"><div style="font-weight:800;margin-bottom:6px">Asking to join</div>
       ${groupAsks(g.id).map(m=>`<div class="row" style="margin-bottom:6px"><span style="flex:1">${esc(m.alias||'?')}</span><button class="btn sm green" onclick="answerJoin('${g.id}','${m.user_id}',true)">Approve</button><button class="btn sm gray" style="margin-left:6px" onclick="answerJoin('${g.id}','${m.user_id}',false)">Decline</button></div>`).join('')}</div>` : ''}
-    <div class="card"><div class="chat" id="gchat">${canRead ? (msgs.length ? msgs.map(m=>{ const own=m.author_id===me;
-        const when=new Date(m.created_at).toLocaleString([], {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
-        return `<div class="msg ${own?'me':''}">${own?'':'<b class="tiny">'+esc(m.author_alias||'')+'</b><br>'}${esc(m.body)}<div class="t">${when}${(own||isStaff())?` · <span style="cursor:pointer" onclick="deletePost('${m.id}')">delete</span>`:''}</div></div>`; }).join('')
-        : '<div class="tiny" style="text-align:center;padding:12px">No messages yet. Say hi!</div>')
+    <div class="chatwrap"><div class="card chatcard"><div class="chat" id="gchat">${canRead ? (msgs.length ? msgs.map(m=>{ const own=m.author_id===me;
+        const when=new Date(m.created_at).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
+        return `<div class="msg ${own?'me':''}">${own?'':'<b class="tiny">'+esc(m.author_alias||'')+'</b><br>'}${esc(m.body)}<div class="t">${when}${own?'':` · <span class="rep" onclick="reportMessage('post','${m.id}')">report</span>`}${isStaff()?` · <span class="rep" onclick="deletePost('${m.id}')">remove</span>`:''}</div></div>`; }).join('')
+        : '<div class="tiny" style="text-align:center;padding:12px">Nothing yet today. Say hi!</div>')
       : '<div class="tiny" style="text-align:center;padding:12px">'+(g.status==='pending' ? 'This group opens once '+esc(g.tutor_alias||'the tutor')+' accepts.' : askedToJoin(g,me) ? 'You\'ve asked to join. '+esc(g.tutor_alias||'The tutor')+' will approve it.' : 'Ask to join and the tutor will let you in.')+'</div>'}</div></div>
     ${canPost && inQuietHours() ? quietNote() : canPost ? `<div class="composer">
       <input id="gchat_in" maxlength="1000" placeholder="Message the group…" onkeydown="if(event.key==='Enter')sendGroupMsg('${g.id}','${esc(g.course)}')">
       <button class="btn sm" onclick="sendGroupMsg('${g.id}','${esc(g.course)}')">Send</button>
     </div>
-    <p class="tiny" style="margin:8px 2px">🛡️ Posting as ${esc(currentAlias())}. ${isMain ? 'Tutors of this class see this chat too.' : esc(g.tutor_alias||'A tutor')+' supervises this group.'} Keep it to schoolwork; no phone numbers or socials.</p>` : ''}`;
+    <p class="tiny" style="margin:8px 2px">🛡️ Posting as ${esc(currentAlias())}. ${isMain ? 'Tutors of this class see this chat too.' : esc(g.tutor_alias||'A tutor')+' supervises this group.'} Messages clear each day. Keep it to schoolwork; no phone numbers or socials.</p>` : ''}</div>`;
   const box=$('gchat'); if(box) box.scrollTop=box.scrollHeight;
   clearInterval(groupTimer);
   groupTimer=setInterval(()=>{ if(S.overlay && S.overlay.type==='groupChat' && S.overlay.id===g.id && !document.hidden) refreshGroup(g.id); else clearInterval(groupTimer); }, 5000);
@@ -2325,11 +2332,11 @@ function renderChat(c){
     <div class="row" style="margin-bottom:10px">${avatarDot(initials(o.alias), S.presence && S.presence[r.id], 'background:'+courseColor(r.course))}
       <div><h2 class="title" style="margin:0">${esc(o.alias)}</h2><div class="tiny">${esc(r.course)} · ${esc(fmtDate(r.date))} ${esc(r.time||'')}</div></div></div>
     ${sessionPlanHtml(r)}
-    <div class="card"><div class="chat" id="chatbox"><div class="tiny" style="text-align:center;padding:10px">Loading…</div></div></div>
+    <div class="chatwrap" style="height:calc(100vh - 420px)"><div class="card chatcard"><div class="chat" id="chatbox"><div class="tiny" style="text-align:center;padding:10px">Loading…</div></div></div>
     ${inQuietHours() ? quietNote() : `<div class="composer">
       <input id="chat_in" maxlength="1000" placeholder="Message ${esc(o.alias)}…" onkeydown="if(event.key==='Enter')sendChat()">
       <button class="btn sm" onclick="sendChat()">Send</button>
-    </div>`}
+    </div>`}</div>
     <div class="acts">
       ${r.status==='pending' && o.iAmTutor ? `<button onclick="respondRequest('${r.id}',true)">✅ Accept</button>` : r.status==='offered' && !o.iAmTutor ? `<button onclick="respondOffer('${r.id}',true)">✅ Accept</button>` : ''}
       <button onclick="openView({type:'retime', id:'${r.id}'})">🕒 Suggest another time</button>
@@ -2395,7 +2402,7 @@ function drawChat(){
     const mine=m.sender_id===A.user.id, sys=/^(🕒 Suggested|📝 Plan|📍 Moved)/.test(m.body);
     const when=new Date(m.created_at).toLocaleString([], {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
     return sys ? `<div class="msg sys">${mine?'You':esc(otherSide(findReq(S.chat.id)).alias)}: ${esc(m.body)}<div class="t">${when}</div></div>`
-      : `<div class="msg ${mine?'me':''}">${esc(m.body)}<div class="t">${when}</div></div>`;
+      : `<div class="msg ${mine?'me':''}">${esc(m.body)}<div class="t">${when}${!mine && m.id ? ` · <span class="rep" onclick="reportMessage('message','${m.id}')">report</span>` : ''}</div></div>`;
   }).join('') : '<div class="tiny" style="text-align:center;padding:12px">No messages yet. Say hi and sort out a time.</div>';
   if(near || !box.dataset.drawn){ box.scrollTop=box.scrollHeight; box.dataset.drawn='1'; }
 }
@@ -2680,6 +2687,26 @@ function sendPost(course, body, parent_id){
   const group_id = S.overlay && S.overlay.group ? S.overlay.group : null;
   return sbFetch('/rest/v1/sl_posts', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ course, body, parent_id, author_id:A.user.id, author_alias:currentAlias(), ...(group_id ? { group_id } : {}) }) })
     .then(loadData).then(render).catch(function(e){ toast(e.message); });
+}
+// Anyone can flag a message; staff see the flags on their Home and can remove the message.
+function reportMessage(kind, id){
+  const reason=prompt('What\'s wrong with this message? (optional)'); if(reason===null) return;
+  const src = kind==='post' ? (S.posts||[]).find(p=>p.id===id) : (S.chat&&S.chat.rows||[]).find(m=>m.id===id);
+  const body = kind==='post' ? { post_id:id } : { message_id:id };
+  sbFetch('/rest/v1/sl_reports', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ ...body, reporter_id:A.user.id, reason:(reason||'').trim()||null, snapshot: src ? ((src.author_alias||'')+': '+(src.body||'')).slice(0,500) : null }) })
+    .then(()=>toast('Reported — an administrator will look at it')).catch(e=>toast(/sl_reports/.test(e.message) ? 'Reporting is not set up yet — run sql/sl_reports.sql.' : e.message));
+}
+function resolveReport(id, removePostId){
+  const p = removePostId ? sbFetch('/rest/v1/sl_posts?id=eq.'+removePostId, { method:'DELETE', headers:{ Prefer:'return=minimal' } }) : Promise.resolve();
+  p.then(()=>sbFetch('/rest/v1/sl_reports?id=eq.'+id, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ status: removePostId ? 'removed' : 'dismissed' }) }))
+    .then(loadData).then(()=>{ render(); toast(removePostId ? 'Message removed' : 'Dismissed'); }).catch(e=>toast(e.message));
+}
+function reportsHtml(){
+  const open=(S.reports||[]).filter(r=>r.status==='open'); if(!open.length) return '';
+  return `<div class="sectlabel">Reported messages · ${open.length}</div>${open.map(r=>`<div class="card">
+    <div class="tiny">${esc(new Date(r.created_at).toLocaleString())}${r.reason?' · “'+esc(r.reason)+'”':''}</div>
+    <div style="font-size:13px;margin:6px 0">${esc(r.snapshot||'(message)')}</div>
+    <div class="row" style="gap:8px">${r.post_id ? `<button class="btn sm gray" onclick="resolveReport('${r.id}','${r.post_id}')">Remove message</button>` : ''}<button class="btn sm ghost" onclick="resolveReport('${r.id}',null)">Dismiss</button></div></div>`).join('')}`;
 }
 function deletePost(id){
   S.posts = S.posts.filter(p => p.id!==id && p.parent_id!==id); render();
@@ -3926,7 +3953,7 @@ async function loadData(){
   if(!A.user) return;
   const me = A.user.id;
   if(dataLoaded) { try { await loadProfile(); } catch(e) {} }   // background refreshes pick up profile changes too
-  let [classes, tcourses, reqs, events, tutors, posts, myGrades, pendingGrades, materials, roster, presence, people, allReqs, inbox, settings, groups, groupMembers, ratings, allGrades, avail] = await Promise.all([
+  let [classes, tcourses, reqs, events, tutors, posts, myGrades, pendingGrades, materials, roster, presence, people, allReqs, inbox, settings, groups, groupMembers, ratings, reports, allGrades, avail] = await Promise.all([
     sbFetch('/rest/v1/sl_student_classes?select=course&user_id=eq.'+me+'&order=created_at'),
     sbFetch('/rest/v1/sl_tutor_courses?select=course,grade,year,availability&user_id=eq.'+me+'&order=created_at'),
     sbFetch('/rest/v1/sl_requests?select=*&or=(student_id.eq.'+me+',tutor_id.eq.'+me+')&order=created_at.desc'),
@@ -3945,6 +3972,7 @@ async function loadData(){
     sbFetch('/rest/v1/sl_groups?select=*&order=created_at').catch(()=>null),
     sbFetch('/rest/v1/sl_group_members?select=*').catch(()=>[]),
     sbFetch('/rest/v1/sl_ratings?select=*'+(isStaff()?'':'&rater_id=eq.'+me)).catch(()=>[]),
+    isStaff() ? sbFetch('/rest/v1/sl_reports?select=*&status=eq.open&order=created_at.desc').catch(()=>[]) : Promise.resolve([]),
     isStaff() ? sbFetch('/rest/v1/sl_grades?select=*').catch(()=>[]) : Promise.resolve([]),
     sbFetch('/rest/v1/sl_availability?select=*&order=recurring.desc,weekday,date,start_min'),
   ]);
@@ -3974,6 +4002,7 @@ async function loadData(){
   S.groups = fixC(groups||[]);
   S.groupMembers = groupMembers||[];
   S.ratings = fixC(ratings||[]);
+  S.reports = reports||[];
   S.allGrades = fixC(allGrades||[]);
   S.tutors = buildTutors(tutors||[], me);
   S.helped = S.incoming.filter(r=>r.status==='done').length;
