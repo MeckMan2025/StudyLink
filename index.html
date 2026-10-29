@@ -599,7 +599,7 @@ function notifItems(){
   (S.inbox||[]).filter(m=>m.sender_id!==me && m.created_at>cut).forEach(m=>{ const r=findReq(m.request_id); if(!r) return;
     out.push({ key:'msg:'+m.id, at:m.created_at, ic:'✉️', t:'Message from '+otherSide(r).alias, s:(m.body||'').slice(0,80), go:()=>openView({type:'chat', id:r.id}) }); });
   // Sessions to rate
-  if(!isAdmin()) unratedSessions().slice(0,3).forEach(r=>out.push({ key:'rate:'+r.id, at:r.done_at||r.created_at, ic:'⭐', t:'Rate your '+r.course+' session with '+(r.tutor_alias||'your tutor'), s:'Optional · only administrators see it', go:()=>openView({type:'rate', id:r.id}) }));
+  if(!isAdmin() && !ratingPromptsOff()) unratedSessions().slice(0,3).forEach(r=>out.push({ key:'rate:'+r.id, at:r.done_at||r.created_at, ic:'⭐', t:'Rate your '+r.course+' session with '+(r.tutor_alias||'your tutor'), s:'Optional · only administrators see it', go:()=>openView({type:'rate', id:r.id}) }));
   // Study groups waiting on me, or opened for me
   (S.groups||[]).forEach(g=>{
     if(g.status==='pending' && g.tutor_id===me) out.push({ key:'group:'+g.id+':ask', at:g.created_at, ic:'📚', t:(g.creator_alias||'A student')+' wants you to supervise a study group', s:g.name+' · '+g.course, go:()=>openView({type:'groupChat', id:g.id}) });
@@ -2476,6 +2476,8 @@ function respondSeries(ids, accept){
     }).catch(function(e){ toast(e.message); });
 }
 function renderTutoring(c){
+  const ratedIds=new Set((S.ratings||[]).map(r=>r.request_id));
+  const rateBtn = r => r.status==='done' && r.student_id===A.user.id && !ratedIds.has(r.id) ? `<button class="btn ghost sm" style="margin-left:auto" onclick="openView({type:'rate', id:'${r.id}'})">⭐ Rate</button>` : '';
   const inc = S.incoming.filter(r=>r.status==='pending');
   const offers = S.myRequests.filter(r=>r.status==='offered');
   const mine = S.myRequests.filter(r=>r.status!=='cancelled' && r.status!=='offered');
@@ -2543,7 +2545,7 @@ function renderTutoring(c){
         <div style="min-width:0"><div style="font-weight:800">${esc(r.course)}</div>
           <div class="tiny">${esc(r.topic)} · with ${esc(r.tutor_alias)} · ${esc(fmtDate(r.date))} ${esc(r.time||'')}${r.location?' · 📍 '+esc(r.location):''}</div></div>
         <span class="pill" style="margin-left:auto;${style[r.status]||''}">${label[r.status]||r.status}</span>
-        ${r.status==='pending' ? cancelBtn(r.id,'request').replace('margin-left:auto;','') : r.status==='accepted' ? cancelBtn(r.id,'session').replace('margin-left:auto;','') : ''}
+        ${r.status==='pending' ? cancelBtn(r.id,'request').replace('margin-left:auto;','') : r.status==='accepted' ? cancelBtn(r.id,'session').replace('margin-left:auto;','') : rateBtn(r).replace('margin-left:auto','margin-left:6px')}
       </div>${r.status==='pending' || r.status==='accepted' ? actsHtml(r) : ''}</div>`).join('') : `<div class="card tiny" style="text-align:center">You haven't requested tutoring yet. Open a class to find a tutor.</div>`}
   `;
 }
@@ -2619,14 +2621,15 @@ function confirmPick(id){
 // ---- Ratings ----
 // A tutee's done sessions that haven't been rated. Optional: dismissed ones
 // are remembered on this device.
-const RATED_SKIP='sc-rate-skip';
+const RATED_SKIP='sc-rate-skip', RATE_OFF='sc-rate-off';
 function skippedRatings(){ try { return JSON.parse(localStorage.getItem(RATED_SKIP)||'[]'); } catch { return []; } }
+const ratingPromptsOff = () => { try { return localStorage.getItem(RATE_OFF)==='1'; } catch { return false; } };
 function unratedSessions(){
   const me=A.user.id, rated=new Set((S.ratings||[]).map(r=>r.request_id)), skip=new Set(skippedRatings());
   return (S.myRequests||[]).filter(r=>r.status==='done' && !rated.has(r.id) && !skip.has(r.id)).sort((a,b)=>(b.done_at||'').localeCompare(a.done_at||''));
 }
 function ratePromptHtml(){
-  const u=unratedSessions(); if(!u.length || isAdmin()) return '';
+  const u=unratedSessions(); if(!u.length || isAdmin() || ratingPromptsOff()) return '';
   const r=u[0];
   return `<div class="card row" style="border-color:var(--pink);cursor:pointer" onclick="openView({type:'rate', id:'${r.id}'})">
     <div class="avatar" style="background:var(--pink-d)">⭐</div>
@@ -2635,7 +2638,7 @@ function ratePromptHtml(){
     <button class="btn sm ghost" onclick="event.stopPropagation(); skipRating('${r.id}')">Skip</button>
   </div>`;
 }
-function skipRating(id){ const a=skippedRatings(); a.push(id); try { localStorage.setItem(RATED_SKIP, JSON.stringify(a.slice(-50))); } catch {} render(); }
+function skipRating(id){ const a=skippedRatings(); a.push(id); try { localStorage.setItem(RATED_SKIP, JSON.stringify(a.slice(-50))); localStorage.setItem(RATE_OFF,'1'); } catch {} render(); }
 function renderRate(c){
   const r=findReq(S.overlay.id); if(!r){ closeView(); return; }
   const d=S.overlay.rate = S.overlay.rate || { stars:0, on_time:null, prepared:null, understood:0, again:null, comment:'' };
