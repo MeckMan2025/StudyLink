@@ -1671,6 +1671,16 @@ function groupsHtml(course){
     ${S.groupsReady ? `<button class="card addcard" style="width:100%;min-height:56px;margin-top:10px" onclick="S.groupForm=!S.groupForm;S.groupSelf=canSelfSupervise('${esc(course)}');render()">＋ Start a study group</button>` : ''}${form}`;
 }
 // A study group's chat: its own screen, bubbles like the session chat.
+// ---- Quiet hours: no messaging during the school day ----
+// 8:00 AM to 3:30 PM on school days (Mon–Fri), every chat is read-only. An
+// administrator can change the window under Session times.
+const DEFAULT_QUIET = { start:480, end:930, days:[1,2,3,4,5] };
+function quietHours(){ const q=S.settings && S.settings.quiet; return q && typeof q.start==='number' ? q : DEFAULT_QUIET; }
+function inQuietHours(now=new Date()){
+  const q=quietHours(); if(!q.days.includes(now.getDay())) return false;
+  const m=now.getHours()*60+now.getMinutes(); return m>=q.start && m<q.end;
+}
+const quietNote = () => `<div class="card tiny" style="text-align:center;border-color:#f3d9a0;background:#fff8e8">🔕 Messaging is off during the school day (${minLabel(quietHours().start)}–${minLabel(quietHours().end)}). You can read; sending opens again at ${minLabel(quietHours().end)}.</div>`;
 let groupTimer=null;
 function renderGroupChat(c){
   const id=S.overlay.id, isMain=String(id).startsWith('main:');
@@ -1698,7 +1708,7 @@ function renderGroupChat(c){
         return `<div class="msg ${own?'me':''}">${own?'':'<b class="tiny">'+esc(m.author_alias||'')+'</b><br>'}${esc(m.body)}<div class="t">${when}${(own||isStaff())?` · <span style="cursor:pointer" onclick="deletePost('${m.id}')">delete</span>`:''}</div></div>`; }).join('')
         : '<div class="tiny" style="text-align:center;padding:12px">No messages yet. Say hi!</div>')
       : '<div class="tiny" style="text-align:center;padding:12px">'+(g.status==='pending' ? 'This group opens once '+esc(g.tutor_alias||'the tutor')+' accepts.' : askedToJoin(g,me) ? 'You\'ve asked to join. '+esc(g.tutor_alias||'The tutor')+' will approve it.' : 'Ask to join and the tutor will let you in.')+'</div>'}</div></div>
-    ${canPost ? `<div class="composer">
+    ${canPost && inQuietHours() ? quietNote() : canPost ? `<div class="composer">
       <input id="gchat_in" maxlength="1000" placeholder="Message the group…" onkeydown="if(event.key==='Enter')sendGroupMsg('${g.id}','${esc(g.course)}')">
       <button class="btn sm" onclick="sendGroupMsg('${g.id}','${esc(g.course)}')">Send</button>
     </div>
@@ -1717,6 +1727,7 @@ async function refreshGroup(gid){
   }catch(e){}
 }
 async function sendGroupMsg(gid, course){
+  if(inQuietHours()){ toast('Messaging is off during the school day.'); return; }
   const inp=$('gchat_in'), body=(inp.value||'').trim(); if(!body) return;
   inp.value='';
   const isMain=String(gid).startsWith('main:'), group_id = isMain ? null : gid;
@@ -2315,10 +2326,10 @@ function renderChat(c){
       <div><h2 class="title" style="margin:0">${esc(o.alias)}</h2><div class="tiny">${esc(r.course)} · ${esc(fmtDate(r.date))} ${esc(r.time||'')}</div></div></div>
     ${sessionPlanHtml(r)}
     <div class="card"><div class="chat" id="chatbox"><div class="tiny" style="text-align:center;padding:10px">Loading…</div></div></div>
-    <div class="composer">
+    ${inQuietHours() ? quietNote() : `<div class="composer">
       <input id="chat_in" maxlength="1000" placeholder="Message ${esc(o.alias)}…" onkeydown="if(event.key==='Enter')sendChat()">
       <button class="btn sm" onclick="sendChat()">Send</button>
-    </div>
+    </div>`}
     <div class="acts">
       ${r.status==='pending' && o.iAmTutor ? `<button onclick="respondRequest('${r.id}',true)">✅ Accept</button>` : r.status==='offered' && !o.iAmTutor ? `<button onclick="respondOffer('${r.id}',true)">✅ Accept</button>` : ''}
       <button onclick="openView({type:'retime', id:'${r.id}'})">🕒 Suggest another time</button>
@@ -2389,6 +2400,7 @@ function drawChat(){
   if(near || !box.dataset.drawn){ box.scrollTop=box.scrollHeight; box.dataset.drawn='1'; }
 }
 async function sendChat(){
+  if(inQuietHours()){ toast('Messaging is off during the school day.'); return; }
   const inp=$('chat_in'), body=(inp.value||'').trim(); if(!body || !S.chat) return;
   if(S.chat.err==='setup'){ toast('Chat is not switched on yet.'); return; }
   inp.value='';
@@ -2664,6 +2676,7 @@ function addReply(postId, course){
   sendPost(course, txt, postId);
 }
 function sendPost(course, body, parent_id){
+  if(inQuietHours()){ toast('Messaging is off during the school day.'); return Promise.resolve(); }
   const group_id = S.overlay && S.overlay.group ? S.overlay.group : null;
   return sbFetch('/rest/v1/sl_posts', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify({ course, body, parent_id, author_id:A.user.id, author_alias:currentAlias(), ...(group_id ? { group_id } : {}) }) })
     .then(loadData).then(render).catch(function(e){ toast(e.message); });
@@ -3231,7 +3244,8 @@ function renderMemberDetail(c){
 function renderAdminTimes(c){
   if(!isStaff()) return go('home');
   const cur = S.settings && S.settings.sessions && S.settings.sessions.slots ? S.settings.sessions : DEFAULT_SESSIONS;
-  const d = S.timesDraft = S.timesDraft || { slots: cur.slots.map(x=>x.slice()), schoolPlaces:(cur.schoolPlaces||[]).filter(x=>x!=='Other').join(', '), offCampusPlaces:(cur.offCampusPlaces||[]).filter(x=>x!=='Other').join(', ') };
+  const cq = quietHours();
+  const d = S.timesDraft = S.timesDraft || { slots: cur.slots.map(x=>x.slice()), schoolPlaces:(cur.schoolPlaces||[]).filter(x=>x!=='Other').join(', '), offCampusPlaces:(cur.offCampusPlaces||[]).filter(x=>x!=='Other').join(', '), quiet:{ start:cq.start, end:cq.end, days:cq.days.slice() } };
   const inp='padding:9px 10px;border:1.5px solid #e5e2f0;border-radius:10px;font:inherit;font-size:14px;background:#fff';
   const t2v = m => (Math.floor(m/60)+'').padStart(2,'0')+':'+(m%60+'').padStart(2,'0');
   const row = (sl,i) => `<div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:8px">
@@ -3252,6 +3266,12 @@ function renderAdminTimes(c){
       ${d.slots.map((sl,i)=>sl[0]===g?row(sl,i):'').join('') || '<div class="tiny" style="margin-bottom:8px">No times yet.</div>'}
       <div style="margin-bottom:8px"><button class="btn ghost sm" onclick="S.timesDraft.slots.push(['${g}',${g==='Before school'?'450,480':g==='8th period'?'885,930':'930,990'}]);render()">＋ Add a time</button></div>
     </div>`).join('')}
+    <div class="sectlabel">Quiet hours · no messaging</div>
+    <div class="card"><div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
+      <input type="time" value="${t2v(d.quiet.start)}" step="300" style="flex:0 0 118px;${inp}" onchange="S.timesDraft.quiet.start=timeToMin(this.value);render()"><span class="tiny">to</span>
+      <input type="time" value="${t2v(d.quiet.end)}" step="300" style="flex:0 0 118px;${inp}" onchange="S.timesDraft.quiet.end=timeToMin(this.value);render()">
+      <div class="chips" style="margin-left:6px">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((n,i)=>`<button class="chip ${d.quiet.days.includes(i)?'dept':''}" style="${d.quiet.days.includes(i)?'background:var(--blue)':''}" onclick="const a=S.timesDraft.quiet.days,j=a.indexOf(${i}); j<0?a.push(${i}):a.splice(j,1); render()">${n}</button>`).join('')}</div>
+    </div><div class="tiny" style="margin-top:6px">Chats are read-only in this window on the ticked days. Scheduling (accepting, moving a session) still works.</div></div>
     <div class="sectlabel">Places inside the school</div>
     <div class="card"><input value="${esc(d.schoolPlaces)}" placeholder="Library, Cafeteria, Commons" style="width:100%;${inp}" oninput="S.timesDraft.schoolPlaces=this.value"><div class="tiny" style="margin-top:6px">Separate with commas. "Other" with a type-in box is always offered.</div></div>
     <div class="sectlabel">Places off campus</div>
@@ -3269,8 +3289,9 @@ async function saveSessionTimes(btn){
     schoolPlaces: d.schoolPlaces.split(',').map(x=>x.trim()).filter(Boolean), offCampusPlaces: d.offCampusPlaces.split(',').map(x=>x.trim()).filter(Boolean) };
   btn.disabled=true; btn.textContent='Saving…';
   try{
-    await sbFetch('/rest/v1/sl_settings', { method:'POST', headers:{ Prefer:'return=minimal,resolution=merge-duplicates' }, body:JSON.stringify({ key:'sessions', value, updated_at:new Date().toISOString(), updated_by:A.user.id }) });
-    S.settings = S.settings||{}; S.settings.sessions=value; applySessionSettings(value); S.timesDraft=null;
+    const quiet={ start:+d.quiet.start, end:+d.quiet.end, days:d.quiet.days.slice().sort() };
+    await sbFetch('/rest/v1/sl_settings', { method:'POST', headers:{ Prefer:'return=minimal,resolution=merge-duplicates' }, body:JSON.stringify([{ key:'sessions', value, updated_at:new Date().toISOString(), updated_by:A.user.id },{ key:'quiet', value:quiet, updated_at:new Date().toISOString(), updated_by:A.user.id }]) });
+    S.settings = S.settings||{}; S.settings.sessions=value; S.settings.quiet=quiet; applySessionSettings(value); S.timesDraft=null;
     toast('Session times saved'); render();
   }catch(e){ toast(/sl_settings/.test(e.message) ? 'The settings table is not set up yet — run sql/sl_settings_and_groups.sql.' : e.message); btn.disabled=false; btn.textContent='Save for everyone'; }
 }
@@ -4031,6 +4052,8 @@ function checkReminders(){
   try { localStorage.setItem(REMINDED_LS, JSON.stringify(seen)); } catch {}
 }
 setInterval(checkReminders, 30000);
+// Flip the composers on and off at the quiet-hours boundary without a reload.
+let lastQuiet=null; setInterval(function(){ const q=inQuietHours(); if(lastQuiet!==null && q!==lastQuiet && A.profile && dataLoaded) render(); lastQuiet=q; }, 30000);
 document.addEventListener('visibilitychange', function(){ if(!document.hidden) checkReminders(); });
 
 /* ============================= INIT ============================= */
